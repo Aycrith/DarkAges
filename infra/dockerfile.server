@@ -1,0 +1,123 @@
+# DarkAges Zone Server Dockerfile
+# Multi-stage build for optimized production image
+
+# Stage 1: Build environment
+FROM ubuntu:22.04 AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    libssl-dev \
+    pkg-config \
+    libredis++-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build EnTT ECS framework
+WORKDIR /deps/entt
+RUN git clone --depth 1 --branch v3.13.1 https://github.com/skypjack/entt.git . \
+    && mkdir build && cd build \
+    && cmake .. -DENTT_BUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release \
+    && make -j$(nproc) \
+    && make install
+
+# Build glm (header-only, just need to install)
+WORKDIR /deps/glm
+RUN git clone --depth 1 --branch 0.9.9.8 https://github.com/g-truc/glm.git . \
+    && mkdir build && cd build \
+    && cmake .. -DCMAKE_BUILD_TYPE=Release \
+    && make -j$(nproc) \
+    && make install
+
+# Build GameNetworkingSockets
+WORKDIR /deps/gns
+RUN git clone --depth 1 --branch v1.4.1 https://github.com/ValveSoftware/GameNetworkingSockets.git . \
+    && git submodule update --init --recursive \
+    && mkdir build && cd build \
+    && cmake .. -DCMAKE_BUILD_TYPE=Release \
+    && make -j$(nproc) \
+    && make install
+
+# Copy and build DarkAges server
+WORKDIR /app
+COPY src/server /app/src
+COPY CMakeLists.txt /app/
+COPY deps /app/deps
+
+# Build server with all optimizations
+RUN mkdir build && cd build \
+    && cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DENABLE_PROFILING=OFF \
+        -DCMAKE_CXX_FLAGS="-O3 -march=native -DNDEBUG" \
+    && make -j$(nproc) darkages-server
+
+# Stage 2: Runtime image
+FROM ubuntu:22.04
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user for security
+RUN groupadd -r darkages && useradd -r -g darkages -s /bin/false darkages
+
+# Create directories
+RUN mkdir -p /app/logs /app/data && chown -R darkages:darkages /app
+
+WORKDIR /app
+
+# Copy binary and libraries from builder
+COPY --from=builder /app/build/bin/darkages-server /app/
+COPY --from=builder /usr/local/lib/libGameNetworkingSockets.so /usr/local/lib/
+COPY --from=builder /usr/local/lib/libredis++.so /usr/local/lib/
+
+# Update library cache
+RUN ldconfig
+
+# Environment variables with defaults
+ENV ZONE_ID=1
+ENV ZONE_PORT=7777
+ENV ZONE_MIN_X=-1000
+ENV ZONE_MAX_X=1000
+ENV ZONE_MIN_Z=-1000
+ENV ZONE_MAX_Z=1000
+ENV REDIS_HOST=localhost
+ENV REDIS_PORT=6379
+ENV SCYLLA_HOST=localhost
+ENV SCYLLA_PORT=9042
+ENV ADJACENT_ZONES=""
+ENV AURA_BUFFER_SIZE=50
+ENV MAX_PLAYERS_PER_ZONE=250
+ENV TICK_RATE=60
+ENV LOG_LEVEL=INFO
+
+# Expose game port (dynamic via env var)
+EXPOSE 7777-7784
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD /app/darkages-server --health-check || exit 1
+
+# Switch to non-root user
+USER darkages
+
+# Run server with environment variable expansion
+ENTRYPOINT ["/app/darkages-server"]
+CMD ["--zone", "${ZONE_ID}", \
+     "--port", "${ZONE_PORT}", \
+     "--min-x", "${ZONE_MIN_X}", \
+     "--max-x", "${ZONE_MAX_X}", \
+     "--min-z", "${ZONE_MIN_Z}", \
+     "--max-z", "${ZONE_MAX_Z}", \
+     "--redis-host", "${REDIS_HOST}", \
+     "--redis-port", "${REDIS_PORT}", \
+     "--scylla-host", "${SCYLLA_HOST}", \
+     "--scylla-port", "${SCYLLA_PORT}", \
+     "--adjacent-zones", "${ADJACENT_ZONES}", \
+     "--aura-buffer", "${AURA_BUFFER_SIZE}", \
+     "--max-players", "${MAX_PLAYERS_PER_ZONE}", \
+     "--tick-rate", "${TICK_RATE}"]

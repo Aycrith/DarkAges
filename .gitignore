@@ -1,0 +1,98 @@
+# DarkAges MMO - Git Ignore
+
+# Build artifacts
+/build/
+/out/
+/bin/
+/lib/
+/CMakeCache.txt
+/CMakeFiles/
+/Makefile
+/cmake_install.cmake
+/compile_commands.json
+CTestTestfile.cmake
+_deps/
+*.cmake
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.vs/
+*.user
+*.suo
+*.userprefs
+
+# Godot-specific
+.import/
+export.cfg
+export_presets.cfg
+*.tmp
+*.import
+project.godot.user
+
+# Godot Mono/C#-specific
+.mono/
+data_*/
+
+# Database volumes (Docker)
+/redis_data/
+/scylla_data/
+*.db
+
+# Logs
+*.log
+logs/
+
+# Test outputs
+test-results/
+*.gcov
+*.gcda
+*.gcno
+
+# Package manager
+node_modules/
+package-lock.json
+yarn.lock
+
+# Documentation build
+docs/_build/
+docs/_static/
+docs/_templates/
+
+# OS-specific
+Thumbs.db
+desktop.ini
+
+# Large installer files (development tools only)
+*.exe
+!verify_build.bat

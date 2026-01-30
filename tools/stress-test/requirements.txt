@@ -1,0 +1,16 @@
+# DarkAges Stress Test Tools - Python Dependencies
+# Python 3.8+ required
+
+# Core dependencies (standard library only)
+# No external packages required for basic operation
+
+# Optional development dependencies:
+# pytest>=7.0.0          # For running unit tests
+# black>=22.0.0          # Code formatting
+# mypy>=0.950            # Type checking
+# flake8>=4.0.0          # Linting
+
+# Optional advanced features:
+# flatbuffers>=2.0       # For full FlatBuffers serialization (instead of simplified binary)
+# numpy>=1.21.0          # For advanced statistical analysis
+# matplotlib>=3.5.0      # For plotting results

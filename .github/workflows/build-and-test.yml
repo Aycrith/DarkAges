@@ -1,0 +1,114 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake g++-11
+        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 110
+        sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 110
+
+    - name: Check dependencies
+      run: |
+        echo "CMake version:"
+        cmake --version
+        echo "GCC version:"
+        g++ --version
+        echo "Directory structure:"
+        ls -la
+        echo "EnTT submodule:"
+        ls -la deps/entt/single_include/entt/ 2>/dev/null || echo "EnTT not found"
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBUILD_TESTS=ON
+
+    - name: Build
+      working-directory: ${{github.workspace}}/build
+      run: cmake --build . --config ${{env.BUILD_TYPE}} -j$(nproc)
+
+    - name: Test
+      working-directory: ${{github.workspace}}/build
+      run: ctest -C ${{env.BUILD_TYPE}} --output-on-failure
+
+    - name: Upload build logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-logs
+        path: build/CMakeFiles/*.log
+
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - name: Setup MSVC
+      uses: microsoft/setup-msbuild@v1.1
+
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBUILD_TESTS=ON
+
+    - name: Build
+      working-directory: ${{github.workspace}}/build
+      run: cmake --build . --config ${{env.BUILD_TYPE}}
+
+    - name: Test
+      working-directory: ${{github.workspace}}/build
+      run: ctest -C ${{env.BUILD_TYPE}} --output-on-failure
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - name: Install clang-tidy
+      run: sudo apt-get install -y clang-tidy
+
+    - name: Configure CMake with clang-tidy
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} \
+                 -DCMAKE_CXX_CLANG_TIDY="clang-tidy;-checks=cppcoreguidelines-*"
+
+    - name: Build with analysis
+      working-directory: ${{github.workspace}}/build
+      run: cmake --build . --config ${{env.BUILD_TYPE}} 2>&1 | tee clang-tidy-output.txt
+
+    - name: Upload analysis results
+      uses: actions/upload-artifact@v3
+      with:
+        name: static-analysis
+        path: build/clang-tidy-output.txt

@@ -1,0 +1,111 @@
+# DarkAges MMO - Git Attributes
+# Enforces consistent line endings and file handling
+
+# Auto detect text files and normalize to LF
+* text=auto
+
+# Source code - force LF
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.h text eol=lf
+*.c text eol=lf
+*.cc text eol=lf
+*.cxx text eol=lf
+
+# CMake files - force LF
+*.cmake text eol=lf
+CMakeLists.txt text eol=lf
+
+# Scripts - force LF (for Unix compatibility)
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf
+*.ps1 text eol=lf
+
+# Python - force LF
+*.py text eol=lf
+
+# Godot files
+*.gd text eol=lf
+*.cs text eol=lf
+*.tscn text eol=lf
+*.tres text eol=lf
+*.godot text eol=lf
+
+# Config files - force LF
+*.json text eol=lf
+*.xml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+*.cfg text eol=lf
+*.conf text eol=lf
+*.env text eol=lf
+
+# Documentation - force LF
+*.md text eol=lf
+*.rst text eol=lf
+*.txt text eol=lf
+
+# Web files - force LF
+*.html text eol=lf
+*.htm text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.jsx text eol=lf
+
+# Docker files
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+docker-compose.*.yml text eol=lf
+.dockerignore text eol=lf
+
+# CI/CD
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# FlatBuffers schemas
+*.fbs text eol=lf
+
+# Binary files - do not modify
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.otf binary
+*.mp3 binary
+*.ogg binary
+*.wav binary
+*.mp4 binary
+*.webm binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.rar binary
+*.7z binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.bin binary
+
+# 3D assets
+*.fbx binary
+*.obj binary
+*.blend binary
+*.gltf text eol=lf
+*.glb binary
+*.dae binary
+*.3ds binary
+
+# Godot import files
+*.import binary

@@ -1,0 +1,205 @@
+// DarkAges MMO - FlatBuffers Protocol Definition
+// Phase 0: Foundation - Basic input and snapshot messages
+
+namespace DarkAges.Protocol;
+
+// ============================================================================
+// COMMON TYPES
+// ============================================================================
+
+// Quantized position (precision ~1.5cm)
+struct Vec3 {
+    x:int16;    // actual = x / 64.0
+    y:int16;
+    z:int16;
+}
+
+// Compressed rotation (quaternion)
+struct Quat {
+    x:int8;     // -127 to 127 maps to -1.0 to 1.0
+    y:int8;
+    z:int8;
+    w:int8;
+}
+
+// Compressed velocity (for prediction)
+struct Vec3Velocity {
+    x:int16;    // actual = x / 256.0 m/s
+    y:int16;
+    z:int16;
+}
+
+// ============================================================================
+// CLIENT -> SERVER MESSAGES
+// ============================================================================
+
+// Client input packet - sent at 60Hz
+// Size: ~20 bytes
+ table ClientInput {
+    sequence:uint32;           // Input sequence number for reconciliation
+    timestamp:uint32;          // Client send time (ms)
+    
+    // Bit-packed input flags
+    // Bit 0: forward
+    // Bit 1: backward
+    // Bit 2: left
+    // Bit 3: right
+    // Bit 4: jump
+    // Bit 5: attack
+    // Bit 6: block
+    // Bit 7: sprint
+    input_flags:uint8;
+    
+    // Camera rotation (quantized to save bandwidth)
+    yaw:int16;                 // actual = yaw / 10000.0 (radians)
+    pitch:int16;               // actual = pitch / 10000.0 (radians)
+    
+    // Targeting
+    target_entity:uint32;      // Entity being targeted/attacked (0 = none)
+}
+
+// Connection request (reliable)
+table ConnectionRequest {
+    protocol_version:uint32;
+    player_id:uint64;          // Persistent player ID
+    auth_token:[ubyte];        // Authentication token
+}
+
+// Connection response (reliable)
+table ConnectionResponse {
+    success:bool;
+    connection_id:uint32;
+    server_tick:uint32;        // Current server tick
+    server_time:uint32;        // Server timestamp
+    error_message:string;      // If success = false
+}
+
+// ============================================================================
+// SERVER -> CLIENT MESSAGES
+// ============================================================================
+
+// Entity state in snapshot
+// Variable size based on present_mask
+table EntityState {
+    id:uint32;
+    type:uint8;                // 0=player, 1=projectile, 2=loot, 3=NPC
+    
+    // Bit mask indicating which fields are present
+    // Bit 0: position
+    // Bit 1: rotation
+    // Bit 2: velocity
+    // Bit 3: health
+    // Bit 4: animation state
+    // Bit 5: team_id
+    present_mask:uint16;
+    
+    position:Vec3;
+    rotation:Quat;
+    velocity:Vec3Velocity;
+    
+    health_percent:uint8;      // 0-100
+    anim_state:uint8;          // Animation state enum
+    team_id:uint8;
+}
+
+// Server snapshot - sent at 20Hz baseline
+// Delta compressed against baseline_tick
+table Snapshot {
+    server_tick:uint32;        // Current server simulation tick
+    baseline_tick:uint32;      // Delta baseline (0 = full snapshot)
+    server_time:uint32;        // Server timestamp
+    
+    // Entity states
+    entities:[EntityState];
+    
+    // Entities that were destroyed since last snapshot
+    removed_entities:[uint32];
+    
+    // Last processed input sequence for this client (for reconciliation)
+    last_processed_input:uint32;
+}
+
+// Reliable event packet (combat, pickups, etc.)
+// Sent on reliable ordered channel
+table EventPacket {
+    event_type:uint16;         // Event type enum
+    timestamp:uint32;          // Server time when event occurred
+    source_entity:uint32;      // Entity that triggered event
+    target_entity:uint32;      // Entity affected by event
+    
+    // Event-specific parameters
+    // Damage event: [damage_amount, damage_type, hit_location_x, hit_location_y, hit_location_z]
+    // Pickup event: [item_id, quantity]
+    // Death event: [killer_entity_id]
+    params:[float];
+    
+    // Additional binary data if needed
+    binary_data:[ubyte];
+}
+
+// Server correction - sent when client prediction is wrong
+table ServerCorrection {
+    server_tick:uint32;
+    position:Vec3;
+    velocity:Vec3Velocity;
+    last_processed_input:uint32;
+}
+
+// ============================================================================
+// EVENT TYPES (for EventPacket.event_type)
+// ============================================================================
+
+enum EventType : uint16 {
+    // Combat events
+    EVENT_DAMAGE_DEALT = 1,
+    EVENT_DAMAGE_TAKEN = 2,
+    EVENT_HEAL = 3,
+    EVENT_DEATH = 4,
+    EVENT_RESPAWN = 5,
+    
+    // Interaction events
+    EVENT_ITEM_PICKUP = 10,
+    EVENT_ITEM_DROP = 11,
+    EVENT_ABILITY_USED = 12,
+    EVENT_ABILITY_COOLDOWN = 13,
+    
+    // Zone events
+    EVENT_ZONE_ENTER = 20,
+    EVENT_ZONE_EXIT = 21,
+    EVENT_ZONE_TRANSFER = 22,
+    
+    // System events
+    EVENT_CHAT_MESSAGE = 30,
+    EVENT_SYSTEM_MESSAGE = 31,
+    EVENT_KICK = 32,
+    EVENT_BAN = 33
+}
+
+// ============================================================================
+// ANIMATION STATES (for EntityState.anim_state)
+// ============================================================================
+
+enum AnimState : uint8 {
+    ANIM_IDLE = 0,
+    ANIM_WALK = 1,
+    ANIM_RUN = 2,
+    ANIM_SPRINT = 3,
+    ANIM_JUMP = 4,
+    ANIM_FALL = 5,
+    ANIM_ATTACK = 10,
+    ANIM_ATTACK_HEAVY = 11,
+    ANIM_BLOCK = 12,
+    ANIM_HIT = 13,
+    ANIM_DEATH = 14,
+    ANIM_RESPAWN = 15
+}
+
+// ============================================================================
+// ROOT TYPES (for flatc compilation)
+// ============================================================================
+
+root_type ClientInput;
+root_type Snapshot;
+root_type EventPacket;
+root_type ConnectionRequest;
+root_type ConnectionResponse;

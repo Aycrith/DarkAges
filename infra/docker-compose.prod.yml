@@ -1,0 +1,531 @@
+# DarkAges MMO - Production Deployment
+# Multi-zone with monitoring, logging, and high availability
+#
+# Usage:
+#   docker-compose -f docker-compose.prod.yml up -d
+#   docker-compose -f docker-compose.prod.yml logs -f zone-1
+#
+# Security Notes:
+#   - Change default passwords in .env file
+#   - Use Docker secrets for production credentials
+#   - Enable SSL/TLS for external-facing services
+
+version: '3.8'
+
+services:
+  # ========================================================================
+  # Infrastructure
+  # ========================================================================
+  
+  redis:
+    image: redis:7-alpine
+    container_name: darkages-redis
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --requirepass ${REDIS_PASSWORD:-darkages123}
+    volumes:
+      - redis_data:/data
+    networks:
+      - darkages-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-darkages123}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  scylla:
+    image: scylladb/scylla:5.2
+    container_name: darkages-scylla
+    command: >
+      --developer-mode=0
+      --smp 4
+      --memory 4G
+      --overprovisioned
+      --listen-address 0.0.0.0
+      --rpc-address 0.0.0.0
+      --broadcast-address scylla
+      --authenticator PasswordAuthenticator
+      --authorizer CassandraAuthorizer
+    volumes:
+      - scylla_data:/var/lib/scylla
+    networks:
+      - darkages-network
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '2.0'
+          memory: 2G
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "cqlsh", "-u", "cassandra", "-p", "${SCYLLA_PASSWORD:-cassandra}", "-e", "describe keyspaces"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ========================================================================
+  # Zone Servers (4 zones in 2x2 grid)
+  # ========================================================================
+  
+  zone-1:
+    image: darkages/server:latest
+    container_name: darkages-zone-1
+    hostname: zone-1
+    environment:
+      - ZONE_ID=1
+      - ZONE_PORT=7777
+      - MONITOR_PORT=7778
+      - ZONE_MIN_X=-1000
+      - ZONE_MAX_X=0
+      - ZONE_MIN_Z=-1000
+      - ZONE_MAX_Z=0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-darkages123}
+      - SCYLLA_HOST=scylla
+      - SCYLLA_PORT=9042
+      - SCYLLA_USER=cassandra
+      - SCYLLA_PASSWORD=${SCYLLA_PASSWORD:-cassandra}
+      - ADJACENT_ZONES=2,3
+      - LOG_LEVEL=info
+      - ENABLE_PROFILING=false
+      - METRICS_ENABLED=true
+      - DDOS_PROTECTION=true
+      - MAX_PLAYERS_PER_ZONE=400
+      - TICK_RATE=60
+    ports:
+      - "7777:7777"
+      - "7778:7778"
+    volumes:
+      - zone1_logs:/app/logs
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - darkages-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7778/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      redis:
+        condition: service_healthy
+      scylla:
+        condition: service_healthy
+
+  zone-2:
+    image: darkages/server:latest
+    container_name: darkages-zone-2
+    hostname: zone-2
+    environment:
+      - ZONE_ID=2
+      - ZONE_PORT=7779
+      - MONITOR_PORT=7780
+      - ZONE_MIN_X=0
+      - ZONE_MAX_X=1000
+      - ZONE_MIN_Z=-1000
+      - ZONE_MAX_Z=0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-darkages123}
+      - SCYLLA_HOST=scylla
+      - SCYLLA_PORT=9042
+      - SCYLLA_USER=cassandra
+      - SCYLLA_PASSWORD=${SCYLLA_PASSWORD:-cassandra}
+      - ADJACENT_ZONES=1,4
+      - LOG_LEVEL=info
+      - ENABLE_PROFILING=false
+      - METRICS_ENABLED=true
+      - DDOS_PROTECTION=true
+      - MAX_PLAYERS_PER_ZONE=400
+      - TICK_RATE=60
+    ports:
+      - "7779:7779"
+      - "7780:7780"
+    volumes:
+      - zone2_logs:/app/logs
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - darkages-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7780/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      - redis
+      - scylla
+
+  zone-3:
+    image: darkages/server:latest
+    container_name: darkages-zone-3
+    hostname: zone-3
+    environment:
+      - ZONE_ID=3
+      - ZONE_PORT=7781
+      - MONITOR_PORT=7782
+      - ZONE_MIN_X=-1000
+      - ZONE_MAX_X=0
+      - ZONE_MIN_Z=0
+      - ZONE_MAX_Z=1000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-darkages123}
+      - SCYLLA_HOST=scylla
+      - SCYLLA_PORT=9042
+      - SCYLLA_USER=cassandra
+      - SCYLLA_PASSWORD=${SCYLLA_PASSWORD:-cassandra}
+      - ADJACENT_ZONES=1,4
+      - LOG_LEVEL=info
+      - ENABLE_PROFILING=false
+      - METRICS_ENABLED=true
+      - DDOS_PROTECTION=true
+      - MAX_PLAYERS_PER_ZONE=400
+      - TICK_RATE=60
+    ports:
+      - "7781:7781"
+      - "7782:7782"
+    volumes:
+      - zone3_logs:/app/logs
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - darkages-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7782/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      - redis
+      - scylla
+
+  zone-4:
+    image: darkages/server:latest
+    container_name: darkages-zone-4
+    hostname: zone-4
+    environment:
+      - ZONE_ID=4
+      - ZONE_PORT=7783
+      - MONITOR_PORT=7784
+      - ZONE_MIN_X=0
+      - ZONE_MAX_X=1000
+      - ZONE_MIN_Z=0
+      - ZONE_MAX_Z=1000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-darkages123}
+      - SCYLLA_HOST=scylla
+      - SCYLLA_PORT=9042
+      - SCYLLA_USER=cassandra
+      - SCYLLA_PASSWORD=${SCYLLA_PASSWORD:-cassandra}
+      - ADJACENT_ZONES=2,3
+      - LOG_LEVEL=info
+      - ENABLE_PROFILING=false
+      - METRICS_ENABLED=true
+      - DDOS_PROTECTION=true
+      - MAX_PLAYERS_PER_ZONE=400
+      - TICK_RATE=60
+    ports:
+      - "7783:7783"
+      - "7784:7784"
+    volumes:
+      - zone4_logs:/app/logs
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - darkages-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7784/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      - redis
+      - scylla
+
+  # ========================================================================
+  # Monitoring Stack
+  # ========================================================================
+  
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: darkages-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--storage.tsdb.retention.size=50GB'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--log.level=info'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - darkages-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
+  grafana:
+    image: grafana/grafana:10.0.0
+    container_name: darkages-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:3000}
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_SECURITY_DISABLE_GRAVATAR=true
+      - GF_SECURITY_CSRF_ADDITIONAL_HEADERS=X-Forwarded-Host
+      - GF_UNIFIED_ALERTING_ENABLED=true
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "3000:3000"
+    networks:
+      - darkages-network
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - loki
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  alertmanager:
+    image: prom/alertmanager:v0.25.0
+    container_name: darkages-alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--log.level=info'
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "9093:9093"
+    networks:
+      - darkages-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
+  node-exporter:
+    image: prom/node-exporter:v1.6.1
+    container_name: darkages-node-exporter
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      - darkages-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+
+  # ========================================================================
+  # Logging Stack (Loki + Promtail)
+  # ========================================================================
+  
+  loki:
+    image: grafana/loki:2.8.0
+    container_name: darkages-loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    networks:
+      - darkages-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  promtail:
+    image: grafana/promtail:2.8.0
+    container_name: darkages-promtail
+    volumes:
+      - zone1_logs:/var/log/zone1:ro
+      - zone2_logs:/var/log/zone2:ro
+      - zone3_logs:/var/log/zone3:ro
+      - zone4_logs:/var/log/zone4:ro
+      - ./monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - darkages-network
+    restart: unless-stopped
+    depends_on:
+      - loki
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+
+  # ========================================================================
+  # Load Balancer
+  # ========================================================================
+  
+  nginx:
+    image: nginx:alpine
+    container_name: darkages-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    networks:
+      - darkages-network
+    restart: unless-stopped
+    depends_on:
+      - zone-1
+      - zone-2
+      - zone-3
+      - zone-4
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # ========================================================================
+  # Backup Service
+  # ========================================================================
+  
+  backup:
+    image: offen/docker-volume-backup:v2
+    container_name: darkages-backup
+    environment:
+      - BACKUP_CRON_EXPRESSION=0 2 * * *
+      - BACKUP_RETENTION_DAYS=30
+      - BACKUP_FILENAME=darkages-backup-%Y-%m-%dT%H-%M-%S.tar.gz
+      - BACKUP_ARCHIVE=/archive
+      - BACKUP_STOP_CONTAINER_LABEL=darkages.backup.stop
+      - BACKUP_FROM_SNAPSHOT=true
+      - AWS_S3_BUCKET_NAME=${BACKUP_S3_BUCKET:-}
+      - AWS_ACCESS_KEY_ID=${BACKUP_AWS_ACCESS_KEY:-}
+      - AWS_SECRET_ACCESS_KEY=${BACKUP_AWS_SECRET_KEY:-}
+      - AWS_DEFAULT_REGION=${BACKUP_AWS_REGION:-us-east-1}
+    volumes:
+      - redis_data:/backup/redis:ro
+      - scylla_data:/backup/scylla:ro
+      - ./backups:/archive
+    networks:
+      - darkages-network
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+    driver: local
+  scylla_data:
+    driver: local
+  zone1_logs:
+    driver: local
+  zone2_logs:
+    driver: local
+  zone3_logs:
+    driver: local
+  zone4_logs:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  alertmanager_data:
+    driver: local
+  loki_data:
+    driver: local
+
+networks:
+  darkages-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

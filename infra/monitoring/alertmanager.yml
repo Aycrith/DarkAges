@@ -1,0 +1,114 @@
+global:
+  smtp_smarthost: '${SMTP_HOST:-localhost:587}'
+  smtp_from: '${SMTP_FROM:-alerts@darkages.example.com}'
+  smtp_auth_username: '${SMTP_USER:-}'
+  smtp_auth_password: '${SMTP_PASS:-}'
+  smtp_require_tls: true
+  slack_api_url: '${SLACK_WEBHOOK_URL:-}'
+  pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+  resolve_timeout: 5m
+
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+route:
+  group_by: ['alertname', 'cluster', 'service', 'zone_id']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default'
+  routes:
+    # Critical alerts - page immediately
+    - match:
+        severity: critical
+      receiver: 'pagerduty-critical'
+      group_wait: 10s
+      repeat_interval: 30m
+      continue: true
+    
+    # Warning alerts - Slack + email
+    - match:
+        severity: warning
+      receiver: 'slack-warnings'
+      group_wait: 1m
+      repeat_interval: 2h
+      continue: true
+    
+    # Performance team alerts
+    - match_re:
+        team: performance|backend
+      receiver: 'performance-team'
+      group_wait: 30s
+      repeat_interval: 1h
+    
+    # Network issues
+    - match_re:
+        team: network
+      receiver: 'network-team'
+      group_wait: 30s
+      repeat_interval: 1h
+
+# Receivers
+receivers:
+  - name: 'default'
+    email_configs:
+      - to: '${ALERT_EMAIL:-ops@darkages.example.com}'
+        subject: '[DarkAges Alert] {{ .GroupLabels.alertname }}'
+        body: |
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Zone: {{ .Labels.zone_id }}
+          Severity: {{ .Labels.severity }}
+          Time: {{ .StartsAt }}
+          {{ if .Annotations.runbook_url }}Runbook: {{ .Annotations.runbook_url }}{{ end }}
+          {{ end }}
+
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - service_key: '${PAGERDUTY_KEY:-}'
+        severity: critical
+        description: '{{ .GroupLabels.alertname }}'
+        details:
+          summary: '{{ .CommonAnnotations.summary }}'
+          description: '{{ .CommonAnnotations.description }}'
+          zone_id: '{{ .CommonLabels.zone_id }}'
+          runbook: '{{ .CommonAnnotations.runbook_url }}'
+
+  - name: 'slack-warnings'
+    slack_configs:
+      - channel: '#alerts'
+        title: '[DarkAges] {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *{{ .Annotations.summary }}*
+          {{ .Annotations.description }}
+          Zone: {{ .Labels.zone_id }} | Severity: {{ .Labels.severity }}
+          {{ end }}
+        send_resolved: true
+
+  - name: 'performance-team'
+    email_configs:
+      - to: 'performance@darkages.example.com'
+        subject: '[Performance] {{ .GroupLabels.alertname }}'
+
+  - name: 'network-team'
+    email_configs:
+      - to: 'network@darkages.example.com'
+        subject: '[Network] {{ .GroupLabels.alertname }}'
+
+# Inhibit rules - prevent alert spam during incidents
+inhibit_rules:
+  # If a zone is down, inhibit high tick time warnings for that zone
+  - source_match:
+      severity: critical
+    target_match:
+      severity: warning
+    equal: ['zone_id']
+  
+  # If critical memory, inhibit high memory warning
+  - source_match:
+      alertname: 'CriticalMemoryUsage'
+    target_match:
+      alertname: 'HighMemoryUsage'
+    equal: ['zone_id']

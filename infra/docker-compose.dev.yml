@@ -1,0 +1,103 @@
+# DarkAges MMO - Multi-Zone Development Environment
+# Phase 4: Spatial Sharding simulation with multiple zone servers
+#
+# This extends docker-compose.yml to run multiple zone servers for testing sharding
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+version: '3.8'
+
+services:
+  # Zone Server 1 - Northern region
+  zone-1:
+    build:
+      context: ../
+      dockerfile: infra/dockerfile.server
+    container_name: darkages-zone-1
+    ports:
+      - "7777:7777/udp"
+      - "7778:7778/tcp"  # Admin/monitoring port
+    environment:
+      - ZONE_ID=1
+      - SERVER_PORT=7777
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SCYLLA_HOST=scylla
+      - SCYLLA_PORT=9042
+      - WORLD_BOUNDS_MIN_X=-1000
+      - WORLD_BOUNDS_MAX_X=0
+      - WORLD_BOUNDS_MIN_Z=-1000
+      - WORLD_BOUNDS_MAX_Z=1000
+      - AURA_BUFFER=50
+    depends_on:
+      redis:
+        condition: service_healthy
+      scylla:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+    networks:
+      - darkages-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7778/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Zone Server 2 - Southern region
+  zone-2:
+    build:
+      context: ../
+      dockerfile: infra/dockerfile.server
+    container_name: darkages-zone-2
+    ports:
+      - "7787:7777/udp"
+      - "7788:7778/tcp"
+    environment:
+      - ZONE_ID=2
+      - SERVER_PORT=7777
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SCYLLA_HOST=scylla
+      - SCYLLA_PORT=9042
+      - WORLD_BOUNDS_MIN_X=0
+      - WORLD_BOUNDS_MAX_X=1000
+      - WORLD_BOUNDS_MIN_Z=-1000
+      - WORLD_BOUNDS_MAX_Z=1000
+      - AURA_BUFFER=50
+    depends_on:
+      redis:
+        condition: service_healthy
+      scylla:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+    networks:
+      - darkages-network
+
+  # Edge Proxy - Routes clients to appropriate zone
+  edge-proxy:
+    image: envoyproxy/envoy:v1.28-latest
+    container_name: darkages-edge-proxy
+    ports:
+      - "7776:7776/udp"  # Client entry point
+      - "9901:9901"      # Admin interface
+    volumes:
+      - ./config/envoy.yaml:/etc/envoy/envoy.yaml:ro
+    depends_on:
+      - zone-1
+      - zone-2
+    networks:
+      - darkages-network
+    profiles:
+      - sharding  # Only start with: docker-compose --profile sharding up

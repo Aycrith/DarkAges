@@ -1,0 +1,44 @@
+[gd_scene load_steps=5 format=3 uid="uid://c8yvxg3ulq3a"]
+
+[ext_resource type="Script" path="res://scripts/Main.cs" id="1_main"]
+[ext_resource type="PackedScene" uid="uid://player" path="res://scenes/Player.tscn" id="2_player"]
+[ext_resource type="PackedScene" uid="uid://ui" path="res://scenes/UI.tscn" id="3_ui"]
+[ext_resource type="PackedScene" uid="uid://remoteplayer" path="res://scenes/RemotePlayer.tscn" id="4_remoteplayer"]
+
+[node name="Main" type="Node3D"]
+script = ExtResource("1_main")
+PlayerScene = ExtResource("2_player")
+RemotePlayerScene = ExtResource("4_remoteplayer")
+
+[node name="World" type="Node3D" parent="."]
+
+[node name="Ground" type="MeshInstance3D" parent="World"]
+mesh = SubResource("PlaneMesh_ground")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="World"]
+transform = Transform3D(0.707107, -0.5, 0.5, 0, 0.707107, 0.707107, -0.707107, -0.5, 0.5, 0, 10, 0)
+shadow_enabled = true
+
+[node name="Environment" type="WorldEnvironment" parent="World"]
+environment = SubResource("Environment_default")
+
+[node name="PlayerSpawn" type="Marker3D" parent="World"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+
+[node name="Players" type="Node3D" parent="."]
+
+[node name="Player" parent="Players" instance=ExtResource("2_player")]
+
+[node name="UI" parent="." instance=ExtResource("3_ui")]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
+size = Vector2(200, 200)
+
+[sub_resource type="Environment" id="Environment_default"]
+background_mode = 1
+background_color = Color(0.529412, 0.807843, 0.921569, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.3, 0.3, 0.3, 1)
+ssao_enabled = true
+ssil_enabled = true
+sdfgi_enabled = true

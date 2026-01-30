@@ -1,0 +1,140 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: info
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    batchwait: 1s
+    batchsize: 1048576
+    timeout: 10s
+    backoff_config:
+      min_period: 500ms
+      max_period: 5m
+      max_retries: 10
+
+scrape_configs:
+  # Zone 1 logs
+  - job_name: zone-1-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: zone-logs
+          zone_id: "1"
+          __path__: /var/log/zone1/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            timestamp: time
+            message: msg
+            component: component
+      - labels:
+          level:
+          component:
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+
+  # Zone 2 logs
+  - job_name: zone-2-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: zone-logs
+          zone_id: "2"
+          __path__: /var/log/zone2/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            timestamp: time
+            message: msg
+            component: component
+      - labels:
+          level:
+          component:
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+
+  # Zone 3 logs
+  - job_name: zone-3-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: zone-logs
+          zone_id: "3"
+          __path__: /var/log/zone3/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            timestamp: time
+            message: msg
+            component: component
+      - labels:
+          level:
+          component:
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+
+  # Zone 4 logs
+  - job_name: zone-4-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: zone-logs
+          zone_id: "4"
+          __path__: /var/log/zone4/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            timestamp: time
+            message: msg
+            component: component
+      - labels:
+          level:
+          component:
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+
+  # Docker container logs
+  - job_name: docker
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: docker
+          __path__: /var/lib/docker/containers/*/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            output: log
+            stream: stream
+            attrs:
+      - json:
+          expressions:
+            tag:
+          source: attrs
+      - regex:
+          expression: (?P<container_name>(?:[^|])*[^|])
+          source: tag
+      - timestamp:
+          format: RFC3339Nano
+          source: time
+      - labels:
+          stream:
+          container_name:
+      - output:
+          source: output

@@ -1,0 +1,80 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'darkages'
+    replica: '{{.ExternalURL}}'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+      timeout: 10s
+      api_version: v2
+
+rule_files:
+  - "alerts.yml"
+
+scrape_configs:
+  # Zone servers - game metrics
+  - job_name: 'zone-1'
+    static_configs:
+      - targets: ['zone-1:7778']
+        labels:
+          zone_id: '1'
+          zone_name: 'bottom-left'
+    metrics_path: /metrics
+    scrape_interval: 5s
+    
+  - job_name: 'zone-2'
+    static_configs:
+      - targets: ['zone-2:7780']
+        labels:
+          zone_id: '2'
+          zone_name: 'bottom-right'
+    metrics_path: /metrics
+    scrape_interval: 5s
+    
+  - job_name: 'zone-3'
+    static_configs:
+      - targets: ['zone-3:7782']
+        labels:
+          zone_id: '3'
+          zone_name: 'top-left'
+    metrics_path: /metrics
+    scrape_interval: 5s
+    
+  - job_name: 'zone-4'
+    static_configs:
+      - targets: ['zone-4:7784']
+        labels:
+          zone_id: '4'
+          zone_name: 'top-right'
+    metrics_path: /metrics
+    scrape_interval: 5s
+
+  # Infrastructure - Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # Infrastructure - ScyllaDB
+  - job_name: 'scylla'
+    static_configs:
+      - targets: ['scylla:9180']
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # Infrastructure - Node Exporter (host metrics)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 15s

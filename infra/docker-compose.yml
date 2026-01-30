@@ -1,0 +1,76 @@
+# DarkAges MMO - Local Development Infrastructure
+# Phase 0: Foundation - Redis + ScyllaDB for hot-state and persistence
+#
+# Usage:
+#   docker-compose up -d    # Start all services
+#   docker-compose down     # Stop all services
+#   docker-compose logs -f  # View logs
+
+version: '3.8'
+
+services:
+  # Redis - Hot state cache for active player sessions
+  # Sub-millisecond access for entity positions, health, temporary buffs
+  redis:
+    image: redis:7-alpine
+    container_name: darkages-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - darkages-network
+
+  # ScyllaDB - Persistent store for player profiles, combat logs, world state
+  # Cassandra-compatible, high write throughput
+  scylla:
+    image: scylladb/scylla:5.2
+    container_name: darkages-scylla
+    ports:
+      - "9042:9042"  # CQL port
+      - "9180:9180"  # Prometheus metrics
+    volumes:
+      - scylla_data:/var/lib/scylla
+    command: --developer-mode=1 --smp=2 --memory=2G --overprovisioned
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - darkages-network
+
+  # Redis Commander - Optional UI for debugging Redis (dev only)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: darkages-redis-ui
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      - redis
+    networks:
+      - darkages-network
+    profiles:
+      - debug  # Only start with: docker-compose --profile debug up
+
+volumes:
+  redis_data:
+    driver: local
+  scylla_data:
+    driver: local
+
+networks:
+  darkages-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

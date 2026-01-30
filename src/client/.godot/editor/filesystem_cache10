@@ -1,0 +1,16 @@
+72322a848ab928aa5c89f0cb78209805
+::res://::1769742430
+::res://addons/::1769731086
+::res://assets/::1769731086
+::res://scenes/::1769735259
+Main.tscn::PackedScene::209998081263685520::1769735322::0::1::::<><><>0<>0<><>::res://scripts/Main.cs<>uid://player::::res://scenes/Player.tscn<>uid://ui::::res://scenes/UI.tscn<>uid://remoteplayer::::res://scenes/RemotePlayer.tscn
+Player.tscn::PackedScene::696258953::1769733307::0::1::::<><><>0<>0<><>::res://src/prediction/PredictedPlayer.cs
+RemotePlayer.tscn::PackedScene::1202222462709785097::1769735259::0::1::::<><><>0<>0<><>::res://src/entities/RemotePlayer.cs
+UI.tscn::PackedScene::688::1769733320::0::1::::<><><>0<>0<><>::res://scripts/UI.cs
+::res://scripts/::1769733406
+::res://src/::1769735202
+::res://src/combat/::1769736685
+::res://src/entities/::1769735254
+::res://src/networking/::1769734253
+::res://src/prediction/::1769734039
+::res://src/ui/::1769736682

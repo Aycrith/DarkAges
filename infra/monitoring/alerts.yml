@@ -1,0 +1,215 @@
+groups:
+  - name: darkages-critical
+    interval: 15s
+    rules:
+      # Zone offline - CRITICAL
+      - alert: ZoneOffline
+        expr: up{job=~"zone-.*"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          team: ops
+        annotations:
+          summary: "Zone {{ $labels.zone_id }} is offline"
+          description: "Zone {{ $labels.zone_name }} ({{ $labels.zone_id }}) has been down for more than 30 seconds"
+          runbook_url: "https://docs.darkages.example.com/runbooks/zone-offline"
+          dashboard_url: "http://localhost:3000/d/zones"
+
+      # DDoS attack detected - CRITICAL
+      - alert: DDoSDetected
+        expr: rate(zone_blocked_connections_total[1m]) > 10
+        for: 30s
+        labels:
+          severity: critical
+          team: security
+        annotations:
+          summary: "Potential DDoS attack detected on Zone {{ $labels.zone_id }}"
+          description: "{{ $value | humanize }} connections blocked per second on Zone {{ $labels.zone_id }}"
+          runbook_url: "https://docs.darkages.example.com/runbooks/ddos-response"
+
+      # Redis connection issues - CRITICAL
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 30s
+        labels:
+          severity: critical
+          team: ops
+        annotations:
+          summary: "Redis is unreachable"
+          description: "Redis instance at {{ $labels.instance }} is not responding"
+          runbook_url: "https://docs.darkages.example.com/runbooks/redis-down"
+
+      # ScyllaDB down - CRITICAL
+      - alert: ScyllaDown
+        expr: up{job="scylla"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          team: ops
+        annotations:
+          summary: "ScyllaDB is unreachable"
+          description: "ScyllaDB instance at {{ $labels.instance }} is not responding"
+          runbook_url: "https://docs.darkages.example.com/runbooks/scylla-down"
+
+      # High tick time - CRITICAL (> 50ms means < 20 FPS)
+      - alert: CriticalTickTime
+        expr: zone_tick_duration_ms > 50
+        for: 1m
+        labels:
+          severity: critical
+          team: performance
+        annotations:
+          summary: "CRITICAL: Tick time on Zone {{ $labels.zone_id }}"
+          description: "Zone {{ $labels.zone_id }} tick time is {{ $value }}ms (target: <16ms)"
+          runbook_url: "https://docs.darkages.example.com/runbooks/high-tick-time"
+
+  - name: darkages-warnings
+    interval: 30s
+    rules:
+      # High tick time - WARNING
+      - alert: HighTickTime
+        expr: zone_tick_duration_ms > 20
+        for: 2m
+        labels:
+          severity: warning
+          team: performance
+        annotations:
+          summary: "High tick time on Zone {{ $labels.zone_id }}"
+          description: "Zone {{ $labels.zone_id }} tick time is {{ $value }}ms (target: <16ms)"
+          runbook_url: "https://docs.darkages.example.com/runbooks/high-tick-time"
+
+      # Low FPS (simulation rate) - WARNING
+      - alert: LowSimulationRate
+        expr: zone_simulation_fps < 55
+        for: 2m
+        labels:
+          severity: warning
+          team: performance
+        annotations:
+          summary: "Low simulation rate on Zone {{ $labels.zone_id }}"
+          description: "Zone {{ $labels.zone_id }} simulation rate is {{ $value }} FPS (target: 60 FPS)"
+
+      # High memory usage - WARNING
+      - alert: HighMemoryUsage
+        expr: zone_memory_usage_bytes / zone_memory_limit_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          team: ops
+        annotations:
+          summary: "High memory usage on Zone {{ $labels.zone_id }}"
+          description: "Zone {{ $labels.zone_id }} memory usage is {{ $value | humanizePercentage }}"
+
+      # High memory usage - CRITICAL
+      - alert: CriticalMemoryUsage
+        expr: zone_memory_usage_bytes / zone_memory_limit_bytes > 0.95
+        for: 1m
+        labels:
+          severity: critical
+          team: ops
+        annotations:
+          summary: "CRITICAL: Memory usage on Zone {{ $labels.zone_id }}"
+          description: "Zone {{ $labels.zone_id }} memory usage is {{ $value | humanizePercentage }} - imminent OOM"
+
+      # Migration failures
+      - alert: MigrationFailures
+        expr: rate(zone_migration_failures_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Migration failures detected on Zone {{ $labels.zone_id }}"
+          description: "Zone migration failure rate is {{ $value | humanize }} per second"
+          runbook_url: "https://docs.darkages.example.com/runbooks/migration-failures"
+
+      # High player count - capacity warning
+      - alert: HighPlayerCount
+        expr: zone_player_count > 350
+        for: 5m
+        labels:
+          severity: warning
+          team: ops
+        annotations:
+          summary: "High player count on Zone {{ $labels.zone_id }}"
+          description: "Zone {{ $labels.zone_id }} has {{ $value }} players (limit: 400)"
+
+      # High player count - CRITICAL
+      - alert: CriticalPlayerCount
+        expr: zone_player_count > 380
+        for: 1m
+        labels:
+          severity: critical
+          team: ops
+        annotations:
+          summary: "CRITICAL: Near capacity on Zone {{ $labels.zone_id }}"
+          description: "Zone {{ $labels.zone_id }} has {{ $value }} players (limit: 400) - scale immediately"
+
+      # High network latency
+      - alert: HighNetworkLatency
+        expr: zone_avg_player_latency_ms > 100
+        for: 3m
+        labels:
+          severity: warning
+          team: network
+        annotations:
+          summary: "High network latency on Zone {{ $labels.zone_id }}"
+          description: "Average player latency is {{ $value }}ms (target: <50ms)"
+
+      # Packet loss
+      - alert: HighPacketLoss
+        expr: rate(zone_packets_lost_total[5m]) > 0.01
+        for: 2m
+        labels:
+          severity: warning
+          team: network
+        annotations:
+          summary: "High packet loss on Zone {{ $labels.zone_id }}"
+          description: "Packet loss rate is {{ $value | humanizePercentage }}"
+
+      # Redis high memory
+      - alert: RedisHighMemory
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          team: ops
+        annotations:
+          summary: "Redis memory usage high"
+          description: "Redis memory usage is {{ $value | humanizePercentage }}"
+
+      # ScyllaDB high latency
+      - alert: ScyllaHighLatency
+        expr: scylla_storage_proxy_coordinator_read_latency_summary > 100
+        for: 3m
+        labels:
+          severity: warning
+          team: database
+        annotations:
+          summary: "ScyllaDB read latency high"
+          description: "ScyllaDB read latency p99 is {{ $value }}ms"
+
+  - name: darkages-info
+    interval: 60s
+    rules:
+      # QoS degradation activated
+      - alert: QoSDegradationActive
+        expr: zone_qos_degradation_active == 1
+        for: 0s
+        labels:
+          severity: info
+          team: performance
+        annotations:
+          summary: "QoS degradation active on Zone {{ $labels.zone_id }}"
+          description: "Zone {{ $labels.zone_id }} has activated QoS degradation measures"
+
+      # Aura sync issues
+      - alert: AuraSyncLag
+        expr: zone_aura_sync_lag_ms > 100
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Aura sync lag on Zone {{ $labels.zone_id }}"
+          description: "Aura projection sync lag is {{ $value }}ms"

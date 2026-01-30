@@ -1,0 +1,309 @@
+# DarkAges MMO - Multi-Zone Production Deployment
+# Runs 4 zones in a 2x2 grid configuration
+#
+# Usage:
+#   docker-compose -f docker-compose.multi-zone.yml up -d    # Start all zones
+#   docker-compose -f docker-compose.multi-zone.yml down     # Stop all zones
+#   docker-compose -f docker-compose.multi-zone.yml logs -f zone-1  # View zone 1 logs
+#
+# Architecture:
+#   Zone 1 (-1000,0)     |     Zone 2 (0,1000)
+#   Bottom-left          |     Bottom-right
+#   Port 7777            |     Port 7779
+#   ---------------------+--------------------
+#   Zone 3 (-1000,0)     |     Zone 4 (0,1000)
+#   Top-left             |     Top-right
+#   Port 7781            |     Port 7783
+
+version: '3.8'
+
+services:
+  # Infrastructure
+  redis:
+    image: redis:7-alpine
+    container_name: darkages-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - darkages-network
+
+  scylla:
+    image: scylladb/scylla:5.2
+    container_name: darkages-scylla
+    ports:
+      - "9042:9042"
+      - "9180:9180"
+    volumes:
+      - scylla_data:/var/lib/scylla
+    command: --developer-mode=1 --smp=2 --memory=2G --overprovisioned
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - darkages-network
+
+  # Zone 1: Bottom-left (-1000 to 0, -1000 to 0)
+  zone-1:
+    build:
+      context: ..
+      dockerfile: infra/dockerfile.server
+    container_name: darkages-zone-1
+    ports:
+      - "7777:7777"  # Game port
+      - "7778:7778"  # Monitoring
+    environment:
+      - ZONE_ID=1
+      - ZONE_PORT=7777
+      - ZONE_MIN_X=-1000
+      - ZONE_MAX_X=0
+      - ZONE_MIN_Z=-1000
+      - ZONE_MAX_Z=0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SCYLLA_HOST=scylla
+      - SCYLLA_PORT=9042
+      - ADJACENT_ZONES=2,3
+    depends_on:
+      redis:
+        condition: service_healthy
+      scylla:
+        condition: service_healthy
+    networks:
+      - darkages-network
+    volumes:
+      - zone1_logs:/app/logs
+      - zone1_data:/app/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+
+  # Zone 2: Bottom-right (0 to 1000, -1000 to 0)
+  zone-2:
+    build:
+      context: ..
+      dockerfile: infra/dockerfile.server
+    container_name: darkages-zone-2
+    ports:
+      - "7779:7779"
+      - "7780:7780"
+    environment:
+      - ZONE_ID=2
+      - ZONE_PORT=7779
+      - ZONE_MIN_X=0
+      - ZONE_MAX_X=1000
+      - ZONE_MIN_Z=-1000
+      - ZONE_MAX_Z=0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SCYLLA_HOST=scylla
+      - SCYLLA_PORT=9042
+      - ADJACENT_ZONES=1,4
+    depends_on:
+      redis:
+        condition: service_healthy
+      scylla:
+        condition: service_healthy
+    networks:
+      - darkages-network
+    volumes:
+      - zone2_logs:/app/logs
+      - zone2_data:/app/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+
+  # Zone 3: Top-left (-1000 to 0, 0 to 1000)
+  zone-3:
+    build:
+      context: ..
+      dockerfile: infra/dockerfile.server
+    container_name: darkages-zone-3
+    ports:
+      - "7781:7781"
+      - "7782:7782"
+    environment:
+      - ZONE_ID=3
+      - ZONE_PORT=7781
+      - ZONE_MIN_X=-1000
+      - ZONE_MAX_X=0
+      - ZONE_MIN_Z=0
+      - ZONE_MAX_Z=1000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SCYLLA_HOST=scylla
+      - SCYLLA_PORT=9042
+      - ADJACENT_ZONES=1,4
+    depends_on:
+      redis:
+        condition: service_healthy
+      scylla:
+        condition: service_healthy
+    networks:
+      - darkages-network
+    volumes:
+      - zone3_logs:/app/logs
+      - zone3_data:/app/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+
+  # Zone 4: Top-right (0 to 1000, 0 to 1000)
+  zone-4:
+    build:
+      context: ..
+      dockerfile: infra/dockerfile.server
+    container_name: darkages-zone-4
+    ports:
+      - "7783:7783"
+      - "7784:7784"
+    environment:
+      - ZONE_ID=4
+      - ZONE_PORT=7783
+      - ZONE_MIN_X=0
+      - ZONE_MAX_X=1000
+      - ZONE_MIN_Z=0
+      - ZONE_MAX_Z=1000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SCYLLA_HOST=scylla
+      - SCYLLA_PORT=9042
+      - ADJACENT_ZONES=2,3
+    depends_on:
+      redis:
+        condition: service_healthy
+      scylla:
+        condition: service_healthy
+    networks:
+      - darkages-network
+    volumes:
+      - zone4_logs:/app/logs
+      - zone4_data:/app/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+
+  # Load Balancer / Gateway
+  gateway:
+    image: nginx:alpine
+    container_name: darkages-gateway
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/upstream.conf:/etc/nginx/upstream.conf:ro
+    depends_on:
+      - zone-1
+      - zone-2
+      - zone-3
+      - zone-4
+    networks:
+      - darkages-network
+    restart: unless-stopped
+
+  # Monitoring - Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: darkages-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - darkages-network
+    restart: unless-stopped
+
+  # Monitoring - Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: darkages-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    networks:
+      - darkages-network
+    restart: unless-stopped
+
+  # Jaeger - Distributed Tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: darkages-jaeger
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - darkages-network
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+    driver: local
+  scylla_data:
+    driver: local
+  zone1_logs:
+    driver: local
+  zone2_logs:
+    driver: local
+  zone3_logs:
+    driver: local
+  zone4_logs:
+    driver: local
+  zone1_data:
+    driver: local
+  zone2_data:
+    driver: local
+  zone3_data:
+    driver: local
+  zone4_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  darkages-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

@@ -1,0 +1,104 @@
+[gd_scene load_steps=2 format=3 uid="uid://ui"]
+
+[ext_resource type="Script" path="res://scripts/UI.cs" id="1_ui"]
+
+[node name="UI" type="CanvasLayer"]
+script = ExtResource("1_ui")
+
+[node name="ConnectionPanel" type="Panel" parent="."]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -100.0
+offset_right = 150.0
+offset_bottom = 100.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="ConnectionPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="ConnectionPanel/VBoxContainer"]
+layout_mode = 2
+text = "DarkAges MMO"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="ConnectionPanel/VBoxContainer"]
+layout_mode = 2
+
+[node name="ServerAddress" type="LineEdit" parent="ConnectionPanel/VBoxContainer"]
+layout_mode = 2
+placeholder_text = "Server Address"
+text = "127.0.0.1"
+
+[node name="ServerPort" type="LineEdit" parent="ConnectionPanel/VBoxContainer"]
+layout_mode = 2
+placeholder_text = "Port"
+text = "7777"
+
+[node name="ConnectButton" type="Button" parent="ConnectionPanel/VBoxContainer"]
+layout_mode = 2
+text = "Connect"
+
+[node name="StatusLabel" type="Label" parent="ConnectionPanel/VBoxContainer"]
+layout_mode = 2
+text = "Disconnected"
+horizontal_alignment = 1
+
+[node name="DebugPanel" type="Panel" parent="."]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -200.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = 150.0
+grow_horizontal = 0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="DebugPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 5.0
+offset_top = 5.0
+offset_right = -5.0
+offset_bottom = -5.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Title" type="Label" parent="DebugPanel/VBoxContainer"]
+layout_mode = 2
+text = "Debug Info"
+
+[node name="PingLabel" type="Label" parent="DebugPanel/VBoxContainer"]
+layout_mode = 2
+text = "Ping: -- ms"
+
+[node name="FpsLabel" type="Label" parent="DebugPanel/VBoxContainer"]
+layout_mode = 2
+text = "FPS: --"
+
+[node name="EntitiesLabel" type="Label" parent="DebugPanel/VBoxContainer"]
+layout_mode = 2
+text = "Entities: --"
+
+[node name="PositionLabel" type="Label" parent="DebugPanel/VBoxContainer"]
+layout_mode = 2
+text = "Pos: --"
+
+[node name="PredictionLabel" type="Label" parent="DebugPanel/VBoxContainer"]
+layout_mode = 2
+text = "Prediction Error: --"

@@ -1,0 +1,15 @@
+# DarkAges Chaos Testing Framework - Python Dependencies
+# Python 3.8+ required
+
+# Core dependencies
+docker>=6.0.0          # Docker container management
+redis>=4.5.0           # Redis client for metrics collection
+asyncio>=3.4.3         # Async I/O (built-in for Python 3.8+)
+
+# Bot swarm integration
+# Requires parent directory: tools/stress-test/bot_swarm.py
+
+# Optional advanced features:
+# prometheus-client>=0.16  # Direct Prometheus metrics querying
+# pyyaml>=6.0              # YAML report generation
+# requests>=2.28.0         # HTTP health checks
