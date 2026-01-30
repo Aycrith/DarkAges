@@ -78,6 +78,19 @@ test-results/
 *.gcov
 *.gcda
 *.gcno
+validation_report*.json
+E2E_TEST_*.json
+
+# Build variants
+/build_test/
+/docs/build/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
 
 # Package manager
 node_modules/
