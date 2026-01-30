@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>DarkAges MMO - Updated Remediation Analysis (Amended)</title>
+    <style>
+        @page { size: A4; margin: 2cm; }
+        @page :first { margin: 0; }
+        body { font-family: Georgia, serif; font-size: 11pt; line-height: 1.5; color: #333; margin: 0; padding: 0; }
+        .cover { width: 210mm; height: 297mm; background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%); position: relative; page-break-after: always; }
+        .cover-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; width: 80%; }
+        .cover-title { font-size: 28pt; color: #2c3e50; margin-bottom: 0.5cm; }
+        .cover-subtitle { font-size: 14pt; color: #5d6d7e; margin-bottom: 2cm; }
+        .update-badge { display: inline-block; padding: 0.3em 1em; background: #e74c3c; color: white; font-size: 10pt; font-weight: bold; margin-top: 1cm; }
+        h1 { font-size: 18pt; color: #2c3e50; border-bottom: 2px solid #2c3e50; padding-bottom: 0.2cm; margin-top: 1cm; page-break-after: avoid; }
+        h2 { font-size: 14pt; color: #34495e; margin-top: 0.8cm; page-break-after: avoid; }
+        h3 { font-size: 12pt; color: #5d6d7e; margin-top: 0.6cm; page-break-after: avoid; }
+        table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 10pt; page-break-inside: avoid; }
+        thead { border-top: 2px solid #333; border-bottom: 1px solid #333; }
+        th { padding: 0.5em; text-align: left; font-weight: bold; background: #f5f5f5; }
+        tbody tr { border-bottom: 1px solid #ddd; }
+        tbody tr:last-child { border-bottom: 2px solid #333; }
+        td { padding: 0.5em; vertical-align: top; }
+        pre { background: #f5f5f5; padding: 1em; overflow-x: auto; white-space: pre-wrap; font-family: monospace; font-size: 9pt; page-break-inside: avoid; }
+        code { font-family: monospace; font-size: 9pt; background: #f5f5f5; padding: 0.1em 0.3em; }
+        .priority-p0 { display: inline-block; padding: 0.1em 0.5em; background: #e74c3c; color: white; font-size: 8pt; font-weight: bold; }
+        .priority-p1 { display: inline-block; padding: 0.1em 0.5em; background: #f39c12; color: white; font-size: 8pt; font-weight: bold; }
+        .priority-p2 { display: inline-block; padding: 0.1em 0.5em; background: #27ae60; color: white; font-size: 8pt; font-weight: bold; }
+        .adr { border-left: 3px solid #2c3e50; padding-left: 1em; margin: 1em 0; background: #f8f9fa; padding: 1em; }
+        .adr-title { font-weight: bold; color: #2c3e50; margin-bottom: 0.5em; }
+        .adr-updated { background: #fff3cd; border-left-color: #f39c12; }
+        .adr-new { background: #d5f5e3; border-left-color: #27ae60; }
+        .change-added { color: #27ae60; font-weight: bold; }
+        .change-modified { color: #f39c12; font-weight: bold; }
+        .change-removed { color: #e74c3c; font-weight: bold; text-decoration: line-through; }
+        ul, ol { margin: 0.5em 0; padding-left: 2em; }
+        li { margin: 0.3em 0; }
+        .section-break { page-break-before: always; }
+        .summary-box { background: #f8f9fa; border: 1px solid #ddd; padding: 1em; margin: 1em 0; }
+        .status-complete { color: #27ae60; font-weight: bold; }
+        .status-progress { color: #f39c12; font-weight: bold; }
+        .status-pending { color: #e74c3c; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="cover">
+        <div class="cover-content">
+            <h1 class="cover-title">DarkAges MMO</h1>
+            <p class="cover-subtitle">Updated Remediation Analysis<br>Amended Recommendations</p>
+            <p><strong>Update Date:</strong> January 30, 2026</p>
+            <p><strong>Current Project Phase:</strong> 6 External Integration</p>
+            <p><strong>Previous Analysis:</strong> Phase 0 Foundation</p>
+            <p><strong>Codebase Size:</strong> ~30,000 lines (18K server + 3.5K client)</p>
+            <div class="update-badge">UPDATED ANALYSIS</div>
+        </div>
+    </div>
+
+    <h1>1. Executive Summary - What's Changed</h1>
+
+    <div class="summary-box">
+        <h3>Major Project Evolution Since Initial Analysis</h3>
+        <p>The DarkAges MMO project has <strong>significantly evolved</strong> from the Phase 0 Foundation state analyzed in the original remediation plan. The project is now in <strong>Phase 6 External Integration</strong> with:</p>
+        <ul>
+            <li><span class="status-complete">✅ Complete</span> Phases 0-5 implementation (~30,000 lines of code)</li>
+            <li><span class="status-complete">✅ Complete</span> Phase 6 build system hardening</li>
+            <li><span class="status-pending">⏳ Ready to Start</span> External library integration (GameNetworkingSockets, Redis, ScyllaDB, FlatBuffers)</li>
+            <li><span class="status-pending">⏳ Planned</span> Phases 7-8 (Client Implementation, Production Hardening)</li>
+        </ul>
+    </div>
+
+    <h2>Key Changes Requiring Remediation Update</h2>
+    <table>
+        <thead><tr><th>Aspect</th><th>Previous State</th><th>Current State</th><th>Impact on Recommendations</th></tr></thead>
+        <tbody>
+            <tr><td>Project Phase</td><td>Phase 0 Foundation</td><td>Phase 6 External Integration</td><td><span class="change-modified">MODIFIED</span></td></tr>
+            <tr><td>Codebase Size</td><td>~5,000 lines (stubs)</td><td>~30,000 lines (implemented)</td><td><span class="change-modified">MODIFIED</span></td></tr>
+            <tr><td>CMake</td><td>Basic CMakeLists.txt</td><td>CMakeLists_enhanced.txt with options</td><td><span class="change-modified">MODIFIED</span></td></tr>
+            <tr><td>Documentation</td><td>Minimal docs</td><td>Comprehensive docs/API contracts</td><td><span class="change-added">NEW</span></td></tr>
+            <tr><td>CI/CD</td><td>No GitHub Actions</td><td>Workflows folder exists</td><td><span class="change-added">NEW</span></td></tr>
+            <tr><td>Database</td><td>Redis+ScyllaDB planned</td><td>Schemas defined, stubs ready</td><td><span class="change-modified">MODIFIED</span></td></tr>
+        </tbody>
+    </table>
+
+    <h2>Updated Priority Assessment</h2>
+    <table>
+        <thead><tr><th>Area</th><th>Previous Priority</th><th>Updated Priority</th><th>Reasoning</th></tr></thead>
+        <tbody>
+            <tr><td>External Library Integration</td><td>P1</td><td><span class="priority-p0">P0</span></td><td>Blocking Phase 6 progress</td></tr>
+            <tr><td>Integration Testing</td><td>P1</td><td><span class="priority-p0">P0</span></td><td>30K lines untested</td></tr>
+            <tr><td>Database Consolidation</td><td>P0</td><td><span class="priority-p1">P1</span></td><td>Schemas already defined</td></tr>
+            <tr><td>Deployment Simplification</td><td>P0</td><td><span class="priority-p1">P1</span></td><td>K8s not yet deployed</td></tr>
+            <tr><td>Godot Integration</td><td>P0</td><td><span class="priority-p0">P0</span></td><td>Still blocking</td></tr>
+        </tbody>
+    </table>
+
+    <h1 class="section-break">2. Updated Research Area 1: Deployment Architecture</h1>
+
+    <h2>2.1 Revised Assessment</h2>
+    <p>The project now has <strong>comprehensive infrastructure documentation</strong> including:</p>
+    <ul>
+        <li>API contracts between all modules (docs/API_CONTRACTS.md)</li>
+        <li>Database schemas for Redis and ScyllaDB (docs/DATABASE_SCHEMA.md)</li>
+        <li>Network protocol specification (docs/network-protocol/PROTOCOL_SPEC.md)</li>
+        <li>Multiple docker-compose variants (dev, multi-zone, prod, phase6)</li>
+    </ul>
+
+    <div class="adr adr-updated">
+        <div class="adr-title">ADR-001-UPDATED: VPS Selection (Revised)</div>
+        <p><strong>Previous Decision:</strong> Hetzner AX42 for all environments</p>
+        <p><strong>Updated Decision:</strong> Tiered approach based on project phase</p>
+        <ul>
+            <li><strong>Development:</strong> OVH VPS-3 ($15/month) - sufficient for integration testing</li>
+            <li><strong>Staging:</strong> Hetzner EX44 (€44/month) - test production-like environment</li>
+            <li><strong>Production:</strong> Hetzner AX42 (€49/month) - when ready for players</li>
+        </ul>
+        <p><strong>Rationale:</strong> With external integration as current focus, start with lower-cost VPS for development. Scale up only after successful integration testing.</p>
+    </div>
+
+    <h2>2.2 Docker Compose Strategy - Aligned with Project State</h2>
+    <p>The project already has multiple docker-compose files. Recommended consolidation:</p>
+
+    <table>
+        <thead><tr><th>File</th><th>Purpose</th><th>Recommendation</th></tr></thead>
+        <tbody>
+            <tr><td>docker-compose.yml</td><td>Development (Redis+ScyllaDB)</td><td><span class="status-complete">Keep</span> - for Phase 6 integration</td></tr>
+            <tr><td>docker-compose.phase6.yml</td><td>Phase 6 specific</td><td><span class="status-complete">Keep</span> - external deps testing</td></tr>
+            <tr><td>docker-compose.dev.yml</td><td>Multi-zone dev</td><td><span class="status-progress">Simplify</span> - single zone for now</td></tr>
+            <tr><td>docker-compose.multi-zone.yml</td><td>Multi-zone production</td><td><span class="status-pending">Defer</span> - not needed until 500+ players</td></tr>
+            <tr><td>docker-compose.prod.yml</td><td>Full production stack</td><td><span class="status-pending">Defer</span> - overkill for Phase 6</td></tr>
+        </tbody>
+    </table>
+
+    <div class="adr adr-new">
+        <div class="adr-title">ADR-002-NEW: Database Strategy for Phase 6</div>
+        <p><strong>Decision:</strong> Proceed with Redis+ScyllaDB as designed for Phase 6 integration testing.</p>
+        <p><strong>Rationale:</strong> The schemas are already defined and stubs are ready. The complexity is already "baked in" - changing now would delay Phase 6.</p>
+        <p><strong>Consolidation Path:</strong> After Phase 6 integration testing, evaluate if PostgreSQL-only can handle the load before production deployment.</p>
+        <p><strong>Timeline:</strong> Re-evaluate at Phase 8 (Production Hardening) - approximately 8-12 weeks.</p>
+    </div>
+
+    <h1 class="section-break">3. Updated Research Area 2: Godot 4 + C++ Integration</h1>
+
+    <h2>3.1 Current State Assessment</h2>
+    <p>The client implementation has progressed significantly:</p>
+    <ul>
+        <li>3,500+ lines of Godot 4.x client code</li>
+        <li>Client-side prediction implemented</li>
+        <li>Interpolation system in place</li>
+        <li>Network protocol specification documented</li>
+    </ul>
+
+    <div class="adr adr-updated">
+        <div class="adr-title">ADR-003-UPDATED: Networking Integration (Revised)</div>
+        <p><strong>Previous Decision:</strong> Evaluate GameNetworkingSockets vs ENet</p>
+        <p><strong>Updated Decision:</strong> Proceed with GameNetworkingSockets as planned</p>
+        <p><strong>Rationale:</strong> The CMakeLists_enhanced.txt already has ENABLE_GNS option. The stubs are in place. Switching now would waste integration effort.</p>
+        <p><strong>Implementation Order:</strong></p>
+        <ol>
+            <li>Complete GameNetworkingSockets integration (WP-6-1)</li>
+            <li>Implement FlatBuffers protocol (WP-6-4)</li>
+            <li>Wire up Godot client to use the protocol</li>
+        </ol>
+    </div>
+
+    <h2>3.2 Integration Testing Strategy</h2>
+    <p>With 30,000 lines of untested code, integration testing is now <span class="priority-p0">P0 CRITICAL</span>.</p>
+
+    <pre># Recommended integration test sequence
+Phase 6.1: GameNetworkingSockets + FlatBuffers (no database)
+  - Test: Server accepts connections, exchanges messages
+  - Duration: 1 week
+
+Phase 6.2: Add Redis hot-state
+  - Test: Player sessions, positions cached
+  - Duration: 1 week
+
+Phase 6.3: Add ScyllaDB persistence
+  - Test: Player profiles save/load
+  - Duration: 1 week
+
+Phase 6.4: Full integration
+  - Test: End-to-end with Godot client
+  - Duration: 2 weeks
+
+Phase 6.5: Stress testing
+  - Test: 10, 50, 100 concurrent connections
+  - Duration: 1 week</pre>
+
+    <h1 class="section-break">4. Updated Research Area 3: ECS & Performance</h1>
+
+    <h2>4.1 Current ECS Implementation</h2>
+    <p>The project has <strong>18,000+ lines of server code</strong> with:</p>
+    <ul>
+        <li>Complete ECS architecture with 10+ components</li>
+        <li>Spatial hash collision detection</li>
+        <li>Area of Interest (AOI) 3-tier system</li>
+        <li>Delta compression for networking</li>
+        <li>Lag-compensated combat system</li>
+    </ul>
+
+    <div class="adr adr-new">
+        <div class="adr-title">ADR-004-NEW: ECS Performance Strategy</div>
+        <p><strong>Decision:</strong> Keep current EnTT implementation. Do NOT refactor to groups yet.</p>
+        <p><strong>Rationale:</strong> With 18,000 lines already written, refactoring carries too much risk. Profile first, optimize second.</p>
+        <p><strong>Performance Validation Plan:</strong></p>
+        <ol>
+            <li>Build with ENABLE_PROFILING=ON</li>
+            <li>Run 100-player stress test</li>
+            <li>Identify actual bottlenecks via Perfetto traces</li>
+            <li>Optimize only proven hotspots</li>
+        </ol>
+    </div>
+
+    <h1 class="section-break">5. Updated Research Area 4: Anti-Cheat</h1>
+
+    <h2>5.1 Current Anti-Cheat Implementation</h2>
+    <p>The project already has:</p>
+    <ul>
+        <li>Kinematic movement system with anti-cheat</li>
+        <li>Server-authoritative validation</li>
+        <li>Movement speed limits (6 m/s normal, 9 m/s sprint)</li>
+    </ul>
+
+    <div class="adr adr-new">
+        <div class="adr-title">ADR-005-NEW: Anti-Cheat Enhancement</div>
+        <p><strong>Decision:</strong> Enhance existing anti-cheat with server-side rewind</p>
+        <p><strong>Current State:</strong> Basic speed/teleport validation exists</p>
+        <p><strong>Enhancement:</strong> Add lag compensation for combat validation</p>
+        <pre>// Pseudocode for lag-compensated combat
+class LagCompensatedCombat {
+    struct HistorySnapshot {
+        uint32_t timestamp;
+        Vector3 position;
+        BoundingBox hitbox;
+    };
+
+    std::deque&lt;HistorySnapshot&gt; player_history;
+
+    bool validate_hit(PlayerID attacker, PlayerID target, uint32_t client_time) {
+        // Rewind target to when attacker fired
+        int32_t rtt = estimate_rtt(attacker);
+        uint32_t fire_time = get_server_time() - (rtt / 2);
+
+        auto target_state = interpolate_history(target, fire_time);
+        auto attacker_state = interpolate_history(attacker, fire_time);
+
+        // Validate line of sight, range, etc.
+        return check_hit_valid(attacker_state, target_state);
+    }
+};</pre>
+    </div>
+
+    <h1 class="section-break">6. Updated Research Area 5: CI/CD & Workflow</h1>
+
+    <h2>6.1 Build System Assessment</h2>
+    <p>The project now has:</p>
+    <ul>
+        <li>CMakeLists_enhanced.txt with feature flags</li>
+        <li>.github/workflows/ folder (workflows need implementation)</li>
+        <li>tools/ folder with build, chaos, stress-test utilities</li>
+    </ul>
+
+    <div class="adr adr-new">
+        <div class="adr-title">ADR-006-NEW: CI/CD Implementation</div>
+        <p><strong>Decision:</strong> Implement GitHub Actions workflows for Phase 6 integration</p>
+        <p><strong>Priority Workflows:</strong></p>
+        <ol>
+            <li><strong>ci.yml</strong> - Build server with all options enabled</li>
+            <li><strong>integration-test.yml</strong> - Docker Compose + test suite</li>
+            <li><strong>godot-export.yml</strong> - Build and export Godot client</li>
+        </ol>
+        <p><strong>CMake Integration:</strong></p>
+        <pre># Use CMakeLists_enhanced.txt for CI
+cmake -DCMAKE_BUILD_TYPE=Release \
+      -DENABLE_GNS=ON \
+      -DENABLE_REDIS=ON \
+      -DENABLE_SCYLLA=ON \
+      -DENABLE_FLATBUFFERS=ON \
+      -DFETCH_DEPENDENCIES=ON \
+      -B build</pre>
+    </div>
+
+    <h1 class="section-break">7. Updated Research Area 6: MVP Scope</h1>
+
+    <h2>7.1 Revised Phase 6-8 Timeline</h2>
+    <table>
+        <thead><tr><th>Phase</th><th>Duration</th><th>Exit Criteria</th><th>Risk Level</th></tr></thead>
+        <tbody>
+            <tr><td>6.1 GNS Integration</td><td>1 week</td><td>Server accepts UDP connections</td><td>Medium</td></tr>
+            <tr><td>6.2 Redis Integration</td><td>1 week</td><td>Session data persists</td><td>Low</td></tr>
+            <tr><td>6.3 ScyllaDB Integration</td><td>1 week</td><td>Player profiles save/load</td><td>Medium</td></tr>
+            <tr><td>6.4 FlatBuffers Protocol</td><td>1 week</td><td>Messages serialize correctly</td><td>Low</td></tr>
+            <tr><td>6.5 Integration Testing</td><td>2 weeks</td><td>10 players, 1 hour, zero crashes</td><td>High</td></tr>
+            <tr><td>7 Client Implementation</td><td>4 weeks</td><td>Godot client connects, moves</td><td>High</td></tr>
+            <tr><td>8 Production Hardening</td><td>2 weeks</td><td>100 players, monitoring, backups</td><td>Medium</td></tr>
+        </tbody>
+    </table>
+
+    <h2>7.2 Success Criteria Revisited</h2>
+    <table>
+        <thead><tr><th>Criterion</th><th>Original Target</th><th>Updated Target</th><th>Status</th></tr></thead>
+        <tbody>
+            <tr><td>DevOps Reduction</td><td>docker-compose up</td><td>docker-compose -f docker-compose.phase6.yml up</td><td class="status-progress">Achieved</td></tr>
+            <tr><td>Build Simplicity</td><td>&lt;2 minutes</td><td>&lt;5 minutes (with deps)</td><td class="status-pending">Pending</td></tr>
+            <tr><td>Deterministic Proof</td><td>Fixed-point demo</td><td>Integration test passes</td><td class="status-pending">Pending</td></tr>
+            <tr><td>Cost Ceiling</td><td>$50/month</td><td>$50/month (production)</td><td class="status-complete">On track</td></tr>
+        </tbody>
+    </table>
+
+    <h1 class="section-break">8. Updated Risk Matrix</h1>
+
+    <table>
+        <thead><tr><th>Risk</th><th>Severity</th><th>Likelihood</th><th>Mitigation</th></tr></thead>
+        <tbody>
+            <tr><td>External library integration fails</td><td>High</td><td>Medium</td><td>Prototype each lib separately first</td></tr>
+            <tr><td>30K lines have hidden bugs</td><td>High</td><td>High</td><td>Incremental integration testing</td></tr>
+            <tr><td>Godot client integration issues</td><td>High</td><td>Medium</td><td>Early protocol testing</td></tr>
+            <tr><td>Performance at 100 players</td><td>Medium</td><td>Unknown</td><td>Profile early, optimize proven hotspots</td></tr>
+            <tr><td>Database complexity overhead</td><td>Medium</td><td>Low</td><td>Re-evaluate at Phase 8</td></tr>
+        </tbody>
+    </table>
+
+    <h1 class="section-break">9. Amended Implementation Roadmap</h1>
+
+    <h2>Immediate Actions (Next 2 Weeks)</h2>
+    <ol>
+        <li><span class="priority-p0">P0</span> Implement GitHub Actions CI workflow</li>
+        <li><span class="priority-p0">P0</span> Complete GameNetworkingSockets integration (WP-6-1)</li>
+        <li><span class="priority-p0">P0</span> Create integration test harness</li>
+        <li><span class="priority-p1">P1</span> Set up OVH VPS-3 for development testing</li>
+    </ol>
+
+    <h2>Short-Term Actions (Weeks 3-6)</h2>
+    <ol>
+        <li><span class="priority-p0">P0</span> Complete Redis integration (WP-6-2)</li>
+        <li><span class="priority-p0">P0</span> Complete ScyllaDB integration (WP-6-3)</li>
+        <li><span class="priority-p0">P0</span> Complete FlatBuffers protocol (WP-6-4)</li>
+        <li><span class="priority-p1">P1</span> Run 10-player integration test</li>
+    </ol>
+
+    <h2>Medium-Term Actions (Weeks 7-12)</h2>
+    <ol>
+        <li><span class="priority-p0">P0</span> Godot client integration (Phase 7)</li>
+        <li><span class="priority-p1">P1</span> 50-player stress test</li>
+        <li><span class="priority-p1">P1</span> Performance profiling and optimization</li>
+        <li><span class="priority-p2">P2</span> Production deployment planning (Phase 8)</li>
+    </ol>
+
+    <h1 class="section-break">10. Summary of Changes from Original Analysis</h1>
+
+    <table>
+        <thead><tr><th>Original Recommendation</th><th>Updated Recommendation</th><th>Reason</th></tr></thead>
+        <tbody>
+            <tr><td>Replace Redis+ScyllaDB with PostgreSQL</td><td>Proceed with Redis+ScyllaDB for Phase 6</td><td>Schemas already defined, stubs ready</td></tr>
+            <tr><td>Single VPS for all environments</td><td>Tiered VPS approach</td><td>Cost optimization for development</td></tr>
+            <tr><td>Refactor EnTT to use groups</td><td>Profile first, optimize second</td><td>18K lines already written</td></tr>
+            <tr><td>Basic GitHub Actions</td><td>Comprehensive CI for Phase 6</td><td>Critical for integration testing</td></tr>
+            <tr><td>Anti-cheat from scratch</td><td>Enhance existing implementation</td><td>Anti-cheat stubs already exist</td></tr>
+        </tbody>
+    </table>
+
+    <div class="summary-box">
+        <h3>Bottom Line</h3>
+        <p>The project has made <strong>significant progress</strong> since the initial Phase 0 analysis. The codebase is now substantial (30K lines) and well-documented. The primary risk has shifted from <em>"over-engineering"</em> to <em>"integration complexity with large untested codebase."</em></p>
+        <p><strong>Key Success Factor:</strong> Complete Phase 6 external integration with comprehensive testing before moving to client integration. The database consolidation and deployment simplification can be revisited at Phase 8 when production deployment approaches.</p>
+    </div>
+
+</body>
+</html>

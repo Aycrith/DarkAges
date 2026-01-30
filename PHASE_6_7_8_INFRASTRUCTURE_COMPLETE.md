@@ -1,13 +1,21 @@
-# DarkAges MMO - Phases 6-8 Infrastructure Complete
+# DarkAges MMO - Phases 6-8 Infrastructure Complete (Research-Aligned)
 
 **Date:** 2026-01-30  
-**Status:** ✅ Infrastructure Ready - Parallel Development Can Begin
+**Status:** ✅ Infrastructure Ready - Research Analysis Integrated
 
 ---
 
 ## Summary
 
-This document summarizes the infrastructure and documentation work completed to enable parallel agent development for Phases 6-8 of the DarkAges MMO project.
+This document summarizes the infrastructure and documentation work completed to enable parallel agent development for Phases 6-8. It now incorporates findings from the **kimi2.5 research analysis** located in `Research/DarkAges_ZeroBudget_Remediation/`.
+
+### Key Research Integration
+
+The research analysis confirms:
+1. ✅ **Proceed with current architecture** - Redis+ScyllaDB, GameNetworkingSockets, EnTT
+2. 🔴 **Integration testing is now P0 critical** - 30,000 lines of untested code
+3. 🔴 **External library integration is blocking** - Complete WP-6-1 through WP-6-4 immediately
+4. ✅ **Database simplification can wait** - Re-evaluate at Phase 8
 
 ---
 
@@ -17,18 +25,49 @@ This document summarizes the infrastructure and documentation work completed to 
 
 | Document | Status | Purpose |
 |----------|--------|---------|
-| `PROJECT_STATUS.md` | ✅ Created | Single source of truth for project status |
+| `PROJECT_STATUS.md` (v3.0) | ✅ Updated | **Research-aligned** single source of truth |
 | `README.md` | ✅ Updated | Now reflects Phase 6 as current |
 | `docs/API_CONTRACTS.md` | ✅ Created | Interface contracts between all modules |
 | `docs/DATABASE_SCHEMA.md` | ✅ Created | Redis & ScyllaDB schemas |
 | `docs/network-protocol/PROTOCOL_SPEC.md` | ✅ Created | Network protocol specification |
+| `PHASE_6_7_8_INFRASTRUCTURE_COMPLETE.md` | ✅ Updated | This document (research-integrated) |
 
-### Conflicts Resolved
+### Research Documents Referenced
 
-- ✅ `README.md` showed "Phase 0" - Updated to "Phase 6 External Integration"
-- ✅ `STATUS.md` was overly optimistic - Referenced `PROJECT_STATUS.md` as SSOT
-- ✅ `MASTER_TASK_TRACKER.md` had confusing progress indicators - Documented actual state
-- ✅ Created `docs/ACTUAL_STATUS.md` for honest assessment
+| Document | Location | Purpose |
+|----------|----------|---------|
+| Original Remediation Analysis | `Research/DarkAges_ZeroBudget_Remediation/darkages_remediation.html` | Zero-budget recommendations |
+| Simplified Summary | `Research/DarkAges_ZeroBudget_Remediation/darkages_simple.html` | Quick reference |
+| Updated Analysis (Amended) | `Research/DarkAges_ZeroBudget_Remediation/darkages_updated.html` | **Research-aligned updates** |
+
+---
+
+## Updated Architecture Decision Records (ADRs)
+
+Based on kimi2.5 research analysis:
+
+### ADR-001-UPDATED: VPS Selection (Tiered Approach)
+
+| Environment | VPS | Cost |
+|-------------|-----|------|
+| Development | OVH VPS-3 | $15/month |
+| Staging | Hetzner EX44 | €44/month |
+| Production | Hetzner AX42 | €49/month |
+
+### ADR-002: Database Strategy
+**Decision:** Proceed with Redis+ScyllaDB for Phase 6. Re-evaluate at Phase 8.
+
+### ADR-003-UPDATED: Networking
+**Decision:** Proceed with GameNetworkingSockets as planned.
+
+### ADR-004-NEW: ECS Performance
+**Decision:** Keep current EnTT. Profile first, optimize second. Don't refactor 18K lines.
+
+### ADR-005-NEW: Anti-Cheat
+**Decision:** Enhance existing implementation. Add server-side rewind for lag compensation.
+
+### ADR-006-NEW: CI/CD
+**Decision:** Implement GitHub Actions workflows for Phase 6 integration.
 
 ---
 
@@ -40,32 +79,22 @@ This document summarizes the infrastructure and documentation work completed to 
 - `NetworkManager` class interface
 - Connection lifecycle management
 - Quality metrics (RTT, packet loss, jitter)
-- Input/output data structures
 - Contract with ZoneServer
 
 #### Database Layer (WP-6-2, WP-6-3)
-- `RedisManager` interface
-  - Session management
-  - Zone membership
-  - Position caching
-  - Pub/sub for cross-zone communication
-- `ScyllaManager` interface
-  - Combat event logging
-  - Player stats (counters)
-  - Async write patterns
+- `RedisManager` interface - Session management, zone membership, pub/sub
+- `ScyllaManager` interface - Combat logging, player stats, async writes
 
 #### Protocol Layer (WP-6-4)
 - FlatBuffers schema definitions
-- Packet structures (Input, Snapshot, Event)
 - Delta compression algorithm
 - Connection handshake protocol
-- Security considerations
 
 ---
 
 ## Phase 3: Infrastructure Setup ✅
 
-### CMake Build System Enhanced
+### CMake Build System
 
 | Feature | Status | Notes |
 |---------|--------|-------|
@@ -84,54 +113,31 @@ This document summarizes the infrastructure and documentation work completed to 
 |-------|----------|--------|
 | `docker-compose.yml` | Redis + ScyllaDB | ✅ Ready |
 | `docker-compose.phase6.yml` | Full stack + monitoring | ✅ Created |
-| Multi-zone stack | 4-zone grid | ✅ Existing |
+| Multi-zone stack | 4-zone grid | ✅ Existing (defer to 500+ players) |
 
-**New Services Added:**
-- Prometheus (metrics)
-- Grafana (visualization)
-- Loki (log aggregation)
-- Promtail (log shipping)
-- Scylla Manager (DB management)
-- Mailhog (email testing)
+**Research Note:** Multi-zone configuration deferred until 500+ players per kimi2.5 analysis.
 
 ### Database Schema
 
-**Redis Schema (`infra/scylla/init.cql`):**
-- Key naming conventions
-- Session keys with TTL
-- Zone membership sets
-- Position cache
-- Pub/sub channels
-- Rate limiting
+**Redis Schema:** Key naming conventions, TTL policies, pub/sub channels
 
-**ScyllaDB Schema (`infra/scylla/init.cql`):**
-- 11 tables created:
-  - `combat_events` (time-series)
-  - `player_stats` (counters)
-  - `player_sessions`
-  - `player_profiles`
-  - `leaderboard_daily`
-  - `leaderboard_alltime`
-  - `zone_metrics`
-  - `audit_log`
-  - `entity_snapshots`
-  - `anticheat_events`
-  - `system_events`
+**ScyllaDB Schema:** 11 tables including:
+- `combat_events` (time-series)
+- `player_stats` (counters)
+- `leaderboard_daily/alltime`
+- `audit_log`, `anticheat_events`
 
 ### Monitoring Configuration
 
-**Prometheus (`infra/monitoring/prometheus.yml`):**
-- Scrape configs for all services
-- 5s scrape interval for game metrics
-- 15s default interval
+- Prometheus (metrics collection)
+- Grafana (visualization)
+- Loki (log aggregation)
 
-**Grafana (`infra/monitoring/grafana/`):**
-- Datasource configuration
-- Dashboard provisioning structure
+**Research Note:** StatsD considered but Prometheus already configured. Keep current.
 
 ### Dependency Installation
 
-**Script Created:** `tools/setup_phase6_deps.ps1`
+**Script:** `tools/setup_phase6_deps.ps1`
 
 Installs:
 - GameNetworkingSockets v1.4.1
@@ -141,45 +147,25 @@ Installs:
 
 ---
 
-## Directory Structure
+## Research-Aligned Priority Assessment
 
-```
-C:\Dev\DarkAges\
-├── PROJECT_STATUS.md          # Single source of truth
-├── README.md                  # Updated project overview
-├── CMakeLists.txt             # Base build (stubs)
-├── CMakeLists_enhanced.txt    # Enhanced (external deps)
-│
-├── docs/
-│   ├── API_CONTRACTS.md       # Interface contracts
-│   ├── DATABASE_SCHEMA.md     # Database schemas
-│   ├── ACTUAL_STATUS.md       # Honest assessment
-│   ├── IMPLEMENTATION_STATUS.md
-│   └── network-protocol/
-│       └── PROTOCOL_SPEC.md   # Protocol specification
-│
-├── infra/
-│   ├── README.md              # Infrastructure guide
-│   ├── docker-compose.yml     # Basic stack
-│   ├── docker-compose.phase6.yml  # Full stack
-│   ├── docker-compose.multi-zone.yml
-│   ├── Dockerfile.build
-│   │
-│   ├── scylla/
-│   │   └── init.cql           # Schema initialization
-│   ├── redis/
-│   │   └── redis.conf         # Redis configuration
-│   └── monitoring/
-│       ├── prometheus.yml
-│       ├── loki.yml
-│       ├── promtail.yml
-│       └── grafana/
-│           ├── datasources/
-│           └── dashboards/
-│
-└── tools/
-    └── setup_phase6_deps.ps1  # Dependency installer
-```
+### Updated from Original Analysis
+
+| Area | Previous Priority | Updated Priority | Reasoning |
+|------|-------------------|------------------|-----------|
+| External Library Integration | P1 | **P0** | Blocking Phase 6 progress |
+| Integration Testing | P1 | **P0** | 30K lines untested |
+| Database Consolidation | P0 | **P1** | Schemas already defined |
+| Deployment Simplification | P0 | **P1** | K8s not yet deployed |
+| Godot Integration | P0 | **P0** | Still blocking |
+
+### Critical Path (P0)
+
+1. **WP-6-1:** GameNetworkingSockets integration
+2. **WP-6-2:** Redis hot-state integration  
+3. **WP-6-3:** ScyllaDB persistence integration
+4. **WP-6-4:** FlatBuffers protocol implementation
+5. **WP-6-5:** Integration testing (**2 weeks - CRITICAL**)
 
 ---
 
@@ -194,10 +180,6 @@ docker-compose up -d
 
 # Or start full stack with monitoring
 docker-compose -f docker-compose.phase6.yml --profile full up -d
-
-# Verify services
-docker-compose ps
-docker-compose logs -f
 ```
 
 ### Step 2: Install Dependencies (Windows)
@@ -206,9 +188,6 @@ docker-compose logs -f
 # Install all Phase 6 dependencies
 cd tools
 .\setup_phase6_deps.ps1
-
-# Or install specific ones
-.\setup_phase6_deps.ps1 -SkipRedis -SkipScylla  # Install only GNS + FlatBuffers
 ```
 
 ### Step 3: Build with External Dependencies
@@ -231,54 +210,37 @@ Agents can now work in parallel on:
 | DATABASE_AGENT | WP-6-2 (Redis) | ✅ Yes |
 | DATABASE_AGENT | WP-6-3 (ScyllaDB) | ✅ Yes |
 | NETWORK_AGENT | WP-6-4 (FlatBuffers) | ✅ Yes |
-| DEVOPS_AGENT | WP-6-5 (Integration) | ⏳ After WP-6-1/2/3 |
+| DEVOPS_AGENT | WP-6-5 (Integration) | ⏳ After WP-6-1/2/3/4 |
 
 ---
 
-## Parallel Development Guidelines
+## Integration Test Sequence (Research Recommendation)
 
-### Daily Workflow
+```
+Week 1: GameNetworkingSockets + FlatBuffers (no database)
+  - Test: Server accepts connections, exchanges messages
+  - Duration: 1 week
 
-1. **Morning Standup** (per `PARALLEL_AGENT_COORDINATION.md`)
-   ```
-   [AGENT-TYPE] Daily Update - YYYY-MM-DD
-   
-   Work Package: WP-X-Y
-   Status: [IN_PROGRESS|BLOCKED|COMPLETED]
-   
-   Yesterday:
-   - Completed: [Specific deliverable]
-   
-   Today:
-   - Planned: [Specific task]
-   - Dependencies needed: [From other agents]
-   
-   Blockers: [None | WP-X-Y waiting for WP-A-B]
-   ```
+Week 2: Add Redis hot-state
+  - Test: Player sessions, positions cached
+  - Duration: 1 week
 
-2. **Interface Changes**
-   - Notify all affected agents
-   - Update `docs/API_CONTRACTS.md`
-   - Follow interface change protocol
+Week 3: Add ScyllaDB persistence
+  - Test: Player profiles save/load
+  - Duration: 1 week
 
-3. **Code Reviews**
-   - Required before marking WP complete
-   - Quality gates must pass
-   - See `PARALLEL_AGENT_COORDINATION.md`
+Week 4-5: Full integration
+  - Test: End-to-end with Godot client
+  - Duration: 2 weeks
 
-### File Ownership
-
-| Directory | Primary Owner | Secondary |
-|-----------|---------------|-----------|
-| `src/server/netcode/` | NETWORK_AGENT | SECURITY_AGENT |
-| `src/server/db/` | DATABASE_AGENT | DEVOPS_AGENT |
-| `src/server/combat/` | PHYSICS_AGENT | SECURITY_AGENT |
-| `src/client/` | CLIENT_AGENT | NETWORK_AGENT |
-| `infra/` | DEVOPS_AGENT | All |
+Week 6: Stress testing
+  - Test: 10, 50, 100 concurrent connections
+  - Duration: 1 week
+```
 
 ---
 
-## Success Criteria
+## Success Criteria (Research-Aligned)
 
 ### Phase 6 Quality Gates
 
@@ -292,18 +254,31 @@ Agents can now work in parallel on:
 | WP-6-3 | Write latency (p99) | <10ms |
 | WP-6-4 | Serialization time | <50μs/entity |
 | WP-6-4 | Bandwidth reduction | >80% |
-| WP-6-5 | Integration tests | All pass |
+| **WP-6-5** | **Integration test** | **10 players, 1 hour, zero crashes** |
 
 ---
 
-## Next Steps
+## Risk Matrix (Research-Updated)
+
+| Risk | Severity | Likelihood | Mitigation |
+|------|----------|------------|------------|
+| External library integration fails | High | Medium | Prototype each lib separately |
+| **30K lines have hidden bugs** | **High** | **High** | **Incremental integration testing** |
+| Godot client integration issues | High | Medium | Early protocol testing |
+| Performance at 100 players | Medium | Unknown | Profile early, optimize hotspots |
+
+**Primary Risk Shift:** From "over-engineering" → "integration complexity with large untested codebase"
+
+---
+
+## Next Steps (Research-Prioritized)
 
 ### Immediate (This Week)
 
-1. **NETWORK_AGENT_1:** Begin WP-6-1 (GameNetworkingSockets)
-2. **DATABASE_AGENT:** Begin WP-6-2 (Redis) and WP-6-3 (ScyllaDB)
-3. **NETWORK_AGENT_1:** Begin WP-6-4 (FlatBuffers)
-4. **DEVOPS_AGENT:** Verify Docker stack, prepare WP-6-5
+1. 🔴 **P0:** Implement GitHub Actions CI workflow (ADR-006-NEW)
+2. 🔴 **P0:** Begin WP-6-1 (GameNetworkingSockets)
+3. 🔴 **P0:** Create integration test harness
+4. 🟡 **P1:** Set up OVH VPS-3 for development testing
 
 ### Short Term (Next 2 Weeks)
 
@@ -311,11 +286,11 @@ Agents can now work in parallel on:
 2. Begin WP-6-5 (Integration Testing)
 3. First end-to-end connectivity test
 
-### Medium Term (Next 6 Weeks)
+### Medium Term (Weeks 3-6)
 
-1. Complete Phase 6 (External Integration)
-2. Begin Phase 7 (Client Implementation)
-3. Set up Phase 8 monitoring infrastructure
+1. Complete WP-6-5 (10-player integration test)
+2. Begin Phase 7 (Godot client integration)
+3. Performance profiling
 
 ---
 
@@ -323,16 +298,18 @@ Agents can now work in parallel on:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0 | 2026-01-30 | AI Coordinator | Initial infrastructure completion summary |
+| 1.0 | 2026-01-30 | AI Coordinator | Initial infrastructure completion |
+| 1.1 | 2026-01-30 | AI Coordinator | **Research-aligned with kimi2.5 analysis** |
 
 ### Related Documents
-- `PROJECT_STATUS.md` - Current project status
+- `PROJECT_STATUS.md` - Current project status (research-aligned v3.0)
 - `PHASES_6_7_8_ROADMAP.md` - Phase roadmap
 - `WP_IMPLEMENTATION_GUIDE.md` - Work package details
 - `PARALLEL_AGENT_COORDINATION.md` - Agent coordination
 - `docs/API_CONTRACTS.md` - Interface contracts
 - `infra/README.md` - Infrastructure guide
+- `Research/DarkAges_ZeroBudget_Remediation/` - kimi2.5 research analysis
 
 ---
 
-*Infrastructure is ready. Parallel development can now begin.*
+*Infrastructure is ready with research analysis integrated. Parallel development can now begin with P0 focus on external integration and testing.*

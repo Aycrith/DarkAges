@@ -1,16 +1,99 @@
 # DarkAges MMO - Project Status (Single Source of Truth)
 
-**Version:** 2.0  
+**Version:** 3.0 (Research-Aligned)  
 **Last Updated:** 2026-01-30  
-**Status:** Phase 6 Build Infrastructure Complete → Ready for External Integration
+**Status:** Phase 6 External Integration → Integration Testing Critical
 
 ---
 
 ## Executive Summary
 
-The DarkAges MMO project has **completed Phases 0-5 implementation** (~30,000 lines of code) and **Phase 6 build system hardening**. The codebase is architecturally complete but requires **external library integration** and **comprehensive testing** before production readiness.
+The DarkAges MMO project has **completed Phases 0-5 implementation** (~30,000 lines of code) and **Phase 6 build system hardening**. Research analysis confirms the primary risk has shifted from "over-engineering" to **"integration complexity with large untested codebase."**
 
-### Current State at a Glance
+### Key Research Findings (kimi2.5 Analysis)
+
+| Aspect | Finding | Action Required |
+|--------|---------|-----------------|
+| **Database Strategy** | Redis+ScyllaDB schemas defined, stubs ready | ✅ Proceed as designed (re-evaluate at Phase 8) |
+| **ECS Architecture** | 18,000 lines already implemented with EnTT | ✅ Keep current, profile first, optimize second |
+| **External Libraries** | CMake configured, stubs in place | 🔴 **P0: Complete integration NOW** |
+| **Testing Status** | 30K lines, 0% integration tested | 🔴 **P0: Integration testing critical** |
+| **Deployment** | Multiple docker-compose files exist | ✅ Tiered VPS approach for dev/staging/prod |
+
+---
+
+## Architecture Decision Records (Updated)
+
+### ADR-001-UPDATED: VPS Selection (Tiered Approach)
+
+| Environment | VPS | Cost | Purpose |
+|-------------|-----|------|---------|
+| Development | OVH VPS-3 | $15/month | Integration testing, WP-6 development |
+| Staging | Hetzner EX44 | €44/month | Production-like testing |
+| Production | Hetzner AX42 | €49/month | Live players (500-1000) |
+
+**Rationale:** Start with lower-cost VPS for development. Scale up only after successful integration testing.
+
+### ADR-002: Database Strategy for Phase 6
+
+**Decision:** Proceed with Redis+ScyllaDB as designed for Phase 6 integration testing.
+
+**Rationale:** 
+- Schemas are already defined (`docs/DATABASE_SCHEMA.md`)
+- Stubs are ready for integration
+- Complexity is already "baked in" - changing now would delay Phase 6
+
+**Consolidation Path:** After Phase 6 integration testing, evaluate if PostgreSQL-only can handle the load before production deployment. **Re-evaluate at Phase 8** (8-12 weeks).
+
+### ADR-003-UPDATED: Networking Integration
+
+**Decision:** Proceed with GameNetworkingSockets as planned.
+
+**Rationale:**
+- `CMakeLists_enhanced.txt` already has `ENABLE_GNS` option
+- Network stubs are in place
+- Switching now would waste integration effort
+
+**Implementation Order:**
+1. Complete GameNetworkingSockets integration (WP-6-1)
+2. Implement FlatBuffers protocol (WP-6-4)
+3. Wire up Godot client to use the protocol
+
+### ADR-004-NEW: ECS Performance Strategy
+
+**Decision:** Keep current EnTT implementation. Do NOT refactor to groups yet.
+
+**Rationale:** With 18,000 lines already written, refactoring carries too much risk.
+
+**Performance Validation Plan:**
+1. Build with `ENABLE_PROFILING=ON`
+2. Run 100-player stress test
+3. Identify actual bottlenecks via Perfetto traces
+4. Optimize only proven hotspots
+
+### ADR-005-NEW: Anti-Cheat Enhancement
+
+**Decision:** Enhance existing anti-cheat with server-side rewind.
+
+**Current State:** 
+- Basic speed/teleport validation exists
+- Kinematic movement system implemented
+- Server-authoritative validation in place
+
+**Enhancement:** Add lag compensation for combat validation
+
+### ADR-006-NEW: CI/CD Implementation
+
+**Decision:** Implement GitHub Actions workflows for Phase 6 integration.
+
+**Priority Workflows:**
+1. **ci.yml** - Build server with all options enabled
+2. **integration-test.yml** - Docker Compose + test suite
+3. **godot-export.yml** - Build and export Godot client
+
+---
+
+## Current State at a Glance
 
 | Phase | Description | Status | Code | Tests |
 |-------|-------------|--------|------|-------|
@@ -21,8 +104,8 @@ The DarkAges MMO project has **completed Phases 0-5 implementation** (~30,000 li
 | 4 | Spatial Sharding | ✅ Complete | Written | None |
 | 5 | Optimization/Security | ✅ Complete | Written | None |
 | 6 | Build System | ✅ Complete | Ready | None |
-| 6 | External Integration | ⏳ Ready to Start | Stubs | None |
-| 7 | Client Implementation | ⏳ Ready to Start | Partial | None |
+| 6 | External Integration | 🔴 **P0 IN PROGRESS** | Stubs | None |
+| 7 | Client Implementation | ⏳ Planned | Partial | None |
 | 8 | Production Hardening | ⏳ Planned | None | None |
 
 ---
@@ -58,121 +141,158 @@ The DarkAges MMO project has **completed Phases 0-5 implementation** (~30,000 li
 - PowerShell/bash build scripts
 - GitHub Actions CI/CD skeleton
 
+#### Documentation (Research-Aligned)
+- API contracts between all modules
+- Database schemas (Redis + ScyllaDB)
+- Network protocol specification
+- Interface specifications
+
 ### ⚠️ Partial/Stubs
 
-#### External Integrations
 | Component | Status | Notes |
 |-----------|--------|-------|
-| GameNetworkingSockets | 🔴 Stub | Needs WP-6-1 implementation |
-| Redis (hiredis) | 🔴 Stub | Needs WP-6-2 implementation |
-| ScyllaDB | 🔴 Stub | Needs WP-6-3 implementation |
-| FlatBuffers | 🟡 Schema Only | Needs WP-6-4 code generation |
-| Godot Client | 🟡 Partial | Needs WP-7-x completion |
+| GameNetworkingSockets | 🔴 Stub | **WP-6-1 P0** - Blocking integration |
+| Redis (hiredis) | 🔴 Stub | **WP-6-2 P0** - Blocking integration |
+| ScyllaDB | 🔴 Stub | **WP-6-3 P0** - Blocking integration |
+| FlatBuffers | 🟡 Schema | **WP-6-4 P0** - Code generation pending |
+| Godot Client | 🟡 Partial | **Phase 7** - After external integration |
 
-### ❌ Not Started
+### ❌ Critical Gaps (P0)
 - End-to-end integration tests
-- Performance benchmarking
-- Chaos engineering framework
-- Production monitoring
-- Load testing
+- 30,000 lines of code **completely untested**
+- CI/CD workflows not fully implemented
+- External library integration incomplete
 
 ---
 
-## Documentation Status
+## Risk Matrix (Research-Updated)
 
-### Core Documentation
-| Document | Status | Purpose |
-|----------|--------|---------|
-| `PROJECT_STATUS.md` (this file) | ✅ Current | Single source of truth |
-| `README.md` | ⚠️ Outdated | Shows Phase 0 as current |
-| `STATUS.md` | ⚠️ Overly optimistic | Claims 100% ready |
-| `AGENTS.md` | ✅ Current | Agent guidelines |
-| `PHASES_6_7_8_ROADMAP.md` | ✅ Current | Parallel development roadmap |
-| `WP_IMPLEMENTATION_GUIDE.md` | ✅ Current | Technical specifications |
-| `PARALLEL_AGENT_COORDINATION.md` | ✅ Current | Multi-agent workflow |
-| `MASTER_TASK_TRACKER.md` | ⚠️ Confusing | Claims 0% but all checked |
+| Risk | Severity | Likelihood | Mitigation |
+|------|----------|------------|------------|
+| **External library integration fails** | High | Medium | Prototype each lib separately first |
+| **30K lines have hidden bugs** | High | **High** | **Incremental integration testing** |
+| **Godot client integration issues** | High | Medium | Early protocol testing |
+| **Performance at 100 players** | Medium | Unknown | Profile early, optimize proven hotspots |
+| **Database complexity overhead** | Medium | Low | Re-evaluate at Phase 8 |
 
-### Technical Documentation
-| Document | Status |
-|----------|--------|
-| `docs/ACTUAL_STATUS.md` | ✅ Honest assessment |
-| `docs/IMPLEMENTATION_STATUS.md` | ✅ Detailed breakdown |
-| `ImplementationRoadmapGuide.md` | ✅ Technical specs |
+**Primary Risk Shift:** From "over-engineering" → "integration complexity with large untested codebase"
 
 ---
 
-## Build Readiness
+## Phase 6 Work Packages (Research-Aligned)
 
-### What Works
-```powershell
-# Build system is configured and ready
-.\setup_compiler.ps1    # Auto-detects compiler
-.\build.ps1 -Test       # Build orchestration (compilation pending)
+### Critical Path (P0 - Block Project)
+
+| WP | Component | Duration | Dependencies | Research Priority |
+|----|-----------|----------|--------------|-------------------|
+| **WP-6-1** | GameNetworkingSockets | 1 week | None | **P0** |
+| **WP-6-2** | Redis Hot-State | 1 week | None | **P0** |
+| **WP-6-3** | ScyllaDB Persistence | 1 week | None | **P0** |
+| **WP-6-4** | FlatBuffers Protocol | 1 week | None | **P0** |
+| **WP-6-5** | Integration Testing | **2 weeks** | WP-6-1/2/3/4 | **P0 CRITICAL** |
+
+### Integration Test Sequence (Research Recommendation)
+
+```
+Week 1: GameNetworkingSockets + FlatBuffers (no database)
+  - Test: Server accepts connections, exchanges messages
+  - Exit: UDP handshake working
+
+Week 2: Add Redis hot-state
+  - Test: Player sessions, positions cached
+  - Exit: Session persistence working
+
+Week 3: Add ScyllaDB persistence
+  - Test: Player profiles save/load
+  - Exit: Database persistence working
+
+Week 4-5: Full integration
+  - Test: End-to-end with Godot client
+  - Exit: Client connects, moves, disconnects cleanly
+
+Week 6: Stress testing
+  - Test: 10, 50, 100 concurrent connections
+  - Exit: No crashes, <16ms tick time
 ```
 
-### Build Configuration
-- ✅ EnTT v3.13.0 cloned to `deps/entt/`
-- ✅ GLM 0.9.9.8 cloned to `deps/glm/`
-- ✅ CMakeLists.txt configured for multi-compiler
-- ✅ 171 missing includes added to 54 files
-- ✅ 0 critical errors, 0 build blockers (static analysis)
+---
 
-### What Needs External Dependencies
-The following are fetched by CMake on first build:
-- GameNetworkingSockets (WP-6-1)
-- hiredis (WP-6-2)
-- cassandra-cpp-driver (WP-6-3)
-- FlatBuffers (WP-6-4)
-- Catch2 (for tests)
+## Next Phase Roadmap (Research-Aligned)
+
+### Phase 7: Client Implementation (Weeks 7-12)
+
+| WP | Component | Duration | Dependencies |
+|----|-----------|----------|--------------|
+| WP-7-1 | Godot Foundation | 2 weeks | WP-6-4 |
+| WP-7-2 | Client Prediction | 2 weeks | WP-7-1 |
+| WP-7-3 | Entity Interpolation | 2 weeks | WP-7-1 |
+| WP-7-4 | Combat UI | 2 weeks | WP-7-1 |
+| WP-7-5 | Zone Transitions | 1 week | WP-7-2/3 |
+| WP-7-6 | Performance | 1 week | WP-7-1/2/3 |
+
+### Phase 8: Production Hardening (Weeks 13-16)
+
+| WP | Component | Duration | Dependencies |
+|----|-----------|----------|--------------|
+| WP-8-1 | Monitoring | 2 weeks | WP-6-1/2/3 |
+| WP-8-2 | Security Audit | 2 weeks | All Phase 6-7 |
+| WP-8-3 | Chaos Testing | 1 week | WP-6-5 |
+| WP-8-4 | Auto-Scaling | 1 week | WP-8-1/3 |
+| WP-8-5 | Load Testing | 1 week | WP-8-4 |
 
 ---
 
-## Next Phase Roadmap (Phases 6-8)
+## Success Criteria (Research-Aligned)
 
-### Phase 6: External Integration (Weeks 17-22)
-**Goal:** Replace stubs with production external libraries
+### Phase 6 Quality Gates
 
-| Work Package | Agent | Status | Dependencies |
-|--------------|-------|--------|--------------|
-| WP-6-1: GameNetworkingSockets | NETWORK | 🔴 Ready to Start | None |
-| WP-6-2: Redis Integration | DATABASE | 🔴 Ready to Start | None |
-| WP-6-3: ScyllaDB Integration | DATABASE | 🔴 Ready to Start | None |
-| WP-6-4: FlatBuffers Protocol | NETWORK | 🔴 Ready to Start | None |
-| WP-6-5: Integration Testing | DEVOPS | 🟡 Blocked | WP-6-1/2/3 |
+| Criterion | Target | Measurement |
+|-----------|--------|-------------|
+| **External Integration** | All libraries integrated | Build with ENABLE_GNS/REDIS/SCYLLA/FLATBUFFERS=ON |
+| **Integration Testing** | 10 players, 1 hour, zero crashes | WP-6-5 test report |
+| **Build Time** | <5 minutes (with deps) | CI timing |
+| **Code Coverage** | >50% integration tests | Test report |
+| **Cost Ceiling** | $50/month (production) | VPS selection |
 
-**Parallel Workstreams:**
-- Stream A (Infrastructure): WP-6-1 → WP-6-5
-- Stream B (Databases): WP-6-2 + WP-6-3 → Shared
-- Stream C (Protocol): WP-6-4 → WP-7-1
+### Revised from Original Research
 
-### Phase 7: Client Implementation (Weeks 23-30)
-**Goal:** Functional Godot 4.x client
-
-| Work Package | Agent | Status | Dependencies |
-|--------------|-------|--------|--------------|
-| WP-7-1: Godot Foundation | CLIENT | 🔴 Ready to Start | WP-6-4 |
-| WP-7-2: Client Prediction | CLIENT | 🔴 Ready to Start | WP-7-1 |
-| WP-7-3: Entity Interpolation | CLIENT | 🔴 Ready to Start | WP-7-1 |
-| WP-7-4: Combat UI | CLIENT | 🔴 Ready to Start | WP-7-1 |
-| WP-7-5: Zone Transitions | CLIENT | 🟡 Blocked | WP-7-2/3 |
-| WP-7-6: Performance | CLIENT | 🟡 Blocked | WP-7-1/2/3 |
-
-### Phase 8: Production Hardening (Weeks 31-38)
-**Goal:** Production-ready infrastructure
-
-| Work Package | Agent | Status | Dependencies |
-|--------------|-------|--------|--------------|
-| WP-8-1: Monitoring | DEVOPS | 🔴 Ready to Start | WP-6-1/2/3 |
-| WP-8-2: Security Audit | SECURITY | 🔴 Ready to Start | All Phase 6-7 |
-| WP-8-3: Chaos Testing | DEVOPS | 🟡 Blocked | WP-6-5 |
-| WP-8-4: Auto-Scaling | DEVOPS | 🟡 Blocked | WP-8-1/3 |
-| WP-8-5: Load Testing | DEVOPS | 🟡 Blocked | WP-8-4 |
+| Criterion | Original Target | Updated Target | Status |
+|-----------|-----------------|----------------|--------|
+| DevOps Reduction | `docker-compose up` | `docker-compose -f docker-compose.phase6.yml up` | ✅ Achieved |
+| Build Simplicity | <2 minutes | <5 minutes (with deps) | ⏳ Pending |
+| Deterministic Proof | Fixed-point demo | Integration test passes | ⏳ Pending |
+| Cost Ceiling | $50/month | $50/month (production) | ✅ On track |
 
 ---
 
-## Confidence Levels
+## Immediate Action Items (Research-Prioritized)
 
-### Implementation Confidence (Based on Code Review)
+### This Week (P0 Critical)
+
+1. ✅ **Documentation alignment** (complete - this document)
+2. 🔴 **Implement GitHub Actions CI workflow** (ADR-006-NEW)
+3. 🔴 **Begin WP-6-1** (GameNetworkingSockets integration)
+4. 🔴 **Create integration test harness** (WP-6-5 foundation)
+
+### Next 2 Weeks (P0)
+
+1. Complete WP-6-1, WP-6-2, WP-6-3, WP-6-4
+2. Set up OVH VPS-3 for development testing
+3. Run first integration test (server only, no client)
+4. Document integration issues
+
+### Weeks 3-6 (P0/P1)
+
+1. Complete WP-6-5 (Integration Testing)
+2. 10-player integration test
+3. Begin Phase 7 (Godot client integration)
+
+---
+
+## Confidence Levels (Research-Updated)
+
+### Implementation Confidence
+
 | Component | Design | Implementation | Testing | Overall |
 |-----------|--------|----------------|---------|---------|
 | Spatial Hash | 95% | 95% | 40% | 🟢 High |
@@ -182,55 +302,27 @@ The following are fetched by CMake on first build:
 | AOI System | 90% | 90% | 10% | 🟡 Medium |
 | Combat System | 85% | 85% | 10% | 🟡 Medium |
 | Lag Compensation | 85% | 80% | 10% | 🟡 Medium |
-| Zone Sharding | 80% | 80% | 0% | 🟡 Medium |
-| Entity Migration | 80% | 75% | 0% | 🔴 Low |
-| Anti-Cheat | 80% | 75% | 0% | 🔴 Low |
-| GNS Integration | 70% | 0% (stub) | 0% | 🔴 Low |
-| Redis/ScyllaDB | 70% | 0% (stub) | 0% | 🔴 Low |
+| **External Integration** | 70% | **0% (stub)** | **0%** | 🔴 **Low** |
+| **Integration Testing** | 80% | 0% | **0%** | 🔴 **Low** |
 
 ### Build Confidence
+
 | Aspect | Confidence | Notes |
 |--------|------------|-------|
 | Compilation Success | 95% | All code validated, 0 blockers |
-| Test Success | 90% | Tests written, need execution |
-| Performance | 70% | Theoretical, needs measurement |
+| External Lib Integration | 60% | Risk: dependency compatibility |
+| Test Success | 50% | 30K lines untested |
 | Production Ready | 40% | Needs full validation cycle |
 
 ---
 
-## Risk Assessment
+## Research References
 
-| Risk | Probability | Impact | Mitigation |
-|------|-------------|--------|------------|
-| Build failures on first compile | High | Critical | Phase 6 build system prepared |
-| GNS integration complexity | Medium | High | WP-6-1 dedicated 2 weeks |
-| Database driver issues | Medium | High | Stubs exist, gradual replacement |
-| Client prediction desync | Medium | Medium | Extensive testing in WP-6-5 |
-| Performance issues | Medium | High | Profiling framework exists |
-| Memory leaks | Medium | High | LeakDetector implemented |
-
----
-
-## Immediate Action Items
-
-### This Week (Priority 1)
-1. ✅ **Align all documentation** (this document created)
-2. ⏳ **Update README.md** with actual status
-3. ⏳ **Create interface contracts** for WP-6-1/2/3/4
-4. ⏳ **Set up development Docker stack**
-
-### Next 2 Weeks (Priority 2)
-1. Begin WP-6-1, WP-6-2, WP-6-3 in parallel
-2. Begin WP-6-4 protocol implementation
-3. Install and configure external dependencies
-4. First compilation attempt
-
-### Success Criteria for Phase 6
-- [ ] 1000 concurrent UDP connections (GNS)
-- [ ] <1ms Redis latency
-- [ ] 100k ScyllaDB writes/sec
-- [ ] 80% bandwidth reduction (delta compression)
-- [ ] All integration tests passing
+| Document | Purpose | Location |
+|----------|---------|----------|
+| Original Remediation Analysis | Zero-budget recommendations | `Research/DarkAges_ZeroBudget_Remediation/darkages_remediation.html` |
+| Simplified Summary | Quick reference | `Research/DarkAges_ZeroBudget_Remediation/darkages_simple.html` |
+| Updated Analysis (Amended) | Research-aligned updates | `Research/DarkAges_ZeroBudget_Remediation/darkages_updated.html` |
 
 ---
 
@@ -240,49 +332,16 @@ The following are fetched by CMake on first build:
 |---------|------|--------|---------|
 | 1.0 | 2026-01-29 | Various | Conflicting status documents |
 | 2.0 | 2026-01-30 | AI Coordinator | Unified single source of truth |
+| 3.0 | 2026-01-30 | AI Coordinator | **Research-aligned with kimi2.5 analysis** |
 
-### Documents Deprecated/Replaced
-- `STATUS.md` → Use `PROJECT_STATUS.md`
-- `PHASE0_SUMMARY.md` → Historical reference only
-- `PHASE_6_COMPLETION_SUMMARY.md` → Historical reference only
-
-### Documents to Update
-- `README.md` → Update Phase status
-- `MASTER_TASK_TRACKER.md` → Fix progress calculation
-
----
-
-## Quick Reference
-
-### Build Commands
-```powershell
-# First time setup
-.\install_msvc.ps1              # Install compiler (one-time)
-.\setup_compiler.ps1            # Configure environment
-
-# Daily development
-.\build.ps1 -Test               # Build and test
-.\build.ps1 -Clean -Test        # Clean build
-```
-
-### Docker Development
-```bash
-# Start infrastructure
-cd infra && docker-compose up -d
-
-# Multi-zone development
-docker-compose -f docker-compose.dev.yml up -d
-```
-
-### Testing
-```bash
-# Run all tests
-cd build && ctest --output-on-failure
-
-# Specific test
-./darkages_tests "[spatial]"
-```
+### Related Documents
+- `PHASES_6_7_8_ROADMAP.md` - Phase roadmap
+- `WP_IMPLEMENTATION_GUIDE.md` - Implementation details
+- `PARALLEL_AGENT_COORDINATION.md` - Agent coordination
+- `docs/API_CONTRACTS.md` - API contracts
+- `PHASE_6_7_8_INFRASTRUCTURE_COMPLETE.md` - Infrastructure summary
+- `Research/DarkAges_ZeroBudget_Remediation/` - kimi2.5 research analysis
 
 ---
 
-*This document is the single source of truth for project status. All other status documents should reference this file.*
+*This document integrates kimi2.5 research analysis and is the single source of truth for project status.*

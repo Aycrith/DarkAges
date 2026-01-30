@@ -1,0 +1,1294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DarkAges MMO - Zero-Budget Architecture Remediation</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <style>
+        /* Reset and base */
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Georgia, "Noto Serif", serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: #333;
+            text-align: justify;
+            text-align-last: left;
+            string-set: doctype "";
+        }
+
+        /* Page setup */
+        @page {
+            size: A4;
+            margin: 2.5cm 2cm;
+            @top-center { content: string(doctitle); font-size: 9pt; color: #666; }
+            @bottom-center { content: counter(page); font-size: 9pt; }
+        }
+        @page :first { margin: 0; @top-center { content: none; } @bottom-center { content: none; } }
+        @page cover { @top-center { content: none; } @bottom-center { content: none; } }
+        @page toc { @top-center { content: none; } @bottom-center { content: none; } }
+
+        /* Cover page - Swiss Style */
+        .cover {
+            width: 210mm;
+            height: 297mm;
+            margin: 0;
+            position: relative;
+            overflow: hidden;
+            page: cover;
+            page-break-after: always;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        }
+        .cover::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 8mm;
+            background: #2c3e50;
+        }
+        .cover::after {
+            content: "";
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 60%;
+            height: 4mm;
+            background: #34495e;
+        }
+        .cover-accent {
+            position: absolute;
+            top: 8mm;
+            left: 0;
+            width: 25mm;
+            height: 100%;
+            background: #34495e;
+        }
+        .cover-grid {
+            position: absolute;
+            top: 40mm;
+            right: 20mm;
+            width: 80mm;
+            height: 80mm;
+            border: 1px solid rgba(52, 73, 94, 0.2);
+        }
+        .cover-grid::before {
+            content: "";
+            position: absolute;
+            top: 20mm;
+            left: 20mm;
+            width: 40mm;
+            height: 40mm;
+            border: 1px solid rgba(52, 73, 94, 0.15);
+        }
+        .cover-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            width: 70%;
+            z-index: 10;
+        }
+        .cover-title {
+            font-size: 32pt;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 0.5cm;
+            letter-spacing: -0.5pt;
+        }
+        .cover-subtitle {
+            font-size: 14pt;
+            color: #5d6d7e;
+            margin-bottom: 2cm;
+            font-style: italic;
+        }
+        .cover-meta {
+            font-size: 11pt;
+            color: #333;
+            line-height: 2;
+        }
+        .cover-badge {
+            display: inline-block;
+            padding: 0.3em 1em;
+            background: #e74c3c;
+            color: white;
+            font-size: 10pt;
+            font-weight: bold;
+            margin-top: 1cm;
+        }
+
+        /* TOC */
+        .toc-page {
+            page: toc;
+            page-break-after: always;
+        }
+        .toc-title {
+            font-size: 20pt;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 1cm;
+            border-bottom: 2px solid #2c3e50;
+            padding-bottom: 0.3cm;
+        }
+        .toc ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .toc li {
+            margin: 0.4em 0;
+        }
+        .toc a {
+            color: #333;
+            text-decoration: none;
+            display: flex;
+            justify-content: space-between;
+        }
+        .toc a::after {
+            content: leader('.') target-counter(attr(href url), page);
+        }
+        .toc-l1 { font-weight: bold; }
+        .toc-l2 { padding-left: 1.5em; }
+        .toc-l3 { padding-left: 3em; font-size: 10pt; }
+
+        /* Headings */
+        h1 {
+            font-size: 20pt;
+            color: #2c3e50;
+            border-bottom: 2px solid #2c3e50;
+            padding-bottom: 0.3cm;
+            margin-top: 1cm;
+            margin-bottom: 0.5cm;
+            string-set: doctype content();
+            page-break-after: avoid;
+        }
+        h2 {
+            font-size: 14pt;
+            color: #34495e;
+            margin-top: 0.8cm;
+            margin-bottom: 0.4cm;
+            page-break-after: avoid;
+        }
+        h3 {
+            font-size: 12pt;
+            color: #5d6d7e;
+            margin-top: 0.6cm;
+            margin-bottom: 0.3cm;
+            page-break-after: avoid;
+        }
+
+        /* Tables - Three-line style */
+        table {
+            width: 100%;
+            max-width: 100%;
+            border-collapse: collapse;
+            margin: 1em 0;
+            font-size: 10pt;
+            page-break-inside: avoid;
+        }
+        thead {
+            display: table-header-group;
+        }
+        thead tr {
+            border-top: 2px solid #333;
+            border-bottom: 1px solid #333;
+        }
+        th {
+            padding: 0.5em;
+            text-align: left;
+            font-weight: bold;
+            background: #f5f5f5;
+        }
+        tbody tr {
+            border-bottom: 1px solid #ddd;
+        }
+        tbody tr:last-child {
+            border-bottom: 2px solid #333;
+        }
+        td {
+            padding: 0.5em;
+            vertical-align: top;
+        }
+        tr { page-break-inside: avoid; }
+        caption {
+            caption-side: top;
+            text-align: left;
+            font-weight: bold;
+            margin-bottom: 0.5em;
+        }
+        caption::before {
+            content: attr(data-label) "  ";
+        }
+
+        /* Code blocks */
+        pre {
+            background: #f5f5f5;
+            padding: 1em;
+            border-radius: 0;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: "Courier New", monospace;
+            font-size: 9pt;
+            line-height: 1.4;
+            max-width: 100%;
+            page-break-inside: avoid;
+        }
+        code {
+            font-family: "Courier New", monospace;
+            font-size: 9pt;
+            background: #f5f5f5;
+            padding: 0.1em 0.3em;
+            word-break: break-word;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+        }
+
+        /* Priority badges */
+        .priority-p0 {
+            display: inline-block;
+            padding: 0.1em 0.5em;
+            background: #e74c3c;
+            color: white;
+            font-size: 8pt;
+            font-weight: bold;
+            margin-right: 0.5em;
+        }
+        .priority-p1 {
+            display: inline-block;
+            padding: 0.1em 0.5em;
+            background: #f39c12;
+            color: white;
+            font-size: 8pt;
+            font-weight: bold;
+            margin-right: 0.5em;
+        }
+        .priority-p2 {
+            display: inline-block;
+            padding: 0.1em 0.5em;
+            background: #27ae60;
+            color: white;
+            font-size: 8pt;
+            font-weight: bold;
+            margin-right: 0.5em;
+        }
+
+        /* ADR boxes */
+        .adr {
+            border-left: 3px solid #2c3e50;
+            padding-left: 1em;
+            margin: 1em 0;
+            background: #f8f9fa;
+            padding: 1em;
+        }
+        .adr-title {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 0.5em;
+        }
+
+        /* Risk matrix */
+        .risk-matrix {
+            width: 100%;
+            margin: 1em 0;
+        }
+        .risk-high {
+            background: #fadbd8;
+        }
+        .risk-medium {
+            background: #fef9e7;
+        }
+        .risk-low {
+            background: #d5f5e3;
+        }
+
+        /* Lists */
+        ul, ol {
+            margin: 0.5em 0;
+            padding-left: 2em;
+        }
+        li {
+            margin: 0.3em 0;
+        }
+
+        /* Links */
+        a {
+            color: #2980b9;
+            text-decoration: none;
+            word-break: break-all;
+        }
+
+        /* Figures */
+        figure {
+            margin: 1em 0;
+            page-break-inside: avoid;
+            max-width: 100%;
+        }
+        figcaption {
+            text-align: center;
+            font-size: 10pt;
+            color: #666;
+            margin-top: 0.5em;
+        }
+        figcaption::before {
+            content: attr(data-label) "  ";
+            font-weight: bold;
+        }
+
+        /* Prevent overflow */
+        pre, table, figure, img, svg, blockquote {
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+
+        /* Section breaks */
+        .section-break {
+            page-break-before: always;
+        }
+
+        /* Summary box */
+        .summary-box {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            padding: 1em;
+            margin: 1em 0;
+        }
+        .summary-box h4 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+
+        /* Config file */
+        .config-file {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            padding: 1em;
+            margin: 1em 0;
+            font-family: "Courier New", monospace;
+            font-size: 9pt;
+        }
+        .config-file h4 {
+            margin-top: 0;
+            color: #2c3e50;
+            font-family: Georgia, serif;
+        }
+    </style>
+</head>
+<body>
+    <!-- COVER PAGE -->
+    <div class="cover">
+        <div class="cover-accent"></div>
+        <div class="cover-grid"></div>
+        <div class="cover-content">
+            <h1 class="cover-title">DarkAges MMO</h1>
+            <p class="cover-subtitle">Zero-Budget Architecture Remediation &<br>Phase 0 Optimization Strategy</p>
+            <div class="cover-meta">
+                <p><strong>Research Areas:</strong> 6 Critical Domains</p>
+                <p><strong>Target:</strong> 100-1000 Concurrent Players</p>
+                <p><strong>Budget Ceiling:</strong> $50/month</p>
+                <p><strong>Date:</strong> January 30, 2026</p>
+            </div>
+            <div class="cover-badge">P0 CRITICAL</div>
+        </div>
+    </div>
+
+    <!-- TABLE OF CONTENTS -->
+    <div class="toc-page">
+        <h2 class="toc-title">Table of Contents</h2>
+        <nav class="toc">
+            <ul>
+                <li class="toc-l1"><a href="#sec1">1. Executive Summary</a></li>
+                <li class="toc-l1"><a href="#sec2">2. Research Area 1: Zero-Budget Deployment</a></li>
+                <li class="toc-l2"><a href="#sec2-1">2.1 VPS Comparison & Recommendation</a></li>
+                <li class="toc-l2"><a href="#sec2-2">2.2 Database Consolidation Strategy</a></li>
+                <li class="toc-l2"><a href="#sec2-3">2.3 Docker Compose Manifest</a></li>
+                <li class="toc-l1"><a href="#sec3">3. Research Area 2: Godot 4 + C++ Integration</a></li>
+                <li class="toc-l2"><a href="#sec3-1">3.1 Serialization Strategy</a></li>
+                <li class="toc-l2"><a href="#sec3-2">3.2 Deterministic Simulation</a></li>
+                <li class="toc-l2"><a href="#sec3-3">3.3 Headless Testing</a></li>
+                <li class="toc-l1"><a href="#sec4">4. Research Area 3: Simplified ECS & Performance</a></li>
+                <li class="toc-l2"><a href="#sec4-1">4.1 ECS Library Comparison</a></li>
+                <li class="toc-l2"><a href="#sec4-2">4.2 Spatial Hashing</a></li>
+                <li class="toc-l2"><a href="#sec4-3">4.3 Memory Management</a></li>
+                <li class="toc-l1"><a href="#sec5">5. Research Area 4: Zero-Budget Anti-Cheat</a></li>
+                <li class="toc-l2"><a href="#sec5-1">5.1 Movement Validation</a></li>
+                <li class="toc-l2"><a href="#sec5-2">5.2 Statistical Detection</a></li>
+                <li class="toc-l2"><a href="#sec5-3">5.3 Client Integrity</a></li>
+                <li class="toc-l1"><a href="#sec6">6. Research Area 5: CI/CD & Workflow</a></li>
+                <li class="toc-l2"><a href="#sec6-1">6.1 Build System</a></li>
+                <li class="toc-l2"><a href="#sec6-2">6.2 Hot Reload</a></li>
+                <li class="toc-l2"><a href="#sec6-3">6.3 Monitoring</a></li>
+                <li class="toc-l1"><a href="#sec7">7. Research Area 6: MVP Scope Definition</a></li>
+                <li class="toc-l2"><a href="#sec7-1">7.1 Phase 0 Exit Criteria</a></li>
+                <li class="toc-l2"><a href="#sec7-2">7.2 Content vs Tech Balance</a></li>
+                <li class="toc-l2"><a href="#sec7-3">7.3 Network Budget</a></li>
+                <li class="toc-l1"><a href="#sec8">8. Risk Matrix & ADRs</a></li>
+                <li class="toc-l1"><a href="#sec9">9. Implementation Roadmap</a></li>
+                <li class="toc-l1"><a href="#sec10">10. References</a></li>
+            </ul>
+        </nav>
+    </div>
+
+    <!-- SECTION 1: EXECUTIVE SUMMARY -->
+    <h1 id="sec1">1. Executive Summary</h1>
+
+    <div class="summary-box">
+        <h4>Current Architecture Assessment</h4>
+        <p>The DarkAges MMO repository reveals a sophisticated but potentially over-engineered architecture for zero-budget, solo/small-team development. Current stack includes C++20/EnTT server, Godot 4 client, GameNetworkingSockets, FlatBuffers, Redis, ScyllaDB, and Kubernetes manifests targeting 100-1000 concurrent players.</p>
+    </div>
+
+    <h2>Key Findings</h2>
+    <table>
+        <caption data-label="Table 1">Remediation Priority Summary</caption>
+        <thead>
+            <tr><th>Area</th><th>Current State</th><th>Recommendation</th><th>Priority</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Deployment</td><td>K8s + ScyllaDB</td><td>Single VPS + Docker Compose</td><td><span class="priority-p0">P0</span></td></tr>
+            <tr><td>Database</td><td>Redis + ScyllaDB</td><td>SQLite/PostgreSQL single node</td><td><span class="priority-p0">P0</span></td></tr>
+            <tr><td>ECS</td><td>EnTT (complex)</td><td>Keep EnTT, simplify usage</td><td><span class="priority-p1">P1</span></td></tr>
+            <tr><td>Networking</td><td>GameNetworkingSockets stub</td><td>Complete integration</td><td><span class="priority-p0">P0</span></td></tr>
+            <tr><td>Anti-Cheat</td><td>Basic stubs</td><td>Server rewind + heuristics</td><td><span class="priority-p1">P1</span></td></tr>
+            <tr><td>CI/CD</td><td>Build scripts only</td><td>GitHub Actions workflow</td><td><span class="priority-p1">P1</span></td></tr>
+        </tbody>
+    </table>
+
+    <h2>Success Criteria Compliance</h2>
+    <table>
+        <caption data-label="Table 2">Success Criteria Assessment</caption>
+        <thead>
+            <tr><th>Criterion</th><th>Target</th><th>Remediation Path</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>DevOps Reduction</td><td>Single-command deployment</td><td>Docker Compose replaces K8s</td></tr>
+            <tr><td>Build Simplicity</td><td>&lt;2 minutes clean build</td><td>CMake presets + ccache</td></tr>
+            <tr><td>Deterministic Proof</td><td>Fixed-point movement demo</td><td>libfixmath integration</td></tr>
+            <tr><td>Cost Ceiling</td><td>$50/month for 100 players</td><td>Hetzner AX42 ($49/month)</td></tr>
+        </tbody>
+    </table>
+
+    <!-- SECTION 2: DEPLOYMENT -->
+    <h1 id="sec2" class="section-break">2. Research Area 1: Zero-Budget Deployment Architectures</h1>
+
+    <h2 id="sec2-1">2.1 VPS Comparison & Recommendation</h2>
+
+    <h3>Single-Node MMO VPS Options</h3>
+    <table>
+        <caption data-label="Table 3">VPS Provider Comparison for Game Servers</caption>
+        <thead>
+            <tr><th>Provider</th><th>Model</th><th>CPU</th><th>RAM</th><th>Storage</th><th>Price</th><th>PassMark</th></tr>
+        </thead>
+        <tbody>
+            <tr class="risk-low"><td>Hetzner</td><td>AX42</td><td>AMD Ryzen 7 PRO 8700GE</td><td>64GB</td><td>2x512GB NVMe</td><td>€49/mo</td><td>27,882</td></tr>
+            <tr><td>Hetzner</td><td>EX44</td><td>Intel i5-13500</td><td>64GB</td><td>2x512GB NVMe</td><td>€44/mo</td><td>31,857</td></tr>
+            <tr><td>OVH</td><td>VPS-3</td><td>8 vCores</td><td>24GB</td><td>200GB</td><td>$15/mo</td><td>N/A</td></tr>
+            <tr><td>OVH</td><td>C3-8</td><td>4 vCores</td><td>8GB</td><td>100GB</td><td>$65/mo</td><td>N/A</td></tr>
+        </tbody>
+    </table>
+
+    <div class="adr">
+        <div class="adr-title">ADR-001: VPS Selection</div>
+        <p><strong>Decision:</strong> Hetzner AX42 for production, OVH VPS-3 for development.</p>
+        <p><strong>Rationale:</strong> AX42 offers the best price/performance ratio at €49/month with 64GB RAM and high single-thread performance (critical for game servers). OVH VPS-3 at $15/month is sufficient for development and early testing.</p>
+        <p><strong>Trade-offs:</strong> Hetzner requires EU data center acceptance; OVH has less predictable CPU performance due to virtualization.</p>
+    </div>
+
+    <h3>Redis Persistence Strategy (Single Node)</h3>
+    <p>For zero-budget deployment without Redis Sentinel/Cluster, use the following configuration:</p>
+    <pre><code># Redis configuration for single-node MMO server
+appendonly yes
+appendfsync everysec  # Balance between durability and performance
+save 900 1
+save 300 10
+save 60 10000
+maxmemory 2gb
+maxmemory-policy allkeys-lru
+auto-aof-rewrite-percentage 100
+auto-aof-rewrite-min-size 64mb</code></pre>
+
+    <h2 id="sec2-2">2.2 Database Consolidation Strategy</h2>
+
+    <h3>SQLite WAL Mode vs PostgreSQL</h3>
+    <table>
+        <caption data-label="Table 4">Database Comparison for &lt;200 Players</caption>
+        <thead>
+            <tr><th>Feature</th><th>SQLite (WAL)</th><th>PostgreSQL</th><th>Redis+ScyllaDB</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Setup Complexity</td><td>Zero</td><td>Low</td><td>High</td></tr>
+            <tr><td>Write Throughput</td><td>~50K TPS</td><td>~100K TPS</td><td>~1M TPS</td></tr>
+            <tr><td>Memory Footprint</td><td>Minimal</td><td>Moderate</td><td>High</td></tr>
+            <tr><td>Persistence</td><td>ACID</td><td>ACID</td><td>Eventual</td></tr>
+            <tr><td>Operational Cost</td><td>None</td><td>Low</td><td>High</td></tr>
+        </tbody>
+    </table>
+
+    <div class="adr">
+        <div class="adr-title">ADR-002: Database Consolidation</div>
+        <p><strong>Decision:</strong> Replace Redis+ScyllaDB with PostgreSQL for Phase 0.</p>
+        <p><strong>Rationale:</strong> For under 200 concurrent players, PostgreSQL single instance can handle all hot-state and persistence needs. Simplifies operations, eliminates network overhead between data stores.</p>
+        <p><strong>Migration Path:</strong> When exceeding 500 concurrent players, reintroduce Redis for hot-state caching. ScyllaDB only needed at 1000+ players with high write throughput requirements.</p>
+    </div>
+
+    <h2 id="sec2-3">2.3 Docker Compose Manifest</h2>
+
+    <div class="config-file">
+        <h4>docker-compose.simplified.yml</h4>
+<pre>version: '3.8'
+
+services:
+  # Single PostgreSQL instance for all data
+  postgres:
+    image: postgres:16-alpine
+    container_name: darkages-db
+    environment:
+      POSTGRES_USER: darkages
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: darkages
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    command: >
+      postgres 
+      -c shared_buffers=1GB
+      -c effective_cache_size=3GB
+      -c maintenance_work_mem=256MB
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=5242kB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  # Game server
+  server:
+    build:
+      context: .
+      dockerfile: infra/dockerfile.server
+    container_name: darkages-server
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: darkages
+      DB_USER: darkages
+      DB_PASSWORD: ${DB_PASSWORD}
+      SERVER_PORT: 7777
+      ZONE_ID: 1
+    ports:
+      - "7777:7777/udp"
+      - "7777:7777/tcp"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+volumes:
+  postgres_data:
+    driver: local</pre>
+    </div>
+
+    <!-- SECTION 3: GODOT INTEGRATION -->
+    <h1 id="sec3" class="section-break">3. Research Area 2: Godot 4 + C++ Server Integration</h1>
+
+    <h2 id="sec3-1">3.1 Serialization Strategy</h2>
+
+    <h3>FlatBuffers vs Protocol Buffers vs Godot StreamPeerBuffer</h3>
+    <table>
+        <caption data-label="Table 5">Serialization Performance Comparison</caption>
+        <thead>
+            <tr><th>Library</th><th>Serialization</th><th>Deserialization</th><th>Size</th><th>Zero-Copy</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>FlatBuffers</td><td>Fast</td><td>Instant</td><td>Medium</td><td>Yes</td></tr>
+            <tr><td>Protocol Buffers</td><td>Fast</td><td>Fast</td><td>Small</td><td>No</td></tr>
+            <tr><td>StreamPeerBuffer</td><td>Manual</td><td>Manual</td><td>Custom</td><td>No</td></tr>
+        </tbody>
+    </table>
+
+    <div class="adr">
+        <div class="adr-title">ADR-003: Serialization Strategy</div>
+        <p><strong>Decision:</strong> Keep FlatBuffers for server-side, use Godot's ByteBuffer for client.</p>
+        <p><strong>Rationale:</strong> FlatBuffers' zero-copy deserialization is critical for server performance at 60Hz tick rate. Godot client can use ByteBuffer with manual serialization to avoid GDExtension complexity.</p>
+        <p><strong>Implementation:</strong> Generate FlatBuffers schema for both C++ and GDScript (via flatc --gen-json or custom codegen).</p>
+    </div>
+
+    <h3>GameNetworkingSockets GDExtension Binding</h3>
+    <p>For Godot 4 integration with GameNetworkingSockets, the recommended approach is:</p>
+    <ol>
+        <li><strong>Option A (Recommended):</strong> Use Godot's built-in ENetMultiplayerPeer for initial implementation. ENet provides reliable UDP with channel support sufficient for MMO needs.</li>
+        <li><strong>Option B (Advanced):</strong> Create a thin GDExtension wrapper around GameNetworkingSockets. Reference implementation pattern available in godot-cpp examples.</li>
+    </ol>
+
+    <h2 id="sec3-2">3.2 Deterministic Simulation</h2>
+
+    <h3>Fixed-Point Arithmetic Libraries</h3>
+    <table>
+        <caption data-label="Table 6">Fixed-Point Library Comparison</caption>
+        <thead>
+            <tr><th>Library</th><th>Type</th><th>Precision</th><th>Godot Compatible</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>libfixmath</td><td>C library</td><td>16.16 fixed</td><td>Via GDExtension</td></tr>
+            <tr><td>FixedMath.Net</td><td>C#</td><td>Configurable</td><td>Godot Mono only</td></tr>
+            <tr><td>nilpunch/fixed-point</td><td>C#</td><td>64-bit configurable</td><td>Unity/Godot</td></tr>
+            <tr><td>Custom int64_t</td><td>C++</td><td>Custom</td><td>Full control</td></tr>
+        </tbody>
+    </table>
+
+    <div class="adr">
+        <div class="adr-title">ADR-004: Deterministic Math</div>
+        <p><strong>Decision:</strong> Use custom int64_t fixed-point (32.32) implementation in C++ server.</p>
+        <p><strong>Rationale:</strong> Cross-platform determinism requires controlling the entire math pipeline. Custom implementation avoids external dependencies and ensures consistent behavior across x86/ARM.</p>
+        <p><strong>Implementation:</strong> Store positions as int64_t (32.32 fixed), convert to float only for Godot rendering. This maintains server authority while allowing visual smoothness.</p>
+    </div>
+
+    <h3>Cross-Platform Determinism Checklist</h3>
+    <ul>
+        <li>Use fixed-point arithmetic for all physics/position calculations</li>
+        <li>Avoid floating-point in serialized state</li>
+        <li>Use deterministic random number generator (xoroshiro128+)</li>
+        <li>Compile with -ffloat-store on GCC to prevent extended precision</li>
+        <li>Test on both x86_64 and ARM64 regularly</li>
+    </ul>
+
+    <h2 id="sec3-3">3.3 Headless Testing</h2>
+
+    <h3>Godot 4 Headless Mode for Integration Testing</h3>
+    <pre><code># Run Godot in headless mode for CI
+# Import assets first (required for class_name registration)
+godot --headless --path . --import --quit
+
+# Run tests with GUT (Godot Unit Test)
+export GODOT_DISABLE_LEAK_CHECKS=1
+godot --headless -d \
+    --display-driver headless \
+    --audio-driver Dummy \
+    --disable-render-loop \
+    --path . \
+    -s res://addons/gut/gut_cmdln.gd \
+    -gdir=res://tests \
+    -ginclude_subdirs \
+    -gexit</code></pre>
+
+    <h3>Bot Client Implementation</h3>
+    <p>For load testing without rendering:</p>
+    <pre><code># Godot scene tree without rendering server
+extends Node
+
+class_name BotClient
+
+var network_peer: ENetMultiplayerPeer
+var player_id: int
+var movement_timer: float = 0.0
+
+func _ready():
+    # Skip rendering initialization
+    Engine.max_fps = 20  # Reduce CPU usage
+
+    network_peer = ENetMultiplayerPeer.new()
+    network_peer.create_client("127.0.0.1", 7777)
+    multiplayer.multiplayer_peer = network_peer
+
+    multiplayer.connected_to_server.connect(_on_connected)
+
+func _physics_process(delta):
+    movement_timer += delta
+    if movement_timer >= 0.016:  # 60Hz
+        _send_random_input()
+        movement_timer = 0.0</code></pre>
+
+    <!-- SECTION 4: ECS & PERFORMANCE -->
+    <h1 id="sec4" class="section-break">4. Research Area 3: Simplified ECS & Performance</h1>
+
+    <h2 id="sec4-1">4.1 ECS Library Comparison</h2>
+
+    <h3>Flecs vs EnTT Benchmark Results</h3>
+    <table>
+        <caption data-label="Table 7">ECS Framework Performance (per entity, 7 systems)</caption>
+        <thead>
+            <tr><th>Framework</th><th>1 Entity</th><th>1K Entities</th><th>16K Entities</th><th>1M Entities</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>EnTT (group)</td><td>89ns</td><td>18us</td><td>403us</td><td>35ms</td></tr>
+            <tr><td>EnTT (stable)</td><td>131ns</td><td>21us</td><td>365us</td><td>26ms</td>
+            <tr><td>Flecs</td><td>1741ns</td><td>10us</td><td>120us</td><td>19ms</td></tr>
+            <tr><td>pico_ecs</td><td>67ns</td><td>19us</td><td>366us</td><td>25ms</td></tr>
+        </tbody>
+    </table>
+
+    <div class="adr">
+        <div class="adr-title">ADR-005: ECS Framework</div>
+        <p><strong>Decision:</strong> Continue using EnTT, but adopt group/stable iteration patterns.</p>
+        <p><strong>Rationale:</strong> EnTT is already integrated. The benchmark shows significant performance gains using groups (4-5x faster than runtime views). Template complexity can be managed with wrapper functions.</p>
+        <p><strong>Refactoring:</strong> Replace runtime views with stable groups for position/velocity queries:</p>
+        <pre><code>// Before (runtime view - slower)
+auto view = registry.view&lt;Position, Velocity&gt;();
+
+// After (stable group - faster)
+auto group = registry.group&lt;Position, Velocity&gt;(entt::get&lt;>);
+group.each([](auto& pos, auto& vel) { ... });</code></pre>
+    </div>
+
+    <h2 id="sec4-2">4.2 Spatial Hashing</h2>
+
+    <h3>Lightweight Spatial Index Options</h3>
+    <table>
+        <caption data-label="Table 8">Spatial Index Comparison</caption>
+        <thead>
+            <tr><th>Algorithm</th><th>Query Complexity</th><th>Update Complexity</th><th>Best For</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Uniform Grid</td><td>O(1)</td><td>O(1)</td><td>Dense worlds</td></tr>
+            <tr><td>Spatial Hash</td><td>O(1) avg</td><td>O(1)</td><td>Dynamic objects</td></tr>
+            <tr><td>R-tree</td><td>O(log n)</td><td>O(log n)</td><td>Static geometry</td></tr>
+            <tr><td>Quadtree</td><td>O(log n)</td><td>O(log n)</td><td>Sparse worlds</td></tr>
+        </tbody>
+    </table>
+
+    <div class="adr">
+        <div class="adr-title">ADR-006: Spatial Indexing</div>
+        <p><strong>Decision:</strong> Keep custom spatial hash implementation.</p>
+        <p><strong>Rationale:</strong> Custom implementation is already in place and provides O(1) queries for AOI (Area of Interest) calculations. For 100-1000 players, uniform grid with 10m cells is optimal.</p>
+    </div>
+
+    <h2 id="sec4-3">4.3 Memory Management</h2>
+
+    <h3>std::pmr for Zero-Allocation Game Loop</h3>
+    <pre><code>#include &lt;memory_resource&gt;
+#include &lt;vector&gt;
+
+class GameWorld {
+    // Pre-allocated buffer for per-frame allocations
+    alignas(64) char frame_buffer[1024 * 1024];  // 1MB
+    std::pmr::monotonic_buffer_resource frame_arena;
+
+public:
+    GameWorld() : frame_arena(frame_buffer, sizeof(frame_buffer)) {}
+
+    void tick(float delta) {
+        // Reset arena at start of frame
+        frame_arena.release();
+
+        // All per-frame allocations use arena
+        std::pmr::vector&lt;EntityUpdate&gt; updates(&frame_arena);
+        updates.reserve(expected_entity_count);
+
+        // Process systems...
+
+        // Arena automatically freed at end of frame
+    }
+};</code></pre>
+
+    <!-- SECTION 5: ANTI-CHEAT -->
+    <h1 id="sec5" class="section-break">5. Research Area 4: Anti-Cheat on Zero Budget</h1>
+
+    <h2 id="sec5-1">5.1 Movement Validation</h2>
+
+    <h3>Server-Side Rewind (Lag Compensation)</h3>
+    <pre><code>// Pseudocode for server-authoritative movement with rewind
+class MovementValidator {
+    static constexpr float MAX_SPEED = 6.0f;      // m/s
+    static constexpr float MAX_SPRINT = 9.0f;     // m/s
+    static constexpr float TELEPORT_THRESHOLD = 10.0f;  // m
+    static constexpr int REWIND_BUFFER_MS = 200;  // Max RTT/2
+
+    struct PositionSnapshot {
+        uint32_t timestamp;
+        Vector3 position;
+        Vector3 velocity;
+    };
+
+    std::deque&lt;PositionSnapshot&gt; history_buffer;
+
+public:
+    bool validate_movement(uint32_t client_time, 
+                          Vector3 claimed_pos,
+                          Vector3 claimed_vel) {
+        // Calculate server time at client action
+        uint32_t server_time = get_server_time();
+        int32_t rtt = estimate_rtt(player_id);
+        uint32_t action_time = server_time - (rtt / 2);
+
+        // Rewind to historical state
+        Vector3 historical_pos = interpolate_position(action_time);
+
+        // Validate movement from historical position
+        float max_distance = MAX_SPEED * (rtt / 1000.0f + TICK_RATE);
+        float actual_distance = (claimed_pos - historical_pos).length();
+
+        if (actual_distance > max_distance * 1.2f) {  // 20% tolerance
+            log_suspicious(player_id, "speed violation");
+            return false;
+        }
+
+        return true;
+    }
+};</code></pre>
+
+    <h3>Tolerance Thresholds</h3>
+    <table>
+        <caption data-label="Table 9">Movement Validation Thresholds</caption>
+        <thead>
+            <tr><th>Check</th><th>Threshold</th><th>Action</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Speed</td><td>Max speed + 20%</td><td>Reject + log</td></tr>
+            <tr><td>Teleport</td><td>10m instant move</td><td>Reject + kick</td></tr>
+            <tr><td>Vertical</td><td>Max jump height</td><td>Clamp + log</td></tr>
+            <tr><td>Jitter</td><td>3 sigma from mean</td><td>Log only</td></tr>
+        </tbody>
+    </table>
+
+    <h2 id="sec5-2">5.2 Statistical Detection</h2>
+
+    <h3>Heuristic Anti-Cheat Implementation</h3>
+    <pre><code>class HeuristicAntiCheat {
+    struct PlayerStats {
+        float avg_reaction_time;
+        float input_variance;
+        uint32_t impossible_actions;
+        uint32_t packet_timing_violations;
+    };
+
+    std::unordered_map&lt;PlayerID, PlayerStats&gt; stats;
+
+public:
+    void record_input(PlayerID id, uint32_t timestamp, InputState input) {
+        auto& s = stats[id];
+
+        // Detect inhuman reaction times (< 100ms consistently)
+        float reaction = calculate_reaction_time(id, timestamp);
+        if (reaction < 0.1f) {
+            s.impossible_actions++;
+        }
+
+        // Detect perfect input patterns (bots)
+        float variance = calculate_input_variance(id, input);
+        if (variance < 0.01f && s.input_variance > 100) {
+            flag_for_review(id, "suspicious consistency");
+        }
+
+        // Packet timing analysis
+        if (check_packet_timing_violation(id, timestamp)) {
+            s.packet_timing_violations++;
+        }
+
+        // Threshold-based actions
+        if (s.impossible_actions > 10) {
+            kick_player(id, "suspicious gameplay patterns");
+        }
+    }
+};</code></pre>
+
+    <h2 id="sec5-3">5.3 Client Integrity</h2>
+
+    <h3>Lightweight File Integrity Verification</h3>
+    <pre><code>// Client sends file hashes on connect
+void on_client_connect(PlayerID id) {
+    // Request critical file hashes
+    send_reliable(id, MSG_VERIFY_INTEGRITY, {
+        .files = {
+            "res://scripts/player_controller.gd",
+            "res://scripts/network_manager.gd",
+            "res://bin/game_logic.gdns"
+        }
+    });
+}
+
+void on_integrity_response(PlayerID id, IntegrityResponse response) {
+    for (auto& file : response.files) {
+        auto expected = get_expected_hash(file.path);
+        if (file.hash != expected) {
+            log_cheater(id, "file modified: " + file.path);
+            // Don't kick immediately - could be version mismatch
+        }
+    }
+}</code></pre>
+
+    <!-- SECTION 6: CI/CD -->
+    <h1 id="sec6" class="section-break">6. Research Area 5: Development Workflow & CI/CD</h1>
+
+    <h2 id="sec6-1">6.1 Build System Modernization</h2>
+
+    <h3>CMake Presets Configuration</h3>
+    <div class="config-file">
+        <h4>CMakePresets.json</h4>
+<pre>{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "default",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_CXX_STANDARD_REQUIRED": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_ASAN": "ON",
+        "BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENABLE_PROFILING": "OFF",
+        "BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "ci",
+      "inherits": "release",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache"
+      },
+      "environment": {
+        "CCACHE_BASEDIR": "${sourceDir}",
+        "CCACHE_DIR": "${sourceDir}/.ccache"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "debug", "configurePreset": "debug" },
+    { "name": "release", "configurePreset": "release" },
+    { "name": "ci", "configurePreset": "ci" }
+  ],
+  "testPresets": [
+    {
+      "name": "default",
+      "configurePreset": "debug",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}</pre>
+    </div>
+
+    <h3>GitHub Actions Workflow</h3>
+    <div class="config-file">
+        <h4>.github/workflows/ci.yml</h4>
+<pre>name: CI
+
+on: [push, pull_request]
+
+jobs:
+  server:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ runner.os }}-server
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build \
+            libssl-dev libenet-dev
+
+      - name: Configure
+        run: cmake --preset ci
+
+      - name: Build
+        run: cmake --build --preset ci --parallel
+
+      - name: Test
+        run: ctest --preset default
+
+  godot-client:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.2.2
+
+      - name: Import project
+        run: |
+          cd src/client
+          godot --headless --import --quit
+
+      - name: Run GUT tests
+        env:
+          GODOT_DISABLE_LEAK_CHECKS: "1"
+        run: |
+          cd src/client
+          godot --headless -d \
+            --display-driver headless \
+            --audio-driver Dummy \
+            -s res://addons/gut/gut_cmdln.gd \
+            -gdir=res://tests \
+            -gexit</pre>
+    </div>
+
+    <h2 id="sec6-2">6.2 Hot Reload</h2>
+
+    <h3>C++ Hot Reload via Shared Libraries</h3>
+    <pre><code>// Host executable
+#include &lt;dlfcn.h&gt;
+
+typedef void (*TickFunc)(float delta, void* state);
+
+int main() {
+    void* state = nullptr;
+    void* handle = nullptr;
+    TickFunc tick = nullptr;
+    time_t last_mtime = 0;
+
+    while (true) {
+        // Check if library changed
+        struct stat st;
+        if (stat("libgame.so", &st) == 0 && st.st_mtime != last_mtime) {
+            if (handle) dlclose(handle);
+
+            handle = dlopen("./libgame.so", RTLD_NOW);
+            tick = (TickFunc)dlsym(handle, "game_tick");
+            last_mtime = st.st_mtime;
+
+            printf("Hot reload completed\n");
+        }
+
+        if (tick) {
+            state = tick(1.0f/60.0f, state);
+        }
+
+        std::this_thread::sleep_for(16ms);
+    }
+}</code></pre>
+
+    <h2 id="sec6-3">6.3 Monitoring</h2>
+
+    <h3>StatsD for Zero-Budget Metrics</h3>
+    <table>
+        <caption data-label="Table 10">Monitoring Solution Comparison</caption>
+        <thead>
+            <tr><th>Solution</th><th>Complexity</th><th>Cost</th><th>Overhead</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Prometheus + Grafana</td><td>Medium</td><td>Free</td><td>Moderate</td></tr>
+            <tr><td>StatsD + Graphite</td><td>Low</td><td>Free</td><td>Low</td></tr>
+            <tr><td>Custom logging</td><td>Low</td><td>Free</td><td>Minimal</td></tr>
+        </tbody>
+    </table>
+
+    <div class="adr">
+        <div class="adr-title">ADR-007: Monitoring Strategy</div>
+        <p><strong>Decision:</strong> Start with StatsD + simple console dashboard, migrate to Prometheus later.</p>
+        <p><strong>Rationale:</strong> StatsD has minimal performance impact (UDP fire-and-forget) and requires no persistent storage. Sufficient for initial debugging and capacity planning.</p>
+    </div>
+
+    <h3>Memory Leak Detection in Production</h3>
+    <table>
+        <caption data-label="Table 11">Memory Debugging Tools</caption>
+        <thead>
+            <tr><th>Tool</th><th>Slowdown</th><th>Best For</th><th>Production?</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>AddressSanitizer</td><td>2-4x</td><td>CI/Testing</td><td>No</td></tr>
+            <tr><td>Valgrind</td><td>20-50x</td><td>Deep analysis</td><td>No</td></tr>
+            <tr><td>LeakSanitizer</td><td>2x</td><td>Leak detection</td><td>Maybe</td></tr>
+            <tr><td>Custom allocators</td><td>&lt;5%</td><td>Tracking</td><td>Yes</td></tr>
+        </tbody>
+    </table>
+
+    <!-- SECTION 7: MVP SCOPE -->
+    <h1 id="sec7" class="section-break">7. Research Area 6: Minimum Viable MMO Scope</h1>
+
+    <h2 id="sec7-1">7.1 Phase 0 Exit Criteria</h2>
+
+    <h3>Revised 4-Week Phase 0 Milestones</h3>
+    <table>
+        <caption data-label="Table 12">Phase 0 Milestone Definition</caption>
+        <thead>
+            <tr><th>Week</th><th>Goal</th><th>Acceptance Criteria</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>1</td><td>Server foundation</td><td>Single player connects, moves, disconnects cleanly</td></tr>
+            <tr><td>2</td><td>Client integration</td><td>Godot client displays player movement</td></tr>
+            <tr><td>3</td><td>Multiplayer basics</td><td>10 concurrent players, no desyncs</td></tr>
+            <tr><td>4</td><td>Validation</td><td>48-hour playtest with 10 players, zero crashes</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Success Metrics</h3>
+    <ul>
+        <li><strong>50 concurrent players</strong> = "Proof of concept validated"</li>
+        <li><strong>100 concurrent players</strong> = "Warrant scaling investment"</li>
+        <li><strong>Player retention &gt;30%</strong> after first session = "Product-market fit signal"</li>
+    </ul>
+
+    <h2 id="sec7-2">7.2 Content vs Tech Balance</h2>
+
+    <h3>Feature Prioritization for Indie MMO</h3>
+    <table>
+        <caption data-label="Table 13">Feature Priority Matrix</caption>
+        <thead>
+            <tr><th>Feature</th><th>Retention Impact</th><th>Dev Effort</th><th>Priority</th></tr>
+        </thead>
+        <tbody>
+            <tr class="risk-high"><td>PvP combat</td><td>High</td><td>High</td><td>P0</td></tr>
+            <tr class="risk-medium"><td>Chat system</td><td>High</td><td>Low</td><td>P0</td></tr>
+            <tr class="risk-medium"><td>Basic inventory</td><td>Medium</td><td>Low</td><td>P1</td></tr>
+            <tr class="risk-low"><td>Character progression</td><td>High</td><td>Medium</td><td>P1</td></tr>
+            <tr class="risk-low"><td>Guild system</td><td>Medium</td><td>Medium</td><td>P2</td></tr>
+        </tbody>
+    </table>
+
+    <h2 id="sec7-3">7.3 Network Budget</h2>
+
+    <h3>Bandwidth Calculation for 60Hz Position Updates</h3>
+    <pre><code>// Position update packet structure (bytes)
+struct PositionUpdate {
+    uint32_t player_id;     // 4 bytes
+    uint32_t timestamp;     // 4 bytes
+    int64_t x, y, z;        // 24 bytes (32.32 fixed)
+    int16_t yaw, pitch;     // 4 bytes (compressed rotation)
+    uint8_t flags;          // 1 byte (sprinting, crouching, etc.)
+}; // Total: ~37 bytes + headers
+
+// Bandwidth calculation
+// 20 players * 60Hz * 37 bytes = 44.4 KB/s upstream (server to each client)
+// 20 players * 60Hz * 37 bytes = 44.4 KB/s downstream (each client to server)
+// Total per client: ~44.4 KB/s = 355 Kbps
+// Server total: 20 * 355 Kbps = 7.1 Mbps outbound
+
+// Optimization: Delta compression + AOI culling
+// Typical reduction: 60-80% = ~2-3 Mbps server outbound</code></pre>
+
+    <!-- SECTION 8: RISK MATRIX -->
+    <h1 id="sec8" class="section-break">8. Risk Matrix & Architecture Decision Records</h1>
+
+    <h2>Technical Debt Assessment</h2>
+    <table>
+        <caption data-label="Table 14">Risk Matrix: Acceptable vs Fatal Technical Debt</caption>
+        <thead>
+            <tr><th>Risk</th><th>Severity</th><th>Acceptable?</th><th>Mitigation</th></tr>
+        </thead>
+        <tbody>
+            <tr class="risk-high"><td>Single point of failure (no HA)</td><td>High</td><td>Yes (Phase 0)</td><td>Document manual recovery</td></tr>
+            <tr class="risk-high"><td>No automated backups</td><td>High</td><td>Yes (Phase 0)</td><td>Daily pg_dump cron</td></tr>
+            <tr class="risk-medium"><td>Client-side prediction bugs</td><td>Medium</td><td>Yes</td><td>Server reconciliation</td></tr>
+            <tr class="risk-high"><td>Memory leaks</td><td>High</td><td>No</td><td>ASan in CI</td></tr>
+            <tr class="risk-medium"><td>Desynchronization</td><td>High</td><td>No</td><td>Periodic state sync</td></tr>
+            <tr class="risk-low"><td>Limited anti-cheat</td><td>Medium</td><td>Yes (Phase 0)</td><td>Server authority</td></tr>
+        </tbody>
+    </table>
+
+    <h2>Summary of ADRs</h2>
+    <table>
+        <caption data-label="Table 15">Architecture Decision Records Summary</caption>
+        <thead>
+            <tr><th>ADR</th><th>Decision</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>ADR-001</td><td>Hetzner AX42 for production</td><td>Recommended</td></tr>
+            <tr><td>ADR-002</td><td>PostgreSQL replaces Redis+ScyllaDB</td><td>P0</td></tr>
+            <tr><td>ADR-003</td><td>FlatBuffers server, ByteBuffer client</td><td>Keep current</td></tr>
+            <tr><td>ADR-004</td><td>Custom int64_t fixed-point math</td><td>P1</td></tr>
+            <tr><td>ADR-005</td><td>EnTT with group iteration</td><td>Refactor</td></tr>
+            <tr><td>ADR-006</td><td>Keep custom spatial hash</td><td>Keep current</td></tr>
+            <tr><td>ADR-007</td><td>StatsD for monitoring</td><td>P2</td></tr>
+        </tbody>
+    </table>
+
+    <!-- SECTION 9: ROADMAP -->
+    <h1 id="sec9" class="section-break">9. Implementation Roadmap</h1>
+
+    <h2>4-Week Sprint Plan</h2>
+    <table>
+        <caption data-label="Table 16">Implementation Roadmap</caption>
+        <thead>
+            <tr><th>Week</th><th>Focus</th><th>Deliverables</th><th>Owner</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>1</td><td>Infrastructure simplification</td><td>Docker Compose, PostgreSQL migration</td><td>DevOps</td></tr>
+            <tr><td>2</td><td>Networking integration</td><td>Godot↔C++ handshake working</td><td>Network</td></tr>
+            <tr><td>3</td><td>Determinism + anti-cheat</td><td>Fixed-point movement, validation</td><td>Gameplay</td></tr>
+            <tr><td>4</td><td>CI/CD + testing</td><td>GitHub Actions, 10-player test</td><td>QA</td></tr>
+        </tbody>
+    </table>
+
+    <h2>Library Recommendations</h2>
+    <table>
+        <caption data-label="Table 17">Recommended Libraries</caption>
+        <thead>
+            <tr><th>Purpose</th><th>Library</th><th>URL</th><th>License</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Fixed-point math</td><td>libfixmath</td><td>github.com/PetteriAimonen/libfixmath</td><td>MIT</td></tr>
+            <tr><td>Game networking</td><td>GameNetworkingSockets</td><td>github.com/ValveSoftware/GameNetworkingSockets</td><td>BSD</td></tr>
+            <tr><td>Serialization</td><td>FlatBuffers</td><td>github.com/google/flatbuffers</td><td>Apache-2.0</td></tr>
+            <tr><td>ECS</td><td>EnTT</td><td>github.com/skypjack/entt</td><td>MIT</td></tr>
+            <tr><td>Testing</td><td>Catch2</td><td>github.com/catchorg/Catch2</td><td>BSL-1.0</td></tr>
+            <tr><td>Metrics</td><td>statsd-c-client</td><td>github.com/etsy/statsd</td><td>MIT</td></tr>
+        </tbody>
+    </table>
+
+    <!-- SECTION 10: REFERENCES -->
+    <h1 id="sec10" class="section-break">10. References</h1>
+
+    <ol class="references">
+        <li id="ref-1">VPSBenchmarks. (2024). Hetzner AX42 Performance Analysis. Retrieved from https://www.vpsbenchmarks.com</li>
+        <li id="ref-2">Achromatic Dev. (2024). Hetzner Server Comparison 2025. Retrieved from https://www.achromatic.dev/blog/hetzner-server-comparison</li>
+        <li id="ref-3">abeimler/ecs_benchmark. (2024). ECS Framework Benchmarks. GitHub. https://github.com/abeimler/ecs_benchmark</li>
+        <li id="ref-4">Flecs Documentation. (2024). Flecs FAQ - Comparison with EnTT. https://www.flecs.dev/flecs/md_docs_2FAQ.html</li>
+        <li id="ref-5">Godot Engine Documentation. (2024). High-level Multiplayer. https://docs.godotengine.org/en/4.x/tutorials/networking/high_level_multiplayer.html</li>
+        <li id="ref-6">Google FlatBuffers. (2024). FlatBuffers Benchmarks. https://flatbuffers.dev/benchmarks/</li>
+        <li id="ref-7">Unity Documentation. (2024). Dealing with Latency - Server Side Rewind. https://docs.unity3d.com/Packages/com.unity.netcode.gameobjects@2.4/manual/learn/dealing-with-latency.html</li>
+        <li id="ref-8">Red Hat Developers. (2021). Memory Error Checking in C and C++. https://developers.redhat.com/blog/2021/05/05/memory-error-checking-in-c-and-c-comparing-sanitizers-and-valgrind</li>
+        <li id="ref-9">Hafiz, A. (2021). Hot Code Reloading with libc. https://ayazhafiz.com/articles/21/hot-code-reloading</li>
+        <li id="ref-10">Slembcke, S. (2022). Easy Hot-Loading for C. https://slembcke.github.io/HotLoadC</li>
+    </ol>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            renderMathInElement(document.body, {
+                delimiters: [
+                    {left: "$$", right: "$$", display: true},
+                    {left: "$", right: "$", display: false}
+                ]
+            });
+        });
+    </script>
+</body>
+</html>
