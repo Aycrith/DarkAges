@@ -1,35 +1,102 @@
-# DarkAges Stress Test Tools
+# DarkAges Stress Test & Integration Testing Tools (WP-6-5)
 
-Python-based bot swarm for stress testing the DarkAges MMO server. Simulates multiple concurrent players connecting to the server.
+Python-based testing framework for the DarkAges MMO server, including bot swarms for load testing, integration test harness, and network chaos testing.
 
 ## Overview
 
-This toolkit provides automated testing capabilities for the DarkAges multiplayer synchronization system:
+This toolkit provides comprehensive testing capabilities for the DarkAges multiplayer synchronization system:
 
-- **Bot Swarm**: Simulates 10+ players with realistic movement patterns
-- **Multi-Player Test**: Automated validation of server synchronization
-- **Latency Simulator**: Test behavior under poor network conditions
+- **Integration Test Harness** (`integration_harness.py`) - Structured integration testing framework (WP-6-5)
+- **Bot Swarm** (`bot_swarm.py`) - Simulates 10-1000+ players with realistic movement patterns
+- **Multi-Player Test** (`test_multiplayer.py`) - Automated validation of server synchronization
+- **Network Chaos** (`network_chaos.py`) - Network condition simulation for resilience testing
+- **Latency Simulator** (`latency_simulator.py`) - Legacy network condition tool
 
 ## Quick Start
 
 ```bash
-# Terminal 1: Start the DarkAges server
-./darkages-server
+# Terminal 1: Start infrastructure (Redis + ScyllaDB)
+cd infra
+docker-compose up -d redis scylla
 
-# Terminal 2: Run the multiplayer test
+# Terminal 2: Start the DarkAges server
+./build/darkages_server
+
+# Terminal 3: Run integration tests
 cd tools/stress-test
-python test_multiplayer.py
+pip install -r requirements.txt
+
+# Check service health
+python integration_harness.py --health
+
+# Run basic connectivity test
+python integration_harness.py --test basic_connectivity
+
+# Run 10-player integration test
+python integration_harness.py --test 10_player_session
+
+# Run full integration test suite
+python integration_harness.py --all
 ```
 
-## Files
+## Integration Test Harness (WP-6-5)
 
-| File | Description |
-|------|-------------|
-| `bot_swarm.py` | Main stress testing tool - simulates multiple game clients |
-| `test_multiplayer.py` | Automated integration test with pass/fail validation |
-| `latency_simulator.py` | Network condition simulation (Linux/macOS) |
-| `requirements.txt` | Python dependencies (standard library only) |
-| `README.md` | This file |
+The `integration_harness.py` is the main testing framework for DarkAges server integration testing.
+
+### Available Tests
+
+| Test Name | Description | Stage |
+|-----------|-------------|-------|
+| `service_health` | Check Redis, ScyllaDB, and server health | Pre-flight |
+| `basic_connectivity` | Single bot connects and receives snapshot | Week 1 |
+| `10_player_session` | 10 bots connect, move, disconnect cleanly | Week 4 |
+| `redis_integration` | Session data persists in Redis | Week 2 |
+| `scylla_integration` | Profile data persists in ScyllaDB | Week 3 |
+| `disconnect_reconnect` | Clean disconnect/reconnect handling | Week 4 |
+| `bandwidth_compliance` | Bandwidth within budget (<20KB/s down, <2KB/s up) | Week 4+ |
+| `stress_50_connections` | 50 concurrent connection test | Week 6 |
+
+### Usage Examples
+
+```bash
+# Run all integration tests
+python integration_harness.py --all
+
+# Run specific test
+python integration_harness.py --test basic_connectivity
+python integration_harness.py --test 10_player_session
+python integration_harness.py --test redis_integration
+
+# Check service health only
+python integration_harness.py --health
+
+# List available tests
+python integration_harness.py --list
+
+# Save results to JSON file
+python integration_harness.py --all --output results.json
+
+# Connect to remote server
+python integration_harness.py --all --server 192.168.1.100 --port 7777
+```
+
+### Stress Testing
+
+```bash
+# Run stress test with 100 bots for 60 seconds
+python integration_harness.py --stress 100 --duration 60
+
+# Run stress test with custom parameters
+python integration_harness.py --stress 500 --duration 300 --server prod.example.com
+```
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | All tests passed |
+| 1 | One or more tests failed |
+| 2 | Critical failure (services unavailable) |
 
 ## Bot Swarm
 
@@ -58,180 +125,87 @@ python bot_swarm.py --bots 20 --pattern circle
 - `linear` - Walk back and forth
 - `stationary` - No movement (baseline testing)
 
-### Example Output
+## Network Chaos Testing
 
-```
-============================================================
-DARKAGES BOT SWARM - Starting Test
-============================================================
-Target server: 127.0.0.1:7777
-Bot count: 10
-Duration: 60s
-Input rate: 60Hz
-------------------------------------------------------------
+Simulates network problems to test server resilience.
 
-Connecting 10 bots...
-Connected: 10/10
+### Prerequisites
 
-Running test for 60 seconds...
-
-Disconnecting bots...
-
-============================================================
-BOT SWARM TEST SUMMARY
-============================================================
-Bots Connected: 10
-Test Duration: 60.1s
-
-Packet Statistics:
-  Total packets sent: 36,120
-  Total packets received: 12,150
-  Packets sent/sec: 601
-  Packets received/sec: 202
-
-Bandwidth Usage:
-  Total sent: 722.66 KB
-  Total received: 2.45 MB
-  Upload rate: 96.36 Kbps
-  Download rate: 326.59 Kbps
-
-Per-Bot Averages:
-  Snapshots received: 1,215.0
-  Server corrections: 12.3
-  Avg upload: 9.64 Kbps/bot
-  Avg download: 32.66 Kbps/bot
-
-Budget Compliance:
-  Upload budget (2KB/s): PASS (1204 bytes/s)
-  Download budget (20KB/s): PASS (4083 bytes/s)
-  Snapshot rate: 20.2/sec (expected 20/sec, ratio 1.01)
-============================================================
-```
-
-## Multi-Player Test
-
-Automated integration test that validates multiplayer synchronization.
+- **Linux**: `tc` (traffic control) - install with `sudo apt-get install iproute2`
+- **macOS**: Limited support via `pfctl`
+- **Windows**: Requires WSL or external tool like [Clumsy](https://jagt.github.io/clumsy/)
 
 ### Usage
 
 ```bash
-# Standard 10-player test for 30 seconds
-python test_multiplayer.py
-
-# Quick smoke test
-python test_multiplayer.py --bots 5 --duration 10
-
-# Stress test with 100 players
-python test_multiplayer.py --bots 100 --duration 120
-```
-
-### Test Coverage
-
-The test validates:
-
-1. **Connection Rate** - ≥90% of bots must connect
-2. **Snapshot Reception** - ≥80% of expected snapshots received
-3. **Bandwidth Upload** - Within 2KB/s budget per bot
-4. **Bandwidth Download** - Within 20KB/s budget per bot
-5. **Packet Integrity** - All bots send and receive packets
-6. **Prediction Accuracy** - <5% of inputs result in corrections
-7. **Input Acknowledgment** - Server acknowledges processed inputs
-
-### Exit Codes
-
-| Code | Meaning |
-|------|---------|
-| 0 | All tests passed |
-| 1 | One or more tests failed |
-| 2 | Could not connect to server |
-
-### Example Output
-
-```
-======================================================================
-DARKAGES MULTI-PLAYER SYNCHRONIZATION TEST
-======================================================================
-Configuration:
-  Server: 127.0.0.1:7777
-  Bots: 10
-  Duration: 30s
-  Expected snapshot rate: 20Hz
-======================================================================
-
-============================================================
-DARKAGES BOT SWARM - Starting Test
-...
-
-======================================================================
-TEST RESULTS
-======================================================================
-  [PASS] Connection Rate          - 10/10 bots connected (100.0%)
-  [PASS] Snapshot Reception       - 10/10 bots received >= 480 snapshots (avg rate: 20.1/sec)
-  [PASS] Bandwidth Upload         - Upload: 1156 bytes/s (limit: 2048)
-  [PASS] Bandwidth Download       - Download: 3842 bytes/s (limit: 20480)
-  [PASS] Packet Integrity         - Total sent: 18012, received: 6045
-  [PASS] Prediction Accuracy      - 45 corrections for 18012 inputs (0.25%)
-  [PASS] Input Acknowledgment     - 10/10 bots received acks (avg ack ratio: 98.5%)
-----------------------------------------------------------------------
-RESULT: ALL TESTS PASSED (7/7)
-======================================================================
-```
-
-## Latency Simulator
-
-Simulates poor network conditions for testing game behavior under adverse conditions.
-
-### Requirements
-
-- **Linux**: `tc` (traffic control) - usually pre-installed
-- **macOS**: `pfctl` and `dnctl` - limited support
-- **Windows**: Requires external tool like [Clumsy](https://jagt.github.io/clumsy/)
-
-### Linux Usage
-
-```bash
 # Add 100ms latency with 20ms jitter (realistic WAN)
-sudo python latency_simulator.py --latency 100 --jitter 20
+sudo python network_chaos.py --latency 100 --jitter 20
 
-# Simulate poor mobile connection
-sudo python latency_simulator.py --latency 200 --jitter 50 --loss 3
+# Poor mobile connection simulation
+sudo python network_chaos.py --latency 200 --jitter 50 --loss 3
 
-# Simulate very bad connection (stress testing)
-sudo python latency_simulator.py --latency 300 --loss 10
+# Use predefined profile
+sudo python network_chaos.py --profile mobile-3g
 
-# Add packet duplication and reordering
-sudo python latency_simulator.py --latency 100 --duplicate 1 --reorder 0.5
+# Automated chaos test for 5 minutes
+sudo python network_chaos.py --chaos-test 300
 
-# Reset to normal
-sudo python latency_simulator.py --reset
-
-# Show current rules
-sudo python latency_simulator.py --show
+# Reset to normal (IMPORTANT!)
+sudo python network_chaos.py --reset
 ```
 
 ### Network Profiles
 
 | Profile | Latency | Jitter | Loss | Use Case |
 |---------|---------|--------|------|----------|
-| LAN | 1ms | 0ms | 0% | Local testing baseline |
-| Good WAN | 50ms | 5ms | 0% | Fiber/cable connection |
-| Average | 100ms | 20ms | 0.5% | Typical internet |
-| Poor | 200ms | 50ms | 2% | Mobile/congested |
-| Very Poor | 300ms | 100ms | 5% | Edge cases |
-| Satellite | 600ms | 50ms | 1% | Satellite internet |
+| lan | 1ms | 0ms | 0% | Local testing baseline |
+| wan-good | 50ms | 5ms | 0% | Fiber/cable connection |
+| wan-average | 100ms | 20ms | 0.5% | Typical internet |
+| mobile-4g | 80ms | 15ms | 0.3% | 4G mobile |
+| mobile-3g | 200ms | 50ms | 2% | 3G mobile |
+| poor | 300ms | 100ms | 5% | Edge cases |
+| satellite | 600ms | 50ms | 1% | Satellite internet |
 
-### Example: Test with Simulated Latency
+## Docker Compose Testing
+
+Run full integration tests with Docker Compose:
 
 ```bash
-# Terminal 1: Add 150ms latency
-sudo python latency_simulator.py --latency 150 --jitter 30
+# Start all services (Redis, ScyllaDB, Server)
+cd infra
+docker-compose -f docker-compose.test.yml up -d
 
-# Terminal 2: Run multiplayer test
-python test_multiplayer.py --duration 60
+# Run integration tests
+docker-compose -f docker-compose.test.yml --profile test run --rm integration-test
 
-# Reset network when done
-sudo python latency_simulator.py --reset
+# Run stress test
+docker-compose -f docker-compose.test.yml --profile stress run --rm stress-test
+
+# Run chaos test (requires privileged mode)
+docker-compose -f docker-compose.test.yml --profile chaos run --rm chaos-test
+
+# View logs
+docker-compose -f docker-compose.test.yml logs -f server
+
+# Tear down
+docker-compose -f docker-compose.test.yml down -v
 ```
+
+## CI/CD Integration
+
+### GitHub Actions
+
+The project includes a GitHub Actions workflow for automated integration testing:
+
+```yaml
+- name: Run Integration Tests
+  run: |
+    cd tools/stress-test
+    pip install -r requirements.txt
+    python integration_harness.py --all
+```
+
+See `.github/workflows/integration-test.yml` for the complete configuration.
 
 ## Protocol Details
 
@@ -282,17 +256,28 @@ The bots use a simplified binary protocol that matches the FlatBuffers schema:
 [17: ...]         entity states (variable)
 ```
 
-## CI/CD Integration
+## Test Stages (from Research Analysis)
 
-The test can be integrated into CI/CD pipelines:
+```
+Week 1: GameNetworkingSockets + FlatBuffers (no database)
+  - Test: basic_connectivity
+  - Exit: UDP handshake working
 
-```yaml
-# Example GitHub Actions workflow
-- name: Run Multiplayer Test
-  run: |
-    cd tools/stress-test
-    python test_multiplayer.py --bots 10 --duration 30
-  timeout-minutes: 2
+Week 2: Add Redis hot-state
+  - Test: redis_integration
+  - Exit: Session persistence working
+
+Week 3: Add ScyllaDB persistence
+  - Test: scylla_integration
+  - Exit: Database persistence working
+
+Week 4-5: Full integration
+  - Test: 10_player_session, disconnect_reconnect
+  - Exit: Client connects, moves, disconnects cleanly
+
+Week 6: Stress testing
+  - Test: stress_50_connections, stress_test with N bots
+  - Exit: No crashes, <16ms tick time
 ```
 
 ## Performance Benchmarks
@@ -315,20 +300,16 @@ Expected performance on reference hardware (Linux, local server):
 - Verify server is running: `netstat -an | grep 7777`
 - Check firewall rules allow UDP port 7777
 - Verify correct host/port arguments
+- Run `--health` check to verify services
 
-### "High bandwidth usage"
+### "Redis/Scylla connection failed"
 
-- Check snapshot rate on server (should be 20Hz)
-- Verify delta compression is enabled
-- Check for excessive entity updates
+- Verify services are running: `docker-compose ps`
+- Check Redis: `redis-cli ping`
+- Check Scylla: `cqlsh localhost 9042`
+- Install dependencies: `pip install redis cassandra-driver`
 
-### "High correction rate"
-
-- Verify client prediction matches server physics
-- Check for clock drift between client and server
-- Ensure input processing is deterministic
-
-### Linux: "tc command not found"
+### "tc command not found" (Linux)
 
 ```bash
 # Install iproute2 package
@@ -336,8 +317,21 @@ sudo apt-get install iproute2    # Debian/Ubuntu
 sudo yum install iproute          # RHEL/CentOS
 ```
 
+### High bandwidth usage
+
+- Check snapshot rate on server (should be 20Hz)
+- Verify delta compression is enabled
+- Check for excessive entity updates
+
+### High correction rate
+
+- Verify client prediction matches server physics
+- Check for clock drift between client and server
+- Ensure input processing is deterministic
+
 ## References
 
 - Protocol: `src/shared/proto/game_protocol.fbs`
 - Constants: `src/server/include/Constants.hpp`
 - Architecture: `ImplementationRoadmapGuide.md`
+- WP-6-5 Specification: `PHASES_6_7_8_ROADMAP.md`
