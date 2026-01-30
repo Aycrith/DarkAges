@@ -412,6 +412,7 @@ set(SERVER_SOURCES
     src/server/src/zones/CrossZoneMessenger.cpp
     src/server/src/security/AntiCheat.cpp
     src/server/src/security/DDoSProtection.cpp
+    src/server/src/security/PacketValidator.cpp
     src/server/src/profiling/PerformanceMonitor.cpp
 )
 

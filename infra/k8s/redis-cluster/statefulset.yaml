@@ -1,0 +1,207 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: darkages
+  labels:
+    app: redis
+spec:
+  serviceName: redis
+  replicas: 3
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - redis
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+            - name: gossip
+              containerPort: 16379
+              protocol: TCP
+          command:
+            - redis-server
+            - /etc/redis/redis.conf
+            - --cluster-enabled
+            - "yes"
+            - --cluster-config-file
+            - /data/nodes.conf
+            - --cluster-node-timeout
+            - "5000"
+            - --appendonly
+            - "yes"
+            - --appendfsync
+            - everysec
+            - --maxmemory
+            - "1gb"
+            - --maxmemory-policy
+            - allkeys-lru
+            - --requirepass
+            - "$(REDIS_PASSWORD)"
+            - --masterauth
+            - "$(REDIS_PASSWORD)"
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: password
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/redis
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -a
+                - "$(REDIS_PASSWORD)"
+                - ping
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -a
+                - "$(REDIS_PASSWORD)"
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: fast-ssd
+        resources:
+          requests:
+            storage: 10Gi
+    - metadata:
+        name: config
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 100Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: darkages
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+    - name: gossip
+      port: 16379
+      targetPort: 16379
+  selector:
+    app: redis
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-secret
+  namespace: darkages
+type: Opaque
+stringData:
+  password: "darkages-redis-2026"
+---
+# Job to initialize cluster
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: redis-cluster-init
+  namespace: darkages
+spec:
+  template:
+    spec:
+      containers:
+        - name: init
+          image: redis:7-alpine
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Waiting for Redis nodes to be ready..."
+              sleep 30
+              
+              # Get pod IPs
+              NODES=$(kubectl get pods -n darkages -l app=redis -o jsonpath='{range.items[*]}{.status.podIP}:6379 {end}')
+              echo "Found nodes: $NODES"
+              
+              # Create cluster
+              redis-cli --cluster create $NODES \
+                --cluster-replicas 1 \
+                --cluster-yes \
+                -a darkages-redis-2026
+              
+              echo "Cluster initialized!"
+      restartPolicy: OnFailure
+      serviceAccountName: redis-init
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: redis-init
+  namespace: darkages
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: redis-init
+  namespace: darkages
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: redis-init
+  namespace: darkages
+subjects:
+  - kind: ServiceAccount
+    name: redis-init
+    namespace: darkages
+roleRef:
+  kind: Role
+  name: redis-init
+  apiGroup: rbac.authorization.k8s.io

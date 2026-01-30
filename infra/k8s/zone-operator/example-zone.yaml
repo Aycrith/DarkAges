@@ -1,0 +1,127 @@
+apiVersion: darkages.io/v1
+kind: ZoneServer
+metadata:
+  name: zone-1
+  namespace: darkages
+  labels:
+    app: zone-server
+    zoneId: "1"
+spec:
+  zoneId: 1
+  port: 7777
+  worldBounds:
+    minX: -500
+    maxX: 500
+    minZ: -500
+    maxZ: 500
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: "1000m"
+      memory: "2Gi"
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+  autoScaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilization: 70
+    targetMemoryUtilization: 80
+    scaleUpCooldown: 60
+    scaleDownCooldown: 300
+  database:
+    redisHost: "redis.darkages.svc.cluster.local"
+    redisPort: 6379
+    scyllaHost: "scylla.darkages.svc.cluster.local"
+    scyllaPort: 9042
+  metrics:
+    enabled: true
+    port: 8080
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - zone-server
+            topologyKey: kubernetes.io/hostname
+---
+apiVersion: darkages.io/v1
+kind: ZoneServer
+metadata:
+  name: zone-2
+  namespace: darkages
+  labels:
+    app: zone-server
+    zoneId: "2"
+spec:
+  zoneId: 2
+  port: 7778
+  worldBounds:
+    minX: 500
+    maxX: 1500
+    minZ: -500
+    maxZ: 500
+  replicaCount: 1
+  autoScaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+  database:
+    redisHost: "redis.darkages.svc.cluster.local"
+    scyllaHost: "scylla.darkages.svc.cluster.local"
+---
+apiVersion: darkages.io/v1
+kind: ZoneServer
+metadata:
+  name: zone-3
+  namespace: darkages
+  labels:
+    app: zone-server
+    zoneId: "3"
+spec:
+  zoneId: 3
+  port: 7779
+  worldBounds:
+    minX: -500
+    maxX: 500
+    minZ: 500
+    maxZ: 1500
+  replicaCount: 1
+  autoScaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+  database:
+    redisHost: "redis.darkages.svc.cluster.local"
+    scyllaHost: "scylla.darkages.svc.cluster.local"
+---
+apiVersion: darkages.io/v1
+kind: ZoneServer
+metadata:
+  name: zone-4
+  namespace: darkages
+  labels:
+    app: zone-server
+    zoneId: "4"
+spec:
+  zoneId: 4
+  port: 7780
+  worldBounds:
+    minX: 500
+    maxX: 1500
+    minZ: 500
+    maxZ: 1500
+  replicaCount: 1
+  autoScaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+  database:
+    redisHost: "redis.darkages.svc.cluster.local"
+    scyllaHost: "scylla.darkages.svc.cluster.local"

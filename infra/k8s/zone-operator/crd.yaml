@@ -1,0 +1,179 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: zoneservers.darkages.io
+spec:
+  group: darkages.io
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - zoneId
+                - port
+              properties:
+                zoneId:
+                  type: integer
+                  description: Unique zone identifier
+                  minimum: 1
+                  maximum: 65535
+                port:
+                  type: integer
+                  description: Game server port
+                  minimum: 1024
+                  maximum: 65535
+                worldBounds:
+                  type: object
+                  properties:
+                    minX:
+                      type: number
+                      default: -500
+                    maxX:
+                      type: number
+                      default: 500
+                    minZ:
+                      type: number
+                      default: -500
+                    maxZ:
+                      type: number
+                      default: 500
+                replicaCount:
+                  type: integer
+                  default: 1
+                  minimum: 1
+                  maximum: 10
+                resources:
+                  type: object
+                  properties:
+                    requests:
+                      type: object
+                      properties:
+                        cpu:
+                          type: string
+                          default: "1000m"
+                        memory:
+                          type: string
+                          default: "2Gi"
+                    limits:
+                      type: object
+                      properties:
+                        cpu:
+                          type: string
+                          default: "2000m"
+                        memory:
+                          type: string
+                          default: "4Gi"
+                autoScaling:
+                  type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                      default: true
+                    minReplicas:
+                      type: integer
+                      default: 1
+                    maxReplicas:
+                      type: integer
+                      default: 5
+                    targetCPUUtilization:
+                      type: integer
+                      default: 70
+                    targetMemoryUtilization:
+                      type: integer
+                      default: 80
+                    scaleUpCooldown:
+                      type: integer
+                      default: 60
+                      description: Seconds between scale-up events
+                    scaleDownCooldown:
+                      type: integer
+                      default: 300
+                      description: Seconds between scale-down events
+                database:
+                  type: object
+                  properties:
+                    redisHost:
+                      type: string
+                      default: "redis.darkages.svc.cluster.local"
+                    redisPort:
+                      type: integer
+                      default: 6379
+                    scyllaHost:
+                      type: string
+                      default: "scylla.darkages.svc.cluster.local"
+                    scyllaPort:
+                      type: integer
+                      default: 9042
+                metrics:
+                  type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                      default: true
+                    port:
+                      type: integer
+                      default: 8080
+                affinity:
+                  type: object
+                  description: Pod affinity/anti-affinity rules
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: ["Pending", "Running", "Failed", "Terminating"]
+                readyReplicas:
+                  type: integer
+                playerCount:
+                  type: integer
+                tickRate:
+                  type: number
+                lastScaleTime:
+                  type: string
+                  format: date-time
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string
+      additionalPrinterColumns:
+        - name: ZoneID
+          type: integer
+          jsonPath: .spec.zoneId
+        - name: Port
+          type: integer
+          jsonPath: .spec.port
+        - name: Replicas
+          type: integer
+          jsonPath: .status.readyReplicas
+        - name: Players
+          type: integer
+          jsonPath: .status.playerCount
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+  scope: Namespaced
+  names:
+    plural: zoneservers
+    singular: zoneserver
+    kind: ZoneServer
+    shortNames:
+      - zs
+      - zone
