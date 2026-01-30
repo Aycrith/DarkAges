@@ -1,0 +1,241 @@
+# DarkAges MMO - Phase 6-8 Development Infrastructure
+# 
+# This stack includes:
+# - Redis (hot state)
+# - ScyllaDB (persistence)
+# - Prometheus (metrics)
+# - Grafana (visualization)
+# - Loki (log aggregation)
+#
+# Usage:
+#   docker-compose -f docker-compose.phase6.yml up -d
+#   docker-compose -f docker-compose.phase6.yml down
+
+version: '3.8'
+
+services:
+  # ============================================================================
+  # Core Services
+  # ============================================================================
+
+  # Redis - Hot state cache (WP-6-2)
+  redis:
+    image: redis:7-alpine
+    container_name: darkages-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - darkages-network
+    profiles:
+      - core
+      - full
+
+  # ScyllaDB - Persistent storage (WP-6-3)
+  scylla:
+    image: scylladb/scylla:5.4
+    container_name: darkages-scylla
+    ports:
+      - "9042:9042"  # CQL port
+      - "9180:9180"  # Prometheus metrics
+      - "10000:10000"  # REST API
+    volumes:
+      - scylla_data:/var/lib/scylla
+      - ./scylla/scylla.yaml:/etc/scylla/scylla.yaml:ro
+      - ./scylla/cassandra-rackdc.properties:/etc/scylla/cassandra-rackdc.properties:ro
+    command: --developer-mode=1 --smp=2 --memory=2G --overprovisioned --listen-address=0.0.0.0
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - darkages-network
+    profiles:
+      - core
+      - full
+
+  # ScyllaDB initialization - creates keyspace and tables
+  scylla-init:
+    image: scylladb/scylla:5.4
+    container_name: darkages-scylla-init
+    volumes:
+      - ./scylla/init.cql:/init.cql:ro
+    entrypoint: |
+      bash -c '
+        echo "Waiting for ScyllaDB to be ready..."
+        for i in {1..30}; do
+          if cqlsh scylla -e "describe keyspaces" 2>/dev/null; then
+            echo "ScyllaDB is ready, initializing..."
+            cqlsh scylla -f /init.cql
+            echo "Initialization complete!"
+            exit 0
+          fi
+          echo "Attempt $$i/30 - ScyllaDB not ready yet, waiting..."
+          sleep 2
+        done
+        echo "Failed to initialize ScyllaDB"
+        exit 1
+      '
+    depends_on:
+      - scylla
+    networks:
+      - darkages-network
+    profiles:
+      - core
+      - full
+
+  # ============================================================================
+  # Monitoring Stack (WP-8-1)
+  # ============================================================================
+
+  # Prometheus - Metrics collection
+  prometheus:
+    image: prom/prometheus:v2.50.0
+    container_name: darkages-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    networks:
+      - darkages-network
+    profiles:
+      - monitoring
+      - full
+
+  # Grafana - Visualization
+  grafana:
+    image: grafana/grafana:10.3.1
+    container_name: darkages-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    networks:
+      - darkages-network
+    profiles:
+      - monitoring
+      - full
+
+  # Loki - Log aggregation
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: darkages-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./monitoring/loki.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - darkages-network
+    profiles:
+      - monitoring
+      - full
+
+  # Promtail - Log shipper (for server logs)
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: darkages-promtail
+    volumes:
+      - ./monitoring/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/log:/var/log:ro
+      - ./logs:/logs:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - darkages-network
+    profiles:
+      - monitoring
+      - full
+
+  # ============================================================================
+  # Development Tools
+  # ============================================================================
+
+  # Redis Commander - Redis UI
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: darkages-redis-ui
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      - redis
+    networks:
+      - darkages-network
+    profiles:
+      - debug
+      - full
+
+  # ScyllaDB Manager - Management UI
+  scylla-manager:
+    image: scylladb/scylla-manager:3.2
+    container_name: darkages-scylla-manager
+    ports:
+      - "5080:5080"
+    environment:
+      - SCYLLA_MANAGER_API=http://scylla:10000
+    depends_on:
+      - scylla
+    networks:
+      - darkages-network
+    profiles:
+      - debug
+      - full
+
+  # Mailhog - Email capture for testing (password reset, etc.)
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: darkages-mailhog
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - darkages-network
+    profiles:
+      - debug
+      - full
+
+volumes:
+  redis_data:
+    driver: local
+  scylla_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  loki_data:
+    driver: local
+
+networks:
+  darkages-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
