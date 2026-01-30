@@ -1,0 +1,425 @@
+// DarkAges MMO - Network Protocol Definitions
+// [NETWORK_AGENT] Protobuf schema for GameNetworkingSockets integration
+//
+// This protocol defines all messages exchanged between client and server
+// Optimized for low latency and bandwidth efficiency
+
+syntax = "proto3";
+
+package DarkAges.Protocol;
+
+option csharp_namespace = "DarkAges.Shared.Protocol";
+option cc_enable_arenas = true;
+
+// ============================================================================
+// Common Types
+// ============================================================================
+
+message Vector3 {
+    float x = 1;
+    float y = 2;
+    float z = 3;
+}
+
+message Quaternion {
+    float x = 1;
+    float y = 2;
+    float z = 3;
+    float w = 4;
+}
+
+// Entity identification
+message EntityId {
+    uint64 id = 1;
+}
+
+// Player identification  
+message PlayerId {
+    uint64 id = 1;
+}
+
+// Connection ID (assigned by server)
+message ConnectionId {
+    uint32 id = 1;
+}
+
+// Timestamp for latency calculation
+message Timestamp {
+    uint32 server_tick = 1;      // Server tick number
+    uint64 server_time_ms = 2;   // Server time in milliseconds
+    uint64 client_time_ms = 3;   // Client time (echoed back)
+}
+
+// ============================================================================
+// Client → Server Messages
+// ============================================================================
+
+// Client input state - sent every tick (60Hz)
+// Unreliable, unordered - latest always wins
+message ClientInput {
+    uint32 sequence_number = 1;     // Monotonic sequence for reconciliation
+    
+    // Movement input
+    float move_forward = 2;         // -1.0 to 1.0
+    float move_right = 3;           // -1.0 to 1.0
+    bool sprint = 4;                // Sprint modifier
+    bool crouch = 5;                // Crouch modifier
+    
+    // Camera/aim direction
+    float aim_yaw = 6;              // Camera yaw (degrees)
+    float aim_pitch = 7;            // Camera pitch (degrees)
+    
+    // Actions (bitmask for efficiency)
+    uint32 action_mask = 8;         // Bit 0=jump, 1=attack, 2=use, 3=block, etc.
+    
+    // Target entity (for combat/abilities)
+    EntityId target_entity = 9;
+    
+    // Timestamp for lag compensation
+    Timestamp timestamp = 10;
+}
+
+// Client request - reliable messages that must be processed
+message ClientRequest {
+    enum Type {
+        UNKNOWN = 0;
+        LOGIN = 1;
+        LOGOUT = 2;
+        RESPAWN = 3;
+        CHANGE_ZONE = 4;
+        USE_ABILITY = 5;
+        INVENTORY_ACTION = 6;
+        PARTY_INVITE = 7;
+        PARTY_ACCEPT = 8;
+        PARTY_LEAVE = 9;
+        GUILD_ACTION = 10;
+        CHAT_MESSAGE = 11;
+    }
+    
+    Type type = 1;
+    uint32 request_id = 2;          // Client-generated ID for response matching
+    bytes payload = 3;              // Type-specific data
+}
+
+// Login request payload
+message LoginPayload {
+    string username = 1;
+    bytes auth_token = 2;           // JWT or session token
+    uint32 client_version = 3;      // For version checking
+    string hardware_id = 4;         // For anti-cheat
+}
+
+// Ability use payload
+message AbilityPayload {
+    uint32 ability_id = 1;
+    Vector3 target_position = 2;
+    EntityId target_entity = 3;
+    float target_yaw = 4;
+}
+
+// Chat message payload
+message ChatPayload {
+    enum Channel {
+        GLOBAL = 0;
+        ZONE = 1;
+        PARTY = 2;
+        GUILD = 3;
+        WHISPER = 4;
+        SYSTEM = 5;
+    }
+    
+    Channel channel = 1;
+    string message = 2;
+    string target_player = 3;       // For whispers
+}
+
+// Ping message for latency measurement
+message ClientPing {
+    uint64 client_send_time = 1;
+    uint32 sequence = 2;
+}
+
+// ============================================================================
+// Server → Client Messages
+// ============================================================================
+
+// Server snapshot - world state update
+// Sent at 20Hz (configurable), unreliable
+message ServerSnapshot {
+    uint32 server_tick = 1;         // Tick this snapshot represents
+    uint32 last_processed_input = 2; // For client reconciliation
+    
+    // Delta compression baseline
+    uint32 baseline_tick = 3;       // Client should have this tick
+    
+    // Entity states
+    repeated EntityState entities = 4;
+    
+    // Entities that were destroyed since baseline
+    repeated uint64 destroyed_entities = 5;
+    
+    // Timestamp for RTT calculation
+    Timestamp timestamp = 6;
+    
+    // Server stats (for debugging)
+    uint32 server_fps = 7;
+    uint32 player_count = 8;
+}
+
+// Entity state for snapshot
+message EntityState {
+    uint64 entity_id = 1;
+    uint32 entity_type = 2;         // 0=player, 1=NPC, 2=projectile, etc.
+    
+    // Transform (quantized for compression)
+    sint32 pos_x_mm = 3;            // Position in millimeters (delta from baseline)
+    sint32 pos_y_mm = 4;
+    sint32 pos_z_mm = 5;
+    
+    uint32 yaw_degrees = 6;         // 0-360, quantized to 1 degree
+    sint32 pitch_degrees = 7;       // -90 to 90
+    
+    // Velocity (for interpolation)
+    sint32 vel_x_cmps = 8;          // Velocity in cm/s
+    sint32 vel_y_cmps = 9;
+    sint32 vel_z_cmps = 10;
+    
+    // Animation state
+    uint32 anim_state = 11;         // Animation ID
+    float anim_time = 12;           // Normalized time 0-1
+    
+    // Combat state
+    int32 health = 13;
+    int32 max_health = 14;
+    bool is_dead = 15;
+    
+    // Player-specific
+    string player_name = 16;
+    uint32 team_id = 17;
+    uint32 level = 18;
+    
+    // Abilities (cooldowns, active effects)
+    repeated AbilityState abilities = 19;
+}
+
+// Ability state for entity
+message AbilityState {
+    uint32 ability_id = 1;
+    float cooldown_remaining = 2;   // Seconds
+    float cast_time_remaining = 3;  // Seconds (0 if not casting)
+}
+
+// Server response to client requests
+message ServerResponse {
+    enum Status {
+        SUCCESS = 0;
+        ERROR_INVALID_REQUEST = 1;
+        ERROR_UNAUTHORIZED = 2;
+        ERROR_RATE_LIMITED = 3;
+        ERROR_SERVER_FULL = 4;
+        ERROR_VERSION_MISMATCH = 5;
+        ERROR_INVALID_STATE = 6;
+        ERROR_NOT_FOUND = 7;
+    }
+    
+    uint32 request_id = 1;          // Matches ClientRequest.request_id
+    Status status = 2;
+    string error_message = 3;
+    bytes payload = 4;
+}
+
+// Login response payload
+message LoginResponsePayload {
+    PlayerId player_id = 1;
+    EntityId entity_id = 2;
+    ConnectionId connection_id = 3;
+    uint32 assigned_zone = 4;
+    Vector3 spawn_position = 5;
+    uint32 server_tick_rate = 6;
+}
+
+// Server event - reliable, ordered
+message ServerEvent {
+    enum Type {
+        UNKNOWN = 0;
+        ENTITY_SPAWN = 1;
+        ENTITY_DESPAWN = 2;
+        DAMAGE_DEALT = 3;
+        ENTITY_DIED = 4;
+        ABILITY_ACTIVATED = 5;
+        ABILITY_COMPLETED = 6;
+        CHAT_MESSAGE = 7;
+        ZONE_TRANSITION = 8;
+        INVENTORY_CHANGED = 9;
+        QUEST_UPDATED = 10;
+        PARTY_UPDATED = 11;
+        GUILD_UPDATED = 12;
+        ACHIEVEMENT_EARNED = 13;
+    }
+    
+    Type type = 1;
+    uint32 event_id = 2;            // Monotonic for ordering
+    uint32 server_tick = 3;         // When event occurred
+    bytes payload = 4;
+}
+
+// Damage event
+message DamageEventPayload {
+    EntityId attacker = 1;
+    EntityId target = 2;
+    int32 damage = 3;
+    uint32 damage_type = 4;         // 0=physical, 1=magical, etc.
+    bool is_critical = 5;
+    Vector3 hit_position = 6;
+    uint32 ability_id = 7;          // 0 if basic attack
+}
+
+// Entity spawn event
+message EntitySpawnPayload {
+    EntityState initial_state = 1;
+}
+
+// Entity despawn event  
+message EntityDespawnPayload {
+    EntityId entity_id = 1;
+    uint32 reason = 2;              // 0=died, 1=disconnected, 2=zone change, etc.
+}
+
+// Zone transition event
+message ZoneTransitionPayload {
+    uint32 source_zone = 1;
+    uint32 target_zone = 2;
+    Vector3 entry_position = 3;
+    string target_server_address = 4;
+    uint32 target_server_port = 5;
+}
+
+// Pong response to client ping
+message ServerPong {
+    uint64 client_send_time = 1;    // Echoed from ClientPing
+    uint64 server_receive_time = 2;
+    uint64 server_send_time = 3;
+    uint32 sequence = 4;
+}
+
+// Server configuration update
+message ServerConfig {
+    uint32 tick_rate = 1;
+    float physics_update_rate = 2;
+    uint32 max_players_per_zone = 3;
+    float global_speed_multiplier = 4;
+    float global_damage_multiplier = 5;
+    bool pvp_enabled = 6;
+}
+
+// ============================================================================
+// Wrapper Messages (for transport)
+// ============================================================================
+
+// Top-level message wrapper - sent over network
+message GameMessage {
+    enum MessageType {
+        // Client → Server
+        CLIENT_INPUT = 0;
+        CLIENT_REQUEST = 1;
+        CLIENT_PING = 2;
+        
+        // Server → Client
+        SERVER_SNAPSHOT = 10;
+        SERVER_RESPONSE = 11;
+        SERVER_EVENT = 12;
+        SERVER_PONG = 13;
+        SERVER_CONFIG = 14;
+    }
+    
+    MessageType type = 1;
+    bytes payload = 2;              // Serialized inner message
+    
+    // Compression (optional)
+    bool is_compressed = 3;
+    uint32 uncompressed_size = 4;
+}
+
+// Connection handshake
+message HandshakeRequest {
+    uint32 protocol_version = 1;    // Must match server
+    uint64 client_timestamp = 2;    // For clock sync
+    bytes client_nonce = 3;         // 32 bytes random
+}
+
+message HandshakeResponse {
+    bool accepted = 1;
+    uint32 server_protocol_version = 2;
+    uint64 server_timestamp = 3;
+    bytes server_nonce = 4;
+    bytes session_token = 5;        // For subsequent auth
+    string rejection_reason = 6;    // If accepted=false
+}
+
+// ============================================================================
+// Anti-Cheat Messages (Server ↔ Anti-Cheat Service)
+// ============================================================================
+
+message AntiCheatReport {
+    PlayerId player_id = 1;
+    uint32 violation_type = 2;      // 0=speed, 1=teleport, 2=aimbot, etc.
+    uint32 severity = 3;            // 0=info, 1=warning, 2=violation, 3=ban
+    
+    // Evidence
+    repeated PositionSample position_history = 4;
+    float confidence_score = 5;     // 0.0 to 1.0
+    uint32 server_tick = 6;
+    string details = 7;
+}
+
+message PositionSample {
+    uint32 tick = 1;
+    Vector3 position = 2;
+    Vector3 velocity = 3;
+    uint64 timestamp_ms = 4;
+}
+
+// ============================================================================
+// Zone Server Messages (Server ↔ Server)
+// ============================================================================
+
+// Cross-zone entity migration
+message EntityMigration {
+    uint32 source_zone = 1;
+    uint32 target_zone = 2;
+    
+    // Full entity state transfer
+    EntityState entity_state = 3;
+    
+    // Player data
+    PlayerId player_id = 4;
+    bytes player_data = 5;          // Serialized player state
+    
+    // Connection info for handoff
+    ConnectionId connection_id = 6;
+    string client_address = 7;
+}
+
+// Aura projection update (zone boundary visibility)
+message AuraUpdate {
+    uint32 source_zone = 1;
+    uint32 target_zone = 2;
+    
+    // Entities visible across zone boundary
+    repeated EntityState visible_entities = 3;
+    
+    // Boundary info
+    Vector3 boundary_center = 4;
+    float boundary_radius = 5;
+}
+
+// Zone statistics (for load balancing)
+message ZoneStats {
+    uint32 zone_id = 1;
+    uint32 player_count = 2;
+    float average_tick_time_ms = 3;
+    float cpu_usage_percent = 4;
+    float memory_usage_mb = 5;
+    uint64 bytes_sent_per_second = 6;
+    uint64 bytes_received_per_second = 7;
+}

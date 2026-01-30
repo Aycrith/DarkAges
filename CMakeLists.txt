@@ -417,8 +417,12 @@ set(SERVER_SOURCES
 
 # Network layer - conditional on GameNetworkingSockets
 if(GNS_FOUND)
-    list(APPEND SERVER_SOURCES src/server/src/netcode/NetworkManager.cpp)
+    list(APPEND SERVER_SOURCES 
+        src/server/src/netcode/NetworkManager.cpp
+        src/server/src/netcode/GNSNetworkManager.cpp
+    )
     message(STATUS "NetworkManager: Using GameNetworkingSockets implementation")
+    message(STATUS "  - GNSNetworkManager: Full-featured implementation")
 else()
     list(APPEND SERVER_SOURCES src/server/src/netcode/NetworkManager_stub.cpp)
     message(WARNING "NetworkManager: Using stub implementation")
