@@ -1,0 +1,246 @@
+# DarkAges MMO - Integration Test Environment (WP-6-5)
+# 
+# Docker Compose stack for integration testing.
+# Includes: Redis, ScyllaDB, Game Server, and Test Runner
+#
+# Usage:
+#   docker-compose -f docker-compose.test.yml up --build
+#   docker-compose -f docker-compose.test.yml down
+#
+# For CI/CD:
+#   docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit
+
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # Redis - Hot State Cache
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: darkages-test-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_test_data:/data
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - darkages-test-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # ScyllaDB - Persistent Storage
+  # ==========================================================================
+  scylla:
+    image: scylladb/scylla:5.4
+    container_name: darkages-test-scylla
+    ports:
+      - "9042:9042"  # CQL port
+      - "9180:9180"  # Prometheus metrics
+    volumes:
+      - scylla_test_data:/var/lib/scylla
+      - ../tools/db/init_scylla_schema.cql:/docker-entrypoint-initdb.d/init.cql:ro
+    command: >
+      --smp 1
+      --memory 1G
+      --overprovisioned
+      --developer-mode=1
+      --alternator-port 8000
+      --alternator-write-isolation only_rmw_uses_lwt
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks:
+      - darkages-test-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # Game Server
+  # ==========================================================================
+  server:
+    build:
+      context: ..
+      dockerfile: Dockerfile.build
+    container_name: darkages-test-server
+    ports:
+      - "7777:7777/udp"
+      - "7777:7777/tcp"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SCYLLA_HOST=scylla
+      - SCYLLA_PORT=9042
+      - SERVER_PORT=7777
+      - TICK_RATE_HZ=60
+      - LOG_LEVEL=info
+      - ENVIRONMENT=test
+    depends_on:
+      redis:
+        condition: service_healthy
+      scylla:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/udp/localhost/7777"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - darkages-test-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  # ==========================================================================
+  # Integration Test Runner
+  # ==========================================================================
+  integration-test:
+    image: python:3.11-slim
+    container_name: darkages-test-runner
+    volumes:
+      - ../tools/stress-test:/tests:ro
+      - test_results:/results
+    working_dir: /tests
+    environment:
+      - SERVER_HOST=server
+      - SERVER_PORT=7777
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SCYLLA_HOST=scylla
+      - SCYLLA_PORT=9042
+      - TEST_OUTPUT=/results/integration_results.json
+    command: >
+      bash -c "
+        echo 'Installing dependencies...' &&
+        pip install --quiet redis cassandra-driver &&
+        echo 'Waiting for services...' &&
+        sleep 10 &&
+        echo 'Running integration tests...' &&
+        python integration_harness.py --all --output /results/integration_results.json &&
+        echo 'Tests complete. Results saved to /results/integration_results.json'
+      "
+    depends_on:
+      server:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      scylla:
+        condition: service_healthy
+    networks:
+      - darkages-test-network
+    profiles:
+      - test  # Only run with: docker-compose --profile test up
+
+  # ==========================================================================
+  # Stress Test Runner
+  # ==========================================================================
+  stress-test:
+    image: python:3.11-slim
+    container_name: darkages-stress-runner
+    volumes:
+      - ../tools/stress-test:/tests:ro
+      - test_results:/results
+    working_dir: /tests
+    environment:
+      - SERVER_HOST=server
+      - SERVER_PORT=7777
+    command: >
+      bash -c "
+        echo 'Installing dependencies...' &&
+        pip install --quiet redis cassandra-driver &&
+        echo 'Running stress test with 50 bots for 60s...' &&
+        python integration_harness.py --stress 50 --duration 60 &&
+        echo 'Stress test complete'
+      "
+    depends_on:
+      server:
+        condition: service_healthy
+    networks:
+      - darkages-test-network
+    profiles:
+      - stress  # Only run with: docker-compose --profile stress up
+
+  # ==========================================================================
+  # Network Chaos Test Runner (requires privileged mode)
+  # ==========================================================================
+  chaos-test:
+    image: python:3.11-slim
+    container_name: darkages-chaos-runner
+    privileged: true  # Required for tc (traffic control)
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ../tools/stress-test:/tests:ro
+      - ../tools/chaos:/chaos:ro
+      - test_results:/results
+    working_dir: /tests
+    environment:
+      - SERVER_HOST=server
+      - SERVER_PORT=7777
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    command: >
+      bash -c "
+        echo 'Installing dependencies...' &&
+        apt-get update -qq &&
+        apt-get install -y -qq iproute2 iputils-ping &&
+        pip install --quiet redis docker &&
+        echo 'Running chaos test...' &&
+        python network_chaos.py --chaos-test 120 || true &&
+        echo 'Chaos test complete'
+      "
+    depends_on:
+      server:
+        condition: service_healthy
+    networks:
+      - darkages-test-network
+    profiles:
+      - chaos  # Only run with: docker-compose --profile chaos up
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  redis_test_data:
+    driver: local
+  scylla_test_data:
+    driver: local
+  test_results:
+    driver: local
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  darkages-test-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16

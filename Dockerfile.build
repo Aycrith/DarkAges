@@ -1,31 +1,213 @@
-# DarkAges MMO - Build Environment
-FROM ubuntu:22.04
+# ============================================================================
+# DarkAges MMO - Multi-Stage Build Environment
+# ============================================================================
+# Usage:
+#   docker build -f Dockerfile.build -t darkages-build .
+#   docker run --rm -v $(pwd)/artifacts:/artifacts darkages-build
+# ============================================================================
+
+# ============================================================================
+# Stage 1: Base Build Environment
+# ============================================================================
+FROM ubuntu:22.04 AS base-builder
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
     ninja-build \
     git \
+    pkg-config \
+    ca-certificates \
     python3 \
+    python3-pip \
+    curl \
+    wget \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
+# Install modern CMake (3.27+)
+RUN pip3 install cmake>=3.27
+
 WORKDIR /build
 
+# ============================================================================
+# Stage 2: Dependency Fetcher
+# ============================================================================
+FROM base-builder AS deps-fetcher
+
+# Copy dependency manifests
+COPY deps/ ./deps/
+
+# Fetch dependencies if not present
+RUN mkdir -p deps && \
+    if [ ! -d "deps/entt" ]; then \
+        git clone --depth 1 --branch v3.13.0 https://github.com/skypjack/entt.git deps/entt; \
+    fi && \
+    if [ ! -d "deps/glm" ]; then \
+        git clone --depth 1 --branch 0.9.9.8 https://github.com/g-truc/glm.git deps/glm; \
+    fi
+
+# ============================================================================
+# Stage 3: Server Builder
+# ============================================================================
+FROM base-builder AS server-builder
+
+# Copy dependencies from fetcher stage
+COPY --from=deps-fetcher /build/deps /build/deps
+
 # Copy source code
+COPY CMakeLists.txt .
+COPY src/ ./src/
+COPY tests/ ./tests/
+COPY VERSION .
+
+# Build server
+RUN mkdir -p build && cd build && \
+    cmake .. \
+        -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_TESTS=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DCMAKE_INSTALL_PREFIX=/install && \
+    ninja -j$(nproc) 2>&1 | tee build.log && \
+    ctest --output-on-failure
+
+# Install to staging directory
+RUN cd build && \
+    mkdir -p /install/darkages && \
+    cp darkages_server /install/darkages/ && \
+    cp -r deps /install/darkages/ 2>/dev/null || true
+
+# ============================================================================
+# Stage 4: Client Builder (Godot)
+# ============================================================================
+FROM mcr.microsoft.com/dotnet/sdk:6.0 AS client-builder
+
+# Install Godot 4.2.1
+ENV GODOT_VERSION=4.2.1
+ENV GODOT_EXPORT_TEMPLATES_VERSION=4.2.1-stable
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and install Godot
+RUN wget -q https://downloads.tuxfamily.org/godotengine/${GODOT_VERSION}/Godot_v${GODOT_VERSION}-stable_mono_linux_x86_64.zip \
+    && unzip -q Godot_v${GODOT_VERSION}-stable_mono_linux_x86_64.zip \
+    && mv Godot_v${GODOT_VERSION}-stable_mono_linux_x86_64 /usr/local/bin/godot \
+    && chmod +x /usr/local/bin/godot \
+    && rm Godot_v${GODOT_VERSION}-stable_mono_linux_x86_64.zip
+
+# Download export templates
+RUN mkdir -p ~/.local/share/godot/export_templates/${GODOT_EXPORT_TEMPLATES_VERSION} \
+    && wget -q https://downloads.tuxfamily.org/godotengine/${GODOT_VERSION}/Godot_v${GODOT_VERSION}-stable_mono_export_templates.tpz \
+    && unzip -q Godot_v${GODOT_VERSION}-stable_mono_export_templates.tpz -d ~/.local/share/godot/export_templates/${GODOT_EXPORT_TEMPLATES_VERSION}/ \
+    && rm Godot_v${GODOT_VERSION}-stable_mono_export_templates.tpz
+
+# Copy client source
+COPY src/client/ ./client/
+
+# Build and export client
+RUN cd client && \
+    dotnet restore && \
+    godot --build-solutions --headless && \
+    mkdir -p /artifacts/client && \
+    godot --export-release "Linux/X11" /artifacts/client/DarkAgesClient.x86_64 --headless || \
+    echo "Client export may require display - copying built files instead" && \
+    cp -r . /artifacts/client/
+
+# ============================================================================
+# Stage 5: Runtime Environment
+# ============================================================================
+FROM ubuntu:22.04 AS runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libssl3 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Create app user
+RUN useradd -m -s /bin/bash darkages
+
+WORKDIR /app
+
+# Copy server binary from builder
+COPY --from=server-builder /install/darkages/darkages_server .
+COPY --from=server-builder /build/VERSION .
+
+# Copy configuration files
+COPY infra/docker-compose.yml ./infra/
+COPY infra/docker-compose.dev.yml ./infra/ 2>/dev/null || true
+COPY quickstart.ps1 ./scripts/
+COPY verify_build.sh ./scripts/
+
+# Set ownership
+RUN chown -R darkages:darkages /app
+
+# Switch to non-root user
+USER darkages
+
+# Expose game server port
+EXPOSE 7777/udp
+EXPOSE 7777/tcp
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD nc -z localhost 7777 || exit 1
+
+ENTRYPOINT ["./darkages_server"]
+CMD ["--help"]
+
+# ============================================================================
+# Stage 6: Development Environment
+# ============================================================================
+FROM base-builder AS development
+
+# Install additional dev tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gdb \
+    valgrind \
+    clang \
+    clang-tidy \
+    clang-format \
+    vim \
+    nano \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy everything for development
 COPY . .
 
-# Get dependencies
-RUN git clone --depth 1 --branch v3.13.0 https://github.com/skypjack/entt.git deps/entt || true
-RUN git clone --depth 1 --branch 0.9.9.8 https://github.com/g-truc/glm.git deps/glm || true
+# Setup git safe directory
+RUN git config --global --add safe.directory /build
 
-# Build
-RUN mkdir -p build && cd build && \
-    cmake .. -GNinja -DBUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release && \
-    ninja 2>&1 | tee build.log
-
-# Run tests
-RUN cd build && ctest --output-on-failure
-
+# Default to bash for development
 CMD ["/bin/bash"]
+
+# ============================================================================
+# Stage 7: CI/CD Test Environment
+# ============================================================================
+FROM server-builder AS ci-test
+
+# Install test dependencies
+RUN pip3 install \
+    redis \
+    cassandra-driver \
+    asyncio \
+    pytest \
+    pytest-asyncio
+
+# Copy test tools
+COPY tools/stress-test/ ./tools/stress-test/
+COPY infra/docker-compose.test.yml ./infra/
+
+# Run tests by default
+CMD ["ctest", "--output-on-failure", "-j$(nproc)"]

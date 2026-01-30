@@ -1,14 +1,3 @@
-# DarkAges MMO - Enhanced CMake Configuration
-# Phase 6-8: External Integration Support
-#
-# This CMake file adds support for:
-# - GameNetworkingSockets (WP-6-1)
-# - hiredis (WP-6-2)
-# - cassandra-cpp-driver (WP-6-3)
-# - FlatBuffers (WP-6-4)
-#
-# Usage: Replace CMakeLists.txt with this file for Phase 6+ development
-
 cmake_minimum_required(VERSION 3.20)
 project(DarkAgesServer VERSION 0.1.0 LANGUAGES CXX)
 
@@ -21,9 +10,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(BUILD_TESTS "Build tests" ON)
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(ENABLE_PROFILING "Enable Perfetto profiling" OFF)
+
+# Phase 6 External Integration Options
 option(ENABLE_GNS "Enable GameNetworkingSockets" ON)
-option(ENABLE_REDIS "Enable Redis support" ON)
-option(ENABLE_SCYLLA "Enable ScyllaDB support" ON)
+option(ENABLE_REDIS "Enable Redis integration" ON)
+option(ENABLE_SCYLLA "Enable ScyllaDB integration" ON)
 option(ENABLE_FLATBUFFERS "Enable FlatBuffers protocol" ON)
 option(FETCH_DEPENDENCIES "Fetch external dependencies automatically" ON)
 
@@ -97,133 +88,20 @@ else()
 endif()
 
 # ============================================================================
-# External Dependencies (WP-6-1, WP-6-2, WP-6-3, WP-6-4)
+# External Dependencies (Phase 6)
 # ============================================================================
 
-# GameNetworkingSockets (WP-6-1)
-if(ENABLE_GNS)
-    find_package(GameNetworkingSockets QUIET)
-    if(GameNetworkingSockets_FOUND)
-        message(STATUS "GameNetworkingSockets found: ${GameNetworkingSockets_DIR}")
-        set(GNS_FOUND TRUE)
-    else()
-        if(FETCH_DEPENDENCIES)
-            message(STATUS "Fetching GameNetworkingSockets...")
-            include(FetchContent)
-            
-            # Check for OpenSSL (required by GNS)
-            find_package(OpenSSL QUIET)
-            if(NOT OpenSSL_FOUND AND MSVC)
-                message(WARNING "OpenSSL not found. GNS may fail to build on Windows.")
-                message(STATUS "Install OpenSSL: winget install ShiningLight.OpenSSL")
-            endif()
-            
-            FetchContent_Declare(
-                GameNetworkingSockets
-                GIT_REPOSITORY https://github.com/ValveSoftware/GameNetworkingSockets.git
-                GIT_TAG v1.4.1
-                GIT_SHALLOW TRUE
-            )
-            
-            # Set GNS build options
-            set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-            set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
-            set(STEAMWEBRTC OFF CACHE BOOL "" FORCE)
-            
-            FetchContent_MakeAvailable(GameNetworkingSockets)
-            set(GNS_FOUND TRUE)
-            set(GameNetworkingSockets_LIBRARIES GameNetworkingSockets::GameNetworkingSockets)
-        else()
-            message(STATUS "GameNetworkingSockets: Using stub (ENABLE_GNS=ON but not found)")
-            set(GNS_FOUND FALSE)
-        endif()
-    endif()
-else()
-    message(STATUS "GameNetworkingSockets: Disabled (ENABLE_GNS=OFF)")
-    set(GNS_FOUND FALSE)
-endif()
+include(FetchContent)
 
-# hiredis (WP-6-2)
-if(ENABLE_REDIS)
-    find_package(hiredis QUIET)
-    if(hiredis_FOUND)
-        message(STATUS "hiredis found: ${hiredis_DIR}")
-        set(HIREDIS_FOUND TRUE)
-    else()
-        if(FETCH_DEPENDENCIES)
-            message(STATUS "Fetching hiredis...")
-            include(FetchContent)
-            FetchContent_Declare(
-                hiredis
-                GIT_REPOSITORY https://github.com/redis/hiredis.git
-                GIT_TAG v1.2.0
-                GIT_SHALLOW TRUE
-            )
-            
-            # Disable SSL for simplicity (can enable later)
-            set(ENABLE_SSL OFF CACHE BOOL "" FORCE)
-            set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-            
-            FetchContent_MakeAvailable(hiredis)
-            set(HIREDIS_FOUND TRUE)
-            set(hiredis_LIBRARIES hiredis::hiredis)
-        else()
-            message(STATUS "hiredis: Using stub (ENABLE_REDIS=ON but not found)")
-            set(HIREDIS_FOUND FALSE)
-        endif()
-    endif()
-else()
-    message(STATUS "hiredis: Disabled (ENABLE_REDIS=OFF)")
-    set(HIREDIS_FOUND FALSE)
-endif()
-
-# cassandra-cpp-driver (WP-6-3)
-if(ENABLE_SCYLLA)
-    find_package(cassandra QUIET)
-    if(cassandra_FOUND)
-        message(STATUS "cassandra-cpp-driver found")
-        set(CASSANDRA_FOUND TRUE)
-    else()
-        if(FETCH_DEPENDENCIES)
-            message(STATUS "Fetching cassandra-cpp-driver...")
-            include(FetchContent)
-            FetchContent_Declare(
-                cassandra
-                GIT_REPOSITORY https://github.com/datastax/cpp-driver.git
-                GIT_TAG 2.17.1
-                GIT_SHALLOW TRUE
-            )
-            
-            # Build options
-            set(CASS_BUILD_STATIC ON CACHE BOOL "" FORCE)
-            set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-            set(CASS_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-            set(CASS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-            set(CASS_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-            
-            FetchContent_MakeAvailable(cassandra)
-            set(CASSANDRA_FOUND TRUE)
-            set(cassandra_LIBRARIES cassandra_static)
-        else()
-            message(STATUS "cassandra-cpp-driver: Using stub (ENABLE_SCYLLA=ON but not found)")
-            set(CASSANDRA_FOUND FALSE)
-        endif()
-    endif()
-else()
-    message(STATUS "cassandra-cpp-driver: Disabled (ENABLE_SCYLLA=OFF)")
-    set(CASSANDRA_FOUND FALSE)
-endif()
-
-# FlatBuffers (WP-6-4)
+# FlatBuffers (v24.3.25) - Protocol serialization
 if(ENABLE_FLATBUFFERS)
     find_package(Flatbuffers QUIET)
     if(Flatbuffers_FOUND OR flatbuffers_FOUND)
-        message(STATUS "FlatBuffers found")
+        message(STATUS "FlatBuffers found via find_package")
         set(FLATBUFFERS_FOUND TRUE)
     else()
         if(FETCH_DEPENDENCIES)
-            message(STATUS "Fetching FlatBuffers...")
-            include(FetchContent)
+            message(STATUS "Fetching FlatBuffers v24.3.25...")
             FetchContent_Declare(
                 flatbuffers
                 GIT_REPOSITORY https://github.com/google/flatbuffers.git
@@ -242,7 +120,7 @@ if(ENABLE_FLATBUFFERS)
             set(FlatBuffers_LIBRARIES flatbuffers::flatbuffers)
             set(FLATBUFFERS_FLATC_EXECUTABLE $<TARGET_FILE:flatbuffers::flatc>)
         else()
-            message(STATUS "FlatBuffers: Not found (ENABLE_FLATBUFFERS=ON but not found)")
+            message(WARNING "FlatBuffers not found. Protocol serialization may fail.")
             set(FLATBUFFERS_FOUND FALSE)
         endif()
     endif()
@@ -251,8 +129,139 @@ else()
     set(FLATBUFFERS_FOUND FALSE)
 endif()
 
+# GameNetworkingSockets (v1.4.1) - UDP networking
+if(ENABLE_GNS)
+    find_package(GameNetworkingSockets QUIET)
+    if(GameNetworkingSockets_FOUND)
+        message(STATUS "GameNetworkingSockets found via find_package")
+        set(GNS_FOUND TRUE)
+        set(GameNetworkingSockets_LIBRARIES GameNetworkingSockets::GameNetworkingSockets)
+    else()
+        if(FETCH_DEPENDENCIES)
+            message(STATUS "Fetching GameNetworkingSockets v1.4.1...")
+            
+            # Check for OpenSSL (required by GNS)
+            find_package(OpenSSL QUIET)
+            if(NOT OpenSSL_FOUND AND MSVC)
+                message(WARNING "OpenSSL not found. GNS may fail to build on Windows.")
+                message(STATUS "Install OpenSSL: winget install ShiningLight.OpenSSL")
+            endif()
+            
+            FetchContent_Declare(
+                GameNetworkingSockets
+                GIT_REPOSITORY https://github.com/ValveSoftware/GameNetworkingSockets.git
+                GIT_TAG v1.4.1
+                GIT_SHALLOW TRUE
+            )
+            
+            # GNS build options
+            set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+            set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+            set(BUILD_STATIC_LIB ON CACHE BOOL "" FORCE)
+            set(BUILD_SHARED_LIB OFF CACHE BOOL "" FORCE)
+            set(BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+            set(STEAMWEBRTC OFF CACHE BOOL "" FORCE)
+            set(USE_CRYPTO MBEDTLS CACHE STRING "" FORCE)
+            
+            FetchContent_MakeAvailable(GameNetworkingSockets)
+            set(GNS_FOUND TRUE)
+            set(GameNetworkingSockets_LIBRARIES GameNetworkingSockets::GameNetworkingSockets)
+        else()
+            message(WARNING "GameNetworkingSockets not found. Using stub implementation.")
+            set(GNS_FOUND FALSE)
+        endif()
+    endif()
+else()
+    message(STATUS "GameNetworkingSockets: Disabled (ENABLE_GNS=OFF)")
+    set(GNS_FOUND FALSE)
+endif()
+
+# hiredis (v1.2.0) - Redis client
+if(ENABLE_REDIS)
+    find_package(hiredis QUIET)
+    if(hiredis_FOUND)
+        message(STATUS "hiredis found via find_package")
+        set(HIREDIS_FOUND TRUE)
+        set(hiredis_LIBRARIES hiredis::hiredis)
+    else()
+        if(FETCH_DEPENDENCIES)
+            message(STATUS "Fetching hiredis v1.2.0...")
+            FetchContent_Declare(
+                hiredis
+                GIT_REPOSITORY https://github.com/redis/hiredis.git
+                GIT_TAG v1.2.0
+                GIT_SHALLOW TRUE
+            )
+            
+            # hiredis build options
+            set(ENABLE_SSL OFF CACHE BOOL "" FORCE)
+            set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+            
+            FetchContent_MakeAvailable(hiredis)
+            set(HIREDIS_FOUND TRUE)
+            set(hiredis_LIBRARIES hiredis::hiredis)
+        else()
+            message(WARNING "hiredis not found. Using stub implementation.")
+            set(HIREDIS_FOUND FALSE)
+        endif()
+    endif()
+else()
+    message(STATUS "hiredis: Disabled (ENABLE_REDIS=OFF)")
+    set(HIREDIS_FOUND FALSE)
+endif()
+
+# cassandra-cpp-driver (2.17.1) - ScyllaDB/Cassandra client
+if(ENABLE_SCYLLA)
+    find_package(cassandra QUIET)
+    if(cassandra_FOUND)
+        message(STATUS "cassandra-cpp-driver found via find_package")
+        set(CASSANDRA_FOUND TRUE)
+        set(cassandra_LIBRARIES cassandra_static)
+    else()
+        if(FETCH_DEPENDENCIES)
+            message(STATUS "Fetching cassandra-cpp-driver v2.17.1...")
+            FetchContent_Declare(
+                cassandra
+                GIT_REPOSITORY https://github.com/datastax/cpp-driver.git
+                GIT_TAG 2.17.1
+                GIT_SHALLOW TRUE
+            )
+            
+            # Cassandra driver build options
+            set(CASS_BUILD_STATIC ON CACHE BOOL "" FORCE)
+            set(CASS_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+            set(CASS_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+            set(CASS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+            set(CASS_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+            
+            FetchContent_MakeAvailable(cassandra)
+            set(CASSANDRA_FOUND TRUE)
+            set(cassandra_LIBRARIES cassandra_static)
+        else()
+            message(WARNING "cassandra-cpp-driver not found. Using stub implementation.")
+            set(CASSANDRA_FOUND FALSE)
+        endif()
+    endif()
+else()
+    message(STATUS "cassandra-cpp-driver: Disabled (ENABLE_SCYLLA=OFF)")
+    set(CASSANDRA_FOUND FALSE)
+endif()
+
+# nlohmann/json (v3.11.3) - JSON serialization for Redis
+FetchContent_Declare(
+    json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+    GIT_SHALLOW TRUE
+)
+
+# nlohmann/json is header-only and always available
+FetchContent_MakeAvailable(json)
+set(NLOHMANN_JSON_FOUND TRUE)
+message(STATUS "nlohmann/json v3.11.3 available")
+
 # ============================================================================
-# FlatBuffers Code Generation (WP-6-4)
+# FlatBuffers Code Generation
 # ============================================================================
 
 if(FLATBUFFERS_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/src/shared/proto/game_protocol.fbs")
@@ -263,28 +272,28 @@ if(FLATBUFFERS_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/src/shared/proto/game_proto
     add_custom_command(
         OUTPUT 
             ${FBS_GENERATED_DIR}/game_protocol_generated.h
-            ${FBS_GENERATED_DIR}/game_protocol_generated.cs
         COMMAND 
             ${FLATBUFFERS_FLATC_EXECUTABLE}
             --cpp
-            --csharp
+            --gen-object-api
+            --gen-compare
             -o ${FBS_GENERATED_DIR}
             ${FBS_SCHEMA}
-        DEPENDS ${FBS_SCHEMA}
-        COMMENT "Generating FlatBuffers code from ${FBS_SCHEMA}"
+        DEPENDS ${FBS_SCHEMA} flatbuffers::flatc
+        COMMENT "Generating FlatBuffers C++ code from ${FBS_SCHEMA}"
     )
     
     add_custom_target(fbs_generation ALL
         DEPENDS 
             ${FBS_GENERATED_DIR}/game_protocol_generated.h
-            ${FBS_GENERATED_DIR}/game_protocol_generated.cs
     )
     
     set(FLATBUFFERS_GENERATED_DIR ${FBS_GENERATED_DIR})
+    message(STATUS "FlatBuffers code generation configured")
 endif()
 
 # ============================================================================
-# Source Files
+# Core Library Source Files
 # ============================================================================
 
 set(SERVER_SOURCES
@@ -309,33 +318,33 @@ set(SERVER_SOURCES
     src/server/src/profiling/PerformanceMonitor.cpp
 )
 
-# Network layer (WP-6-1)
+# Network layer - conditional on GameNetworkingSockets
 if(GNS_FOUND)
     list(APPEND SERVER_SOURCES src/server/src/netcode/NetworkManager.cpp)
-    message(STATUS "Using NetworkManager with GameNetworkingSockets")
+    message(STATUS "NetworkManager: Using GameNetworkingSockets implementation")
 else()
     list(APPEND SERVER_SOURCES src/server/src/netcode/NetworkManager_stub.cpp)
-    message(WARNING "Using NetworkManager stub - GameNetworkingSockets not available")
+    message(WARNING "NetworkManager: Using stub implementation")
 endif()
 
-# Database layer (WP-6-2, WP-6-3)
+# Database layer - conditional on hiredis and cassandra-cpp-driver
 if(HIREDIS_FOUND)
     list(APPEND SERVER_SOURCES src/server/src/db/RedisManager.cpp)
-    message(STATUS "Using RedisManager with hiredis")
+    message(STATUS "RedisManager: Using hiredis implementation")
 else()
     list(APPEND SERVER_SOURCES src/server/src/db/RedisManager_stub.cpp)
-    message(WARNING "Using RedisManager stub - hiredis not available")
+    message(WARNING "RedisManager: Using stub implementation")
 endif()
 
 if(CASSANDRA_FOUND)
     list(APPEND SERVER_SOURCES src/server/src/db/ScyllaManager.cpp)
-    message(STATUS "Using ScyllaManager with cassandra-cpp-driver")
+    message(STATUS "ScyllaManager: Using cassandra-cpp-driver implementation")
 else()
     list(APPEND SERVER_SOURCES src/server/src/db/ScyllaManager_stub.cpp)
-    message(WARNING "Using ScyllaManager stub - cassandra-cpp-driver not available")
+    message(WARNING "ScyllaManager: Using stub implementation")
 endif()
 
-# Profiling
+# Profiling layer
 if(ENABLE_PROFILING)
     list(APPEND SERVER_SOURCES src/server/src/profiling/PerfettoProfiler.cpp)
 else()
@@ -343,47 +352,104 @@ else()
 endif()
 
 # ============================================================================
-# Library and Executable
+# darkages_core Library
 # ============================================================================
 
 add_library(darkages_core OBJECT ${SERVER_SOURCES})
 
+# Core include directories
 target_include_directories(darkages_core PUBLIC
-    ${CMAKE_SOURCE_DIR}/src/server/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/server/include
     ${ENTT_INCLUDE_DIR}
     ${GLM_INCLUDE_DIR}
 )
 
-if(FLATBUFFERS_FOUND AND FLATBUFFERS_GENERATED_DIR)
-    target_include_directories(darkages_core PUBLIC ${FLATBUFFERS_GENERATED_DIR})
-    add_dependencies(darkages_core fbs_generation)
+# External dependency includes
+if(FLATBUFFERS_FOUND)
+    target_include_directories(darkages_core PUBLIC 
+        ${flatbuffers_SOURCE_DIR}/include
+    )
+    if(FLATBUFFERS_GENERATED_DIR)
+        target_include_directories(darkages_core PUBLIC ${FLATBUFFERS_GENERATED_DIR})
+        add_dependencies(darkages_core fbs_generation)
+    endif()
 endif()
 
+if(GNS_FOUND)
+    target_include_directories(darkages_core PUBLIC 
+        ${GameNetworkingSockets_SOURCE_DIR}/include
+    )
+endif()
+
+if(HIREDIS_FOUND)
+    target_include_directories(darkages_core PUBLIC 
+        ${hiredis_SOURCE_DIR}
+        ${hiredis_SOURCE_DIR}/include
+    )
+endif()
+
+if(CASSANDRA_FOUND)
+    target_include_directories(darkages_core PUBLIC 
+        ${cassandra_SOURCE_DIR}/include
+    )
+endif()
+
+# nlohmann/json is always included (header-only)
+target_include_directories(darkages_core PUBLIC 
+    ${json_SOURCE_DIR}/single_include
+)
+
+# Core linking
 target_link_libraries(darkages_core PUBLIC Threads::Threads)
+
+# External library linking
+if(FLATBUFFERS_FOUND AND FlatBuffers_LIBRARIES)
+    target_link_libraries(darkages_core PUBLIC ${FlatBuffers_LIBRARIES})
+    target_compile_definitions(darkages_core PUBLIC ENABLE_FLATBUFFERS=1)
+endif()
 
 if(GNS_FOUND AND GameNetworkingSockets_LIBRARIES)
     target_link_libraries(darkages_core PUBLIC ${GameNetworkingSockets_LIBRARIES})
-    target_compile_definitions(darkages_core PUBLIC HAS_GNS=1)
+    target_compile_definitions(darkages_core PUBLIC ENABLE_GNS=1)
+    
+    # Windows-specific libraries for GameNetworkingSockets
+    if(WIN32)
+        target_link_libraries(darkages_core PUBLIC 
+            ws2_32
+            winmm
+            crypt32
+            iphlpapi
+        )
+    endif()
 endif()
 
 if(HIREDIS_FOUND AND hiredis_LIBRARIES)
     target_link_libraries(darkages_core PUBLIC ${hiredis_LIBRARIES})
-    target_compile_definitions(darkages_core PUBLIC HAS_REDIS=1)
+    target_compile_definitions(darkages_core PUBLIC ENABLE_REDIS=1)
 endif()
 
 if(CASSANDRA_FOUND AND cassandra_LIBRARIES)
     target_link_libraries(darkages_core PUBLIC ${cassandra_LIBRARIES})
-    target_compile_definitions(darkages_core PUBLIC HAS_SCYLLA=1)
+    target_compile_definitions(darkages_core PUBLIC ENABLE_SCYLLA=1)
 endif()
 
-if(FLATBUFFERS_FOUND AND FlatBuffers_LIBRARIES)
-    target_link_libraries(darkages_core PUBLIC ${FlatBuffers_LIBRARIES})
-    target_compile_definitions(darkages_core PUBLIC HAS_FLATBUFFERS=1)
-endif()
+# nlohmann/json is header-only, no linking needed
+target_compile_definitions(darkages_core PUBLIC ENABLE_NLOHMANN_JSON=1)
 
-# Main executable
+# ============================================================================
+# darkages_server Executable
+# ============================================================================
+
 add_executable(darkages_server src/server/src/main.cpp)
+
 target_link_libraries(darkages_server PRIVATE darkages_core)
+
+# Windows subsystem settings
+if(WIN32)
+    set_target_properties(darkages_server PROPERTIES
+        WIN32_EXECUTABLE FALSE
+    )
+endif()
 
 # ============================================================================
 # Testing
@@ -434,7 +500,7 @@ if(BUILD_TESTS)
     enable_testing()
     add_test(NAME unit_tests COMMAND darkages_tests --reporter console)
     
-    # Individual test suites
+    # Individual test suites for CI/CD reporting
     add_test(NAME test_spatial COMMAND darkages_tests "[spatial]")
     add_test(NAME test_movement COMMAND darkages_tests "[movement]")
     add_test(NAME test_memory COMMAND darkages_tests "[memory]")
@@ -446,7 +512,20 @@ if(BUILD_TESTS)
 endif()
 
 # ============================================================================
-# Status Output
+# Install Targets
+# ============================================================================
+
+install(TARGETS darkages_server
+    RUNTIME DESTINATION bin
+)
+
+install(DIRECTORY src/server/include/
+    DESTINATION include
+    FILES_MATCHING PATTERN "*.hpp"
+)
+
+# ============================================================================
+# Build Status Output
 # ============================================================================
 
 message("")
@@ -461,22 +540,10 @@ message("")
 message("Dependencies:")
 message("  EnTT: ${ENTT_FOUND} - ${ENTT_INCLUDE_DIR}")
 message("  GLM: ${GLM_FOUND} - ${GLM_INCLUDE_DIR}")
+message("  FlatBuffers: ${FLATBUFFERS_FOUND}")
 message("  GameNetworkingSockets: ${GNS_FOUND}")
 message("  hiredis: ${HIREDIS_FOUND}")
 message("  cassandra-cpp-driver: ${CASSANDRA_FOUND}")
-message("  FlatBuffers: ${FLATBUFFERS_FOUND}")
+message("  nlohmann/json: ${NLOHMANN_JSON_FOUND}")
 message("========================================")
 message("")
-
-# ============================================================================
-# Install Targets
-# ============================================================================
-
-install(TARGETS darkages_server
-    RUNTIME DESTINATION bin
-)
-
-install(DIRECTORY src/server/include/
-    DESTINATION include
-    FILES_MATCHING PATTERN "*.hpp"
-)

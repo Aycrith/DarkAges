@@ -1,0 +1,539 @@
+name: Release Build and Package
+
+# ============================================================================
+# CI/CD Pipeline for DarkAges MMO
+# Triggers:
+#   - Push to main branch with VERSION file change
+#   - Manual workflow dispatch
+#   - Tag push (v*)
+# ============================================================================
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'VERSION'
+      - '.github/workflows/release.yml'
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version override (leave empty to use VERSION file)'
+        required: false
+        default: ''
+      prerelease:
+        description: 'Mark as prerelease'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  # ==========================================================================
+  # Job 1: Build Server (Multi-Platform)
+  # ==========================================================================
+  build-server:
+    name: Build Server (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+            exe_name: darkages_server
+          - os: windows-latest
+            target: windows
+            exe_name: darkages_server.exe
+          - os: macos-latest
+            target: macos
+            exe_name: darkages_server
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      
+      - name: Get version
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=$(cat VERSION)
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+      
+      # Linux dependencies
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++-11
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 110
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 110
+      
+      # macOS dependencies
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install cmake ninja
+      
+      # Windows dependencies
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: microsoft/setup-msbuild@v1.3
+      
+      - name: Configure CMake
+        shell: bash
+        run: |
+          mkdir -p build
+          cd build
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBUILD_TESTS=ON
+          else
+            cmake .. -G Ninja -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBUILD_TESTS=ON
+          fi
+      
+      - name: Build
+        shell: bash
+        working-directory: build
+        run: |
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            cmake --build . --config ${{ env.BUILD_TYPE }} --parallel
+          else
+            ninja -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+          fi
+      
+      - name: Run unit tests
+        shell: bash
+        working-directory: build
+        run: ctest -C ${{ env.BUILD_TYPE }} --output-on-failure
+      
+      - name: Package server artifacts
+        shell: bash
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          mkdir -p artifacts/server-${{ matrix.target }}
+          
+          # Copy executable
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            cp build/${{ env.BUILD_TYPE }}/${{ matrix.exe_name }} artifacts/server-${{ matrix.target }}/ 2>/dev/null || \
+            cp build/${{ matrix.exe_name }} artifacts/server-${{ matrix.target }}/
+            # Copy DLLs
+            cp build/${{ env.BUILD_TYPE }}/*.dll artifacts/server-${{ matrix.target }}/ 2>/dev/null || true
+            cp build/*.dll artifacts/server-${{ matrix.target }}/ 2>/dev/null || true
+          else
+            cp build/${{ matrix.exe_name }} artifacts/server-${{ matrix.target }}/
+          fi
+          
+          # Copy config files
+          cp infra/docker-compose.yml artifacts/server-${{ matrix.target }}/ 2>/dev/null || true
+          cp VERSION artifacts/server-${{ matrix.target }}/
+          
+          # Create archive
+          cd artifacts
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            7z a -tzip darkages-server-${{ matrix.target }}-v$VERSION.zip server-${{ matrix.target }}/*
+          else
+            tar -czf darkages-server-${{ matrix.target }}-v$VERSION.tar.gz server-${{ matrix.target }}
+          fi
+      
+      - name: Upload server artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-${{ matrix.target }}-v${{ steps.version.outputs.VERSION }}
+          path: artifacts/darkages-server-*-v${{ steps.version.outputs.VERSION }}.*
+          retention-days: 7
+  
+  # ==========================================================================
+  # Job 2: Build Client (Godot)
+  # ==========================================================================
+  build-client:
+    name: Build Client (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            export_name: DarkAgesClient.x86_64
+          - os: windows-latest
+            platform: windows
+            export_name: DarkAgesClient.exe
+          - os: macos-latest
+            platform: macos
+            export_name: DarkAgesClient.app
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Get version
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=$(cat VERSION)
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Setup Godot
+        uses: chickensoft-games/setup-godot@v1
+        with:
+          version: 4.2.1
+          use-dotnet: true
+      
+      - name: Verify Godot installation
+        run: |
+          godot --version
+      
+      - name: Build C# project
+        working-directory: src/client
+        run: |
+          dotnet restore
+          godot --build-solutions --headless
+      
+      - name: Export client
+        working-directory: src/client
+        shell: bash
+        run: |
+          mkdir -p ../../artifacts/client-${{ matrix.platform }}
+          
+          if [ "${{ matrix.platform }}" == "linux" ]; then
+            godot --export-release "Linux/X11" ../../artifacts/client-${{ matrix.platform }}/${{ matrix.export_name }} --headless || true
+          elif [ "${{ matrix.platform }}" == "windows" ]; then
+            godot --export-release "Windows Desktop" ../../artifacts/client-${{ matrix.platform }}/${{ matrix.export_name }} --headless || true
+          elif [ "${{ matrix.platform }}" == "macos" ]; then
+            godot --export-release "macOS" ../../artifacts/client-${{ matrix.platform }}/${{ matrix.export_name }} --headless || true
+          fi
+          
+          # Fallback: copy project files if export fails
+          if [ ! -f "../../artifacts/client-${{ matrix.platform }}/${{ matrix.export_name }}" ]; then
+            echo "Export may have failed, copying source files..."
+            cp -r . ../../artifacts/client-${{ matrix.platform }}/source/
+          fi
+      
+      - name: Package client
+        shell: bash
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          cd artifacts
+          
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            7z a -tzip darkages-client-${{ matrix.platform }}-v$VERSION.zip client-${{ matrix.platform }}/*
+          else
+            tar -czf darkages-client-${{ matrix.platform }}-v$VERSION.tar.gz client-${{ matrix.platform }}
+          fi
+      
+      - name: Upload client artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-${{ matrix.platform }}-v${{ steps.version.outputs.VERSION }}
+          path: artifacts/darkages-client-*-v${{ steps.version.outputs.VERSION }}.*
+          retention-days: 7
+
+  # ==========================================================================
+  # Job 3: Docker Image Build
+  # ==========================================================================
+  build-docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: build-server
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=$(cat VERSION)
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "IMAGE_TAG=ghcr.io/${{ github.repository_owner }}/darkages-server:$VERSION" >> $GITHUB_OUTPUT
+          echo "LATEST_TAG=ghcr.io/${{ github.repository_owner }}/darkages-server:latest" >> $GITHUB_OUTPUT
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.build
+          target: runtime
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ steps.version.outputs.IMAGE_TAG }}
+            ${{ steps.version.outputs.LATEST_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
+  # ==========================================================================
+  # Job 4: Integration Tests
+  # ==========================================================================
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: build-server
+    
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+      
+      scylla:
+        image: scylladb/scylla:5.4
+        ports:
+          - 9042:9042
+        options: >-
+          --health-cmd "cqlsh -e 'describe keyspaces'"
+          --health-interval 30s
+          --health-timeout 10s
+          --health-retries 10
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Download Linux server build
+        uses: actions/download-artifact@v4
+        with:
+          name: server-linux-v${{ needs.build-server.outputs.VERSION }}
+          path: artifacts/
+      
+      - name: Setup test environment
+        run: |
+          # Extract server
+          mkdir -p build
+          tar -xzf artifacts/darkages-server-linux-*.tar.gz -C build/
+          mv build/server-linux/* build/
+          chmod +x build/darkages_server
+          
+          # Install Python dependencies
+          pip install --upgrade pip
+          pip install redis cassandra-driver asyncio pytest pytest-asyncio
+      
+      - name: Wait for services
+        run: |
+          echo "Waiting for Redis..."
+          while ! nc -z localhost 6379; do sleep 1; done
+          echo "Redis is ready"
+          
+          echo "Waiting for ScyllaDB..."
+          for i in {1..60}; do
+            if cqlsh localhost 9042 -e "describe keyspaces" 2>/dev/null; then
+              echo "ScyllaDB is ready"
+              break
+            fi
+            sleep 2
+          done
+      
+      - name: Start server and run tests
+        run: |
+          export REDIS_HOST=localhost
+          export REDIS_PORT=6379
+          export SCYLLA_HOST=localhost
+          export SCYLLA_PORT=9042
+          
+          # Start server
+          ./build/darkages_server &
+          SERVER_PID=$!
+          
+          # Wait for server
+          for i in {1..30}; do
+            if nc -zu localhost 7777 2>/dev/null || nc -z localhost 7777 2>/dev/null; then
+              echo "Server is ready"
+              break
+            fi
+            sleep 1
+          done
+          
+          sleep 3
+          
+          # Run tests
+          cd tools/stress-test
+          python integration_harness.py --all --server 127.0.0.1 --port 7777 --output integration_results.json
+          
+          # Cleanup
+          kill $SERVER_PID 2>/dev/null || true
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results
+          path: tools/stress-test/integration_results.json
+          retention-days: 7
+
+  # ==========================================================================
+  # Job 5: Create Release
+  # ==========================================================================
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build-server, build-client, build-docker, integration-test]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    
+    permissions:
+      contents: write
+      packages: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=$(cat VERSION)
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts/
+          pattern: '*-v${{ steps.version.outputs.VERSION }}'
+      
+      - name: Create release package
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          mkdir -p release/DarkAges-v$VERSION
+          
+          # Organize artifacts
+          for dir in all-artifacts/*; do
+            if [ -d "$dir" ]; then
+              # Extract and organize
+              for archive in "$dir"/*; do
+                if [[ $archive == *.tar.gz ]]; then
+                  tar -xzf "$archive" -C release/
+                elif [[ $archive == *.zip ]]; then
+                  unzip -q "$archive" -d release/
+                fi
+              done
+            fi
+          done
+          
+          # Create unified release archives
+          cd release
+          
+          # Linux full package
+          if [ -d "server-linux" ] && [ -d "client-linux" ]; then
+            mkdir -p DarkAges-v$VERSION-linux
+            cp -r server-linux/* DarkAges-v$VERSION-linux/server/
+            cp -r client-linux/* DarkAges-v$VERSION-linux/client/
+            tar -czf DarkAges-v$VERSION-linux.tar.gz DarkAges-v$VERSION-linux/
+          fi
+          
+          # Windows full package
+          if [ -d "server-windows" ] && [ -d "client-windows" ]; then
+            mkdir -p DarkAges-v$VERSION-win64
+            cp -r server-windows/* DarkAges-v$VERSION-win64/server/
+            cp -r client-windows/* DarkAges-v$VERSION-win64/client/
+            zip -r DarkAges-v$VERSION-win64.zip DarkAges-v$VERSION-win64/
+          fi
+      
+      - name: Generate release notes
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          cat > release-notes.md << 'EOF'
+          # DarkAges MMO v${{ steps.version.outputs.VERSION }}
+          
+          ## Downloads
+          
+          ### Full Package (Server + Client)
+          - Windows: `DarkAges-v${{ steps.version.outputs.VERSION }}-win64.zip`
+          - Linux: `DarkAges-v${{ steps.version.outputs.VERSION }}-linux.tar.gz`
+          
+          ### Server Only
+          - Windows: `darkages-server-windows-v${{ steps.version.outputs.VERSION }}.zip`
+          - Linux: `darkages-server-linux-v${{ steps.version.outputs.VERSION }}.tar.gz`
+          - macOS: `darkages-server-macos-v${{ steps.version.outputs.VERSION }}.tar.gz`
+          
+          ### Client Only
+          - Windows: `darkages-client-windows-v${{ steps.version.outputs.VERSION }}.zip`
+          - Linux: `darkages-client-linux-v${{ steps.version.outputs.VERSION }}.tar.gz`
+          - macOS: `darkages-client-macos-v${{ steps.version.outputs.VERSION }}.tar.gz`
+          
+          ### Docker
+          ```bash
+          docker pull ghcr.io/${{ github.repository_owner }}/darkages-server:v${{ steps.version.outputs.VERSION }}
+          ```
+          
+          ## Quick Start
+          
+          ### Server
+          ```bash
+          cd server
+          ./darkages_server
+          ```
+          
+          ### Client
+          Run `DarkAgesClient.exe` (Windows) or `./DarkAgesClient.x86_64` (Linux)
+          
+          ## System Requirements
+          - **Server**: Ubuntu 22.04+ / Windows 10+ / macOS 12+
+          - **Client**: Windows 10+ / Ubuntu 22.04+ / macOS 12+
+          - **Network**: UDP port 7777 open for server
+          
+          EOF
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: DarkAges v${{ steps.version.outputs.VERSION }}
+          body_path: release-notes.md
+          prerelease: ${{ github.event.inputs.prerelease || false }}
+          files: |
+            all-artifacts/**/*.tar.gz
+            all-artifacts/**/*.zip
+            release/*.tar.gz
+            release/*.zip
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-packages-v${{ steps.version.outputs.VERSION }}
+          path: |
+            release/*.tar.gz
+            release/*.zip
+          retention-days: 30

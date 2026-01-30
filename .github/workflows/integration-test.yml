@@ -1,0 +1,337 @@
+name: Integration Tests (WP-6-5)
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'tools/stress-test/**'
+      - 'infra/docker-compose*.yml'
+      - '.github/workflows/integration-test.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tools/stress-test/**'
+  workflow_dispatch:
+    inputs:
+      stress_bots:
+        description: 'Number of bots for stress test'
+        required: false
+        default: '50'
+      stress_duration:
+        description: 'Stress test duration in seconds'
+        required: false
+        default: '60'
+
+env:
+  BUILD_TYPE: Release
+  SERVER_PORT: 7777
+
+jobs:
+  # ==========================================================================
+  # Build and Unit Tests
+  # ==========================================================================
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake g++-11 ninja-build
+        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 110
+        sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 110
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} \
+          -DBUILD_TESTS=ON \
+          -DCMAKE_CXX_COMPILER=g++-11
+
+    - name: Build server
+      working-directory: ${{github.workspace}}/build
+      run: cmake --build . --config ${{env.BUILD_TYPE}}
+
+    - name: Run unit tests
+      working-directory: ${{github.workspace}}/build
+      run: ctest -C ${{env.BUILD_TYPE}} --output-on-failure
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: server-build
+        path: build/darkages_server
+        retention-days: 1
+
+  # ==========================================================================
+  # Integration Tests with Docker Services
+  # ==========================================================================
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: build
+    
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+      
+      scylla:
+        image: scylladb/scylla:5.4
+        ports:
+          - 9042:9042
+        options: >-
+          --health-cmd "cqlsh -e 'describe keyspaces'"
+          --health-interval 30s
+          --health-timeout 10s
+          --health-retries 10
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: server-build
+        path: build/
+
+    - name: Make server executable
+      run: chmod +x build/darkages_server
+
+    - name: Install Python dependencies
+      run: |
+        pip install --upgrade pip
+        pip install redis cassandra-driver asyncio
+
+    - name: Wait for services
+      run: |
+        echo "Waiting for Redis..."
+        while ! nc -z localhost 6379; do sleep 1; done
+        echo "Redis is up"
+        
+        echo "Waiting for ScyllaDB..."
+        for i in {1..30}; do
+          if cqlsh localhost 9042 -e "describe keyspaces" 2>/dev/null; then
+            echo "ScyllaDB is up"
+            break
+          fi
+          sleep 2
+        done
+
+    - name: Start server
+      run: |
+        export REDIS_HOST=localhost
+        export REDIS_PORT=6379
+        export SCYLLA_HOST=localhost
+        export SCYLLA_PORT=9042
+        ./build/darkages_server &
+        echo $! > server.pid
+        
+        # Wait for server to start
+        for i in {1..30}; do
+          if nc -zu localhost 7777 2>/dev/null || nc -z localhost 7777 2>/dev/null; then
+            echo "Server is listening on port 7777"
+            break
+          fi
+          sleep 1
+        done
+        
+        # Give server time to fully initialize
+        sleep 3
+
+    - name: Check service health
+      run: |
+        cd tools/stress-test
+        python integration_harness.py --health --server 127.0.0.1 --port 7777
+
+    - name: Run basic connectivity test
+      run: |
+        cd tools/stress-test
+        python integration_harness.py --test basic_connectivity --server 127.0.0.1 --port 7777
+
+    - name: Run 10-player session test
+      run: |
+        cd tools/stress-test
+        python integration_harness.py --test 10_player_session --server 127.0.0.1 --port 7777
+
+    - name: Run Redis integration test
+      run: |
+        cd tools/stress-test
+        python integration_harness.py --test redis_integration --server 127.0.0.1 --port 7777
+
+    - name: Run ScyllaDB integration test
+      run: |
+        cd tools/stress-test
+        python integration_harness.py --test scylla_integration --server 127.0.0.1 --port 7777
+
+    - name: Run full integration test suite
+      run: |
+        cd tools/stress-test
+        python integration_harness.py --all --server 127.0.0.1 --port 7777 --output integration_results.json
+
+    - name: Upload integration test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: integration-results
+        path: tools/stress-test/integration_results.json
+        retention-days: 7
+
+    - name: Stop server
+      if: always()
+      run: |
+        if [ -f server.pid ]; then
+          kill $(cat server.pid) 2>/dev/null || true
+        fi
+
+  # ==========================================================================
+  # Stress Test
+  # ==========================================================================
+  stress-test:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: server-build
+        path: build/
+
+    - name: Make server executable
+      run: chmod +x build/darkages_server
+
+    - name: Install Python dependencies
+      run: |
+        pip install --upgrade pip
+        pip install redis asyncio
+
+    - name: Start server
+      run: |
+        export REDIS_HOST=localhost
+        export REDIS_PORT=6379
+        ./build/darkages_server &
+        sleep 5
+
+    - name: Run stress test
+      run: |
+        cd tools/stress-test
+        python integration_harness.py \
+          --stress ${{ github.event.inputs.stress_bots || '50' }} \
+          --duration ${{ github.event.inputs.stress_duration || '60' }} \
+          --server 127.0.0.1 --port 7777
+
+    - name: Stop server
+      if: always()
+      run: |
+        pkill -f darkages_server || true
+
+  # ==========================================================================
+  # Docker Compose Integration Test
+  # ==========================================================================
+  docker-compose-test:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build and start services
+      run: |
+        cd infra
+        docker-compose -f docker-compose.test.yml up -d --build server redis scylla
+        
+        # Wait for services to be healthy
+        echo "Waiting for services..."
+        sleep 30
+        
+        docker-compose -f docker-compose.test.yml ps
+
+    - name: Run integration tests in Docker
+      run: |
+        cd infra
+        docker-compose -f docker-compose.test.yml --profile test run --rm integration-test
+
+    - name: Collect Docker logs
+      if: failure()
+      run: |
+        cd infra
+        docker-compose -f docker-compose.test.yml logs --no-color > docker_logs.txt
+
+    - name: Upload Docker logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: docker-logs
+        path: infra/docker_logs.txt
+        retention-days: 3
+
+    - name: Tear down services
+      if: always()
+      run: |
+        cd infra
+        docker-compose -f docker-compose.test.yml down -v
+
+  # ==========================================================================
+  # Summary
+  # ==========================================================================
+  test-summary:
+    runs-on: ubuntu-latest
+    needs: [integration-test, stress-test, docker-compose-test]
+    if: always()
+    
+    steps:
+    - name: Test Summary
+      run: |
+        echo "="*60
+        echo "INTEGRATION TEST SUMMARY"
+        echo "="*60
+        echo "Build & Unit Tests: ${{ needs.build.result }}"
+        echo "Integration Tests:  ${{ needs.integration-test.result }}"
+        echo "Stress Test:        ${{ needs.stress-test.result }}"
+        echo "Docker Compose:     ${{ needs.docker-compose-test.result }}"
+        echo "="*60
+        
+        # Check if any required test failed
+        if [[ "${{ needs.integration-test.result }}" == "failure" ]]; then
+          echo "❌ Integration tests failed"
+          exit 1
+        fi
+        
+        echo "✅ All required tests passed"
