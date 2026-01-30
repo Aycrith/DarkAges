@@ -80,7 +80,7 @@ class TestConfig:
     min_tick_rate: float = 58.0  # Allow 2Hz variance
     
     # Paths
-    server_binary: str = "./build/bin/darkages_server"
+    server_binary: str = "./build/Release/darkages_server.exe"
     client_binary: str = "./src/client/DarkAgesClient.exe"
 
 
@@ -461,18 +461,19 @@ def print_report(report: TestReport):
     print(f"  Reconciliation Time:  P95={stats['reconciliation_time_ms']['p95']:.1f}ms (max={stats['reconciliation_time_ms']['max']:.1f}ms)")
     print(f"  Interpolation Error:  P95={stats['interpolation_error_m']['p95']:.2f}m (max={stats['interpolation_error_m']['max']:.2f}m)")
     print(f"  Combat Delay:         P95={stats['combat_delay_ms']['p95']:.1f}ms (max={stats['combat_delay_ms']['max']:.1f}ms)")
-    print(f"  Tick Rate:            Mean={stats['tick_rate_hz']['mean']:.1f}Hz (min={stats['tick_rate_hz']['min']:.1f}Hz)")
+    tick_stats = stats.get('tick_rate_hz', {})
+    print(f"  Tick Rate:            Mean={tick_stats.get('mean', 0):.1f}Hz (min={tick_stats.get('min', 0):.1f}Hz)")
     print()
     
     if report.failures:
         print("FAILURES:")
         for failure in report.failures:
-            print(f"  ❌ {failure}")
+            print(f"  [FAIL] {failure}")
     
     if report.warnings:
         print("WARNINGS:")
         for warning in report.warnings:
-            print(f"  ⚠️  {warning}")
+            print(f"  [WARN] {warning}")
     
     print("="*70)
 

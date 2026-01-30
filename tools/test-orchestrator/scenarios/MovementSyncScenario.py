@@ -12,6 +12,8 @@ This scenario tests:
 import asyncio
 import time
 import logging
+import sys
+from pathlib import Path
 from typing import List, Tuple
 from dataclasses import dataclass
 
@@ -316,7 +318,8 @@ class MovementSyncScenario:
         report
     ):
         """Validate prediction accuracy and reconciliation"""
-        from ...TestOrchestrator import GamestateSample
+        import sys; sys.path.insert(0, str(Path(__file__).parent.parent))
+        from TestOrchestrator import GamestateSample
         
         # Convert to gamestate samples for validation
         for pred, server in zip(predictions, server_snapshots):
@@ -336,7 +339,7 @@ class MovementSyncScenario:
             report.samples.append(sample)
         
         # Validate using GamestateValidator
-        from ...TestOrchestrator import GamestateValidator
+        from TestOrchestrator import GamestateValidator
         validator = GamestateValidator(report.config)
         validator.samples = report.samples
         
