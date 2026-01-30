@@ -462,6 +462,10 @@ else()
     list(APPEND SERVER_SOURCES src/server/src/profiling/PerfettoProfiler_stub.cpp)
 endif()
 
+# Monitoring layer (Prometheus metrics)
+list(APPEND SERVER_SOURCES src/server/src/monitoring/MetricsExporter.cpp)
+message(STATUS "Monitoring: Prometheus metrics enabled")
+
 # ============================================================================
 # darkages_core Library
 # ============================================================================

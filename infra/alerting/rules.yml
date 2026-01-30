@@ -1,0 +1,108 @@
+# DarkAges MMO - Prometheus Alerting Rules
+# Defines alerts for critical system conditions
+
+groups:
+  - name: darkages-server
+    interval: 10s
+    rules:
+      # Critical: Server tick time exceeding budget
+      - alert: HighTickTime
+        expr: darkages_tick_duration_ms > 16
+        for: 30s
+        labels:
+          severity: critical
+          component: server
+        annotations:
+          summary: "Zone {{ $labels.zone_id }} tick time exceeded 16ms budget"
+          description: "Tick time is {{ $value }}ms for zone {{ $labels.zone_id }}. Performance degradation detected."
+
+      # Critical: Memory usage high
+      - alert: HighMemoryUsage
+        expr: (darkages_memory_used_bytes / darkages_memory_total_bytes) > 0.8
+        for: 1m
+        labels:
+          severity: critical
+          component: server
+        annotations:
+          summary: "Zone {{ $labels.zone_id }} memory usage > 80%"
+          description: "Memory usage is {{ $value | humanizePercentage }} for zone {{ $labels.zone_id }}."
+
+      # Warning: Error rate elevated
+      - alert: HighErrorRate
+        expr: rate(darkages_errors_total[1m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+          component: server
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }} errors/sec."
+
+      # Warning: Player count approaching capacity
+      - alert: ZoneNearCapacity
+        expr: darkages_player_count / darkages_player_capacity > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: scaling
+        annotations:
+          summary: "Zone {{ $labels.zone_id }} near capacity"
+          description: "Player count is {{ $value | humanizePercentage }} of capacity."
+
+      # Critical: Server not responding
+      - alert: ServerDown
+        expr: up{job="darkages-zones"} == 0
+        for: 10s
+        labels:
+          severity: critical
+          component: availability
+        annotations:
+          summary: "Zone server {{ $labels.instance }} is down"
+          description: "Zone server has been down for more than 10 seconds."
+
+      # Warning: High packet loss
+      - alert: HighPacketLoss
+        expr: (darkages_packets_lost_total / darkages_packets_sent_total) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          component: network
+        annotations:
+          summary: "High packet loss detected"
+          description: "Packet loss is {{ $value | humanizePercentage }}."
+
+      # Warning: Replication bandwidth high
+      - alert: HighReplicationBandwidth
+        expr: rate(darkages_replication_bytes_total[1m]) > 1048576  # 1 MB/s
+        for: 5m
+        labels:
+          severity: warning
+          component: network
+        annotations:
+          summary: "High replication bandwidth"
+          description: "Replication bandwidth is {{ $value | humanize }}B/s."
+
+  - name: infrastructure
+    interval: 30s
+    rules:
+      # Warning: Redis latency high
+      - alert: RedisHighLatency
+        expr: redis_command_duration_seconds{quantile="0.99"} > 0.001
+        for: 2m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Redis latency > 1ms"
+          description: "99th percentile Redis latency is {{ $value }}s."
+
+      # Critical: Database connection failed
+      - alert: DatabaseConnectionFailed
+        expr: darkages_db_connected == 0
+        for: 10s
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Database connection lost"
+          description: "Zone {{ $labels.zone_id }} cannot connect to database."

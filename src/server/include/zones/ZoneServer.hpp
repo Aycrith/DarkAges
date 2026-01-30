@@ -17,6 +17,7 @@
 #include "security/AntiCheat.hpp"
 #include "profiling/PerfettoProfiler.hpp"
 #include "profiling/PerformanceMonitor.hpp"
+#include "monitoring/MetricsExporter.hpp"
 #include "memory/MemoryPool.hpp"
 #include "memory/FixedVector.hpp"
 #include <memory>

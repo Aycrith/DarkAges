@@ -7,6 +7,7 @@
 #include "combat/LagCompensatedCombat.hpp"
 #include "profiling/PerfettoProfiler.hpp"
 #include "profiling/PerformanceMonitor.hpp"
+#include "monitoring/MetricsExporter.hpp"
 #include <iostream>
 #include <thread>
 #include <chrono>
@@ -138,6 +139,15 @@ bool ZoneServer::initialize(const ZoneConfig& config) {
     std::cout << "[ZONE " << config_.zoneId << "] Profiling enabled, trace: " << tracePath << std::endl;
 #endif
     
+    // [DEVOPS_AGENT] Initialize metrics exporter
+    uint16_t metricsPort = static_cast<uint16_t>(8080 + config_.zoneId - 1);
+    if (!Monitoring::MetricsExporter::Instance().Initialize(metricsPort)) {
+        std::cerr << "[ZONE " << config_.zoneId << "] Warning: Failed to start metrics exporter" << std::endl;
+        // Non-fatal - server can run without metrics
+    } else {
+        std::cout << "[ZONE " << config_.zoneId << "] Metrics exporter on port " << metricsPort << std::endl;
+    }
+    
     std::cout << "[ZONE " << config_.zoneId << "] Initialization complete" << std::endl;
     return true;
 }
@@ -258,6 +268,9 @@ void ZoneServer::shutdown() {
         network_->shutdown();
     }
     
+    // [DEVOPS_AGENT] Shutdown metrics exporter
+    Monitoring::MetricsExporter::Instance().Shutdown();
+    
     std::cout << "[ZONE " << config_.zoneId << "] ZoneServer shutdown complete" << std::endl;
 }
 
@@ -371,6 +384,28 @@ bool ZoneServer::tick() {
     if (perfMonitor_) {
         perfMonitor_->recordTickTime(tickTimeUs);
     }
+    
+    // [DEVOPS_AGENT] Update Prometheus metrics
+    auto& metrics = Monitoring::MetricsExporter::Instance();
+    double tickTimeMs = tickTimeUs / 1000.0;
+    
+    metrics.TicksTotal().Increment({{"zone_id", std::to_string(config_.zoneId)}});
+    metrics.TickDurationMs().Set(tickTimeMs, {{"zone_id", std::to_string(config_.zoneId)}});
+    metrics.TickDurationHistogram().Observe(tickTimeMs);
+    metrics.PlayerCount().Set(static_cast<double>(connectionToEntity_.size()), 
+                              {{"zone_id", std::to_string(config_.zoneId)}});
+    
+    // Memory metrics (convert bytes to MB for readability)
+    size_t memoryUsed = tempAllocator_->getUsed();
+    metrics.MemoryUsedBytes().Set(static_cast<double>(memoryUsed),
+                                   {{"zone_id", std::to_string(config_.zoneId)}});
+    metrics.MemoryTotalBytes().Set(1024.0 * 1024.0 * 1024.0,  // 1GB assumption
+                                   {{"zone_id", std::to_string(config_.zoneId)}});
+    
+    // Database connection status
+    bool dbConnected = redis_ && redis_->isConnected();
+    metrics.DbConnected().Set(dbConnected ? 1.0 : 0.0,
+                              {{"zone_id", std::to_string(config_.zoneId)}});
     
     // Trace counters
     ZONE_TRACE_COUNTER("tick_time_us", static_cast<int64_t>(tickTimeUs));

@@ -1,0 +1,60 @@
+# Alertmanager Configuration
+# Routes alerts to appropriate notification channels
+
+global:
+  smtp_smarthost: 'localhost:587'
+  smtp_from: 'alerts@darkages-mmo.com'
+  slack_api_url: '${SLACK_WEBHOOK_URL}'
+  pagerduty_url: '${PAGERDUTY_URL}'
+
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+  receiver: 'default'
+  routes:
+    # Critical alerts -> PagerDuty + Slack
+    - match:
+        severity: critical
+      receiver: 'pagerduty-critical'
+      continue: true
+    
+    # Warning alerts -> Slack only
+    - match:
+        severity: warning
+      receiver: 'slack-warnings'
+
+receivers:
+  - name: 'default'
+    slack_configs:
+      - channel: '#alerts'
+        title: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - service_key: '${PAGERDUTY_SERVICE_KEY}'
+        description: '{{ .GroupLabels.alertname }}: {{ .GroupLabels.service }}'
+        severity: critical
+    slack_configs:
+      - channel: '#critical-alerts'
+        title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+  - name: 'slack-warnings'
+    slack_configs:
+      - channel: '#warnings'
+        title: '⚠️ WARNING: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+inhibit_rules:
+  # If a critical alert is firing, suppress warnings for the same service
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'cluster', 'service']
