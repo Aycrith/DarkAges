@@ -28,6 +28,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <csignal>
 
 // [ZONE_AGENT] Main zone server class
 // Manages all systems for a single zone/shard
@@ -99,8 +100,17 @@ public:
     // Run main loop (blocking)
     void run();
     
-    // Request shutdown
+    // Request shutdown (can be called from signal handlers)
+    void requestShutdown();
+    
+    // Stop server (internal use)
     void stop();
+    
+    // Check if server is running
+    [[nodiscard]] bool isRunning() const { return running_; }
+    
+    // Check if shutdown was requested
+    [[nodiscard]] bool isShutdownRequested() const { return shutdownRequested_; }
     
     // Single tick update (for external loop control)
     bool tick();
@@ -167,6 +177,9 @@ private:
     // Performance monitoring
     void checkPerformanceBudgets(uint64_t tickTimeUs);
     void activateQoSDegradation();
+    
+    // Save player state to database
+    void savePlayerState(EntityID entity);
 
 private:
     // ECS registry
@@ -193,7 +206,14 @@ private:
     
     // State
     std::atomic<bool> running_{false};
+    std::atomic<bool> shutdownRequested_{false};
     uint32_t currentTick_{0};
+    
+    // Signal handling setup
+    void setupSignalHandlers();
+    
+    // Graceful shutdown implementation
+    void shutdown();
     std::chrono::steady_clock::time_point startTime_;
     std::chrono::steady_clock::time_point lastTickTime_;
     
@@ -205,12 +225,13 @@ private:
     bool profilingEnabled_{false};
     
     // [PERFORMANCE_AGENT] Memory pools for zero-allocation tick processing
-    Memory::SmallPool smallPool_;
-    Memory::MediumPool mediumPool_;
-    Memory::LargePool largePool_;
+    // Heap-allocated to avoid stack overflow (pools are 640KB - 1.25MB each)
+    std::unique_ptr<Memory::SmallPool> smallPool_;
+    std::unique_ptr<Memory::MediumPool> mediumPool_;
+    std::unique_ptr<Memory::LargePool> largePool_;
     
-    // Per-tick stack allocator for temporary data (1MB)
-    Memory::StackAllocator tempAllocator_{1024 * 1024};
+    // Per-tick stack allocator for temporary data (1MB) - heap allocated to avoid stack overflow
+    std::unique_ptr<Memory::StackAllocator> tempAllocator_;
     
     // Memory stats tracking
     struct MemoryStats {

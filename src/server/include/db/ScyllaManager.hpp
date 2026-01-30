@@ -8,6 +8,7 @@
 #include <memory>
 #include <cstddef>
 #include <cstdint>
+#include <atomic>
 
 namespace DarkAges {
 

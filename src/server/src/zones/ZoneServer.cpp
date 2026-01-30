@@ -37,7 +37,11 @@
 namespace DarkAges {
 
 ZoneServer::ZoneServer() 
-    : auraManager_(1) {  // Default zone ID, will be updated in initialize
+    : auraManager_(1),  // Default zone ID, will be updated in initialize
+      tempAllocator_(std::make_unique<Memory::StackAllocator>(1024 * 1024)),
+      smallPool_(std::make_unique<Memory::SmallPool>()),
+      mediumPool_(std::make_unique<Memory::MediumPool>()),
+      largePool_(std::make_unique<Memory::LargePool>()) {
 }
 ZoneServer::~ZoneServer() = default;
 
@@ -139,19 +143,95 @@ bool ZoneServer::initialize(const ZoneConfig& config) {
 }
 
 void ZoneServer::run() {
-    running_ = true;
+    std::cout << "[ZONE " << config_.zoneId << "] Starting main loop..." << std::endl;
     
-    std::cout << "[ZONE " << config_.zoneId << "] Main loop starting..." << std::endl;
+    setupSignalHandlers();
+    running_ = true;
+    shutdownRequested_ = false;
+    
+    // Main game loop at 60Hz (16.67ms per tick)
+    constexpr auto tickInterval = std::chrono::microseconds(16667);
+    auto nextTick = std::chrono::steady_clock::now();
+    uint32_t tickCount = 0;
+    
+    std::cout << "[ZONE " << config_.zoneId << "] Server running at 60Hz on port " << config_.port << std::endl;
     
     while (running_) {
-        if (!tick()) {
-            break;
+        auto frameStart = std::chrono::steady_clock::now();
+        
+        // Execute one game tick
+        tick();
+        tickCount++;
+        
+        // Frame rate limiting
+        auto frameEnd = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(frameEnd - frameStart);
+        
+        if (elapsed < tickInterval) {
+            // Sleep to maintain 60Hz
+            std::this_thread::sleep_for(tickInterval - elapsed);
+        } else if (elapsed > tickInterval * 2) {
+            // Frame overrun warning (only log every 60 ticks to avoid spam)
+            if (tickCount % 60 == 0) {
+                std::cerr << "[ZONE " << config_.zoneId << "] Tick overrun: " << elapsed.count() 
+                          << " us (budget: " << tickInterval.count() << " us)" << std::endl;
+            }
         }
+        
+        nextTick += tickInterval;
+    }
+    
+    std::cout << "[ZONE " << config_.zoneId << "] Main loop ended after " << tickCount << " ticks" << std::endl;
+    shutdown();
+}
+
+// Global pointer for signal handler access
+static ZoneServer* g_zoneServerInstance = nullptr;
+
+void ZoneServer::setupSignalHandlers() {
+    // Store global pointer for signal handlers
+    g_zoneServerInstance = this;
+    
+    #ifdef _WIN32
+    // Windows signal handling
+    std::signal(SIGINT, [](int) {
+        std::cout << "[SIGNAL] SIGINT received, requesting shutdown..." << std::endl;
+        if (g_zoneServerInstance) {
+            g_zoneServerInstance->requestShutdown();
+        }
+    });
+    std::signal(SIGTERM, [](int) {
+        std::cout << "[SIGNAL] SIGTERM received, requesting shutdown..." << std::endl;
+        if (g_zoneServerInstance) {
+            g_zoneServerInstance->requestShutdown();
+        }
+    });
+    #else
+    // Unix signal handling
+    struct sigaction sa;
+    sa.sa_handler = [](int sig) {
+        std::cout << "[SIGNAL] Signal " << sig << " received, requesting shutdown..." << std::endl;
+        if (g_zoneServerInstance) {
+            g_zoneServerInstance->requestShutdown();
+        }
+    };
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, nullptr);
+    sigaction(SIGTERM, &sa, nullptr);
+    #endif
+}
+
+void ZoneServer::requestShutdown() {
+    if (!shutdownRequested_) {
+        shutdownRequested_ = true;
+        running_ = false;
+        std::cout << "[ZONE " << config_.zoneId << "] Shutdown requested" << std::endl;
     }
 }
 
-void ZoneServer::stop() {
-    running_ = false;
+void ZoneServer::shutdown() {
+    std::cout << "[ZONE " << config_.zoneId << "] Shutting down ZoneServer..." << std::endl;
     
     // [PERFORMANCE_AGENT] Shutdown profiler
     if (profilingEnabled_) {
@@ -160,6 +240,82 @@ void ZoneServer::stop() {
         }
         Profiling::PerfettoProfiler::instance().shutdown();
     }
+    
+    // Save player states
+    for (const auto& [connId, entityId] : connectionToEntity_) {
+        savePlayerState(entityId);
+    }
+    
+    // Flush database writes
+    if (scylla_ && scylla_->isConnected()) {
+        std::cout << "[ZONE " << config_.zoneId << "] Processing pending database writes..." << std::endl;
+        // Process any pending async operations
+        scylla_->update();
+    }
+    
+    // Stop network
+    if (network_) {
+        network_->shutdown();
+    }
+    
+    std::cout << "[ZONE " << config_.zoneId << "] ZoneServer shutdown complete" << std::endl;
+}
+
+void ZoneServer::stop() {
+    requestShutdown();
+}
+
+void ZoneServer::savePlayerState(EntityID entity) {
+    // Get player info
+    const PlayerInfo* info = registry_.try_get<PlayerInfo>(entity);
+    if (!info) return;
+    
+    // Get current position
+    const Position* pos = registry_.try_get<Position>(entity);
+    
+    uint32_t currentTimeMs = getCurrentTimeMs();
+    
+    // [DATABASE_AGENT] Save to Redis for hot state (fast recovery)
+    if (redis_ && redis_->isConnected()) {
+        PlayerSession session;
+        session.playerId = info->playerId;
+        session.zoneId = config_.zoneId;
+        session.connectionId = info->connectionId;
+        if (pos) {
+            session.position = *pos;
+        }
+        // Get health from combat state if available
+        if (const CombatState* combat = registry_.try_get<CombatState>(entity)) {
+            session.health = combat->health;
+        } else {
+            session.health = Constants::DEFAULT_HEALTH;
+        }
+        session.lastActivity = currentTimeMs;
+        std::strncpy(session.username, info->username, sizeof(session.username) - 1);
+        session.username[sizeof(session.username) - 1] = '\0';
+        
+        // Save session with 1 hour TTL
+        redis_->savePlayerSession(session, [playerId = info->playerId](bool success) {
+            if (!success) {
+                std::cerr << "[REDIS] Failed to save session for player " << playerId << std::endl;
+            }
+        });
+        
+        // Also update position separately for quick lookups
+        if (pos) {
+            redis_->updatePlayerPosition(info->playerId, *pos, currentTimeMs);
+        }
+        
+        // Update zone player set
+        redis_->addPlayerToZone(config_.zoneId, info->playerId);
+    }
+    
+    // [DATABASE_AGENT] Save to ScyllaDB for persistence (async, fire-and-forget)
+    if (scylla_ && scylla_->isConnected()) {
+        // TODO: Implement player state persistence
+        // This would save: position, inventory, stats, etc. to player_sessions table
+        // For now, we rely on Redis hot state for session recovery
+    }
 }
 
 bool ZoneServer::tick() {
@@ -167,9 +323,9 @@ bool ZoneServer::tick() {
     
     // [PERFORMANCE_AGENT] Reset temporary allocator at start of tick
     // This ensures zero heap allocations during tick processing
-    memoryStats_.tempBytesUsed = tempAllocator_.getUsed();
+    memoryStats_.tempBytesUsed = tempAllocator_->getUsed();
     memoryStats_.peakTempBytesUsed = std::max(memoryStats_.peakTempBytesUsed, memoryStats_.tempBytesUsed);
-    tempAllocator_.reset();
+    tempAllocator_->reset();
     memoryStats_.tempAllocationsPerTick = 0;
     
     auto tickStart = std::chrono::steady_clock::now();
@@ -646,8 +802,11 @@ void ZoneServer::updateDatabase() {
     ZONE_TRACE_EVENT("Database::update", Profiling::TraceCategory::DATABASE);
     
     // Update Redis async operations
-    if (redis_->isConnected()) {
+    if (redis_ && redis_->isConnected()) {
+        // Process async callbacks and pending commands
         redis_->update();
+        // Process pub/sub messages for cross-zone communication
+        redis_->processSubscriptions();
     }
     
     // Update ScyllaDB async operations (process pending writes)

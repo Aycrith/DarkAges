@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using DarkAges.Networking;
 
 namespace DarkAges
@@ -9,11 +10,19 @@ namespace DarkAges
     /// [CLIENT_AGENT] Client-side predicted player controller
     /// Predicts movement locally, server corrects errors via reconciliation
     /// 
+    /// WP-7-2 Implementation Features:
+    /// - Input prediction buffer (2-second window, 120 inputs)
+    /// - Local physics simulation matching server exactly
+    /// - Server reconciliation with smooth error correction
+    /// - Position error visualization (server ghost)
+    /// - Handles 200ms+ latency gracefully
+    /// 
     /// Design:
     /// - All inputs are predicted immediately and stored in a buffer
     /// - Server processes inputs and sends corrections when needed
     /// - On correction: rewind to server state, replay unacknowledged inputs
-    /// - Smooth error correction for small drift, snap for large errors
+    /// - Smooth error correction for small drift, snap for large errors (>2m)
+    /// - Green ghost shows server-authoritative position for debugging
     /// </summary>
     public partial class PredictedPlayer : CharacterBody3D
     {
@@ -29,10 +38,19 @@ namespace DarkAges
         [Export] public float CorrectionSmoothing = 0.3f;  // Blend factor for smooth correction (0-1)
         [Export] public float ErrorSnapThreshold = 2.0f;   // Meters - snap instantly above this
         [Export] public float ErrorCorrectThreshold = 0.1f; // Meters - correct below this
+        [Export] public float CorrectionSpeed = 10.0f;     // Speed of smooth correction (m/s)
         
         // Input buffer configuration
-        private const int MAX_INPUT_BUFFER_SIZE = 120;  // 2 seconds at 60Hz
-        private const float FIXED_DT = 1.0f / 60.0f;    // Fixed timestep for reconciliation
+        [Export] public int MaxInputBufferSize = 120;      // 2 seconds at 60Hz
+        [Export] public float FixedDt = 1.0f / 60.0f;      // Fixed timestep for reconciliation
+        
+        // Latency handling
+        [Export] public float MaxExpectedLatency = 0.3f;   // 300ms - buffer size accommodates this
+        [Export] public bool EnableLatencyCompensation = true;
+        
+        // Debug visualization
+        [Export] public bool ShowServerGhost = true;
+        [Export] public bool ShowDebugLabel = true;
         
         // State
         private uint _inputSequence = 1;  // Start at 1, 0 reserved for "no input processed"
@@ -47,9 +65,12 @@ namespace DarkAges
         private int _reconciliationCount = 0;  // Debug counter
         private uint _lastCorrectionTick = 0;
         
-        // Smooth correction target
+        // Smooth correction state
         private Vector3 _correctionTargetPosition;
+        private Vector3 _correctionStartPosition;
+        private float _correctionProgress = 0.0f;
         private bool _isSmoothingCorrection = false;
+        private float _correctionDuration = 0.0f;
         
         // Camera
         private Node3D _cameraRig;
@@ -60,12 +81,20 @@ namespace DarkAges
         // Components
         private AnimationPlayer _animPlayer;
         
+        // Debug visualization
+        private MeshInstance3D _serverGhost;
+        private Label3D _debugLabel;
+        private float _timeSinceLastCorrection = 0.0f;
+        
         // Signals for UI/debug
         [Signal]
         public delegate void PredictionErrorEventHandler(float error, bool isLarge);
         
         [Signal]
         public delegate void ReconciliationEventHandler(int inputCount, float error);
+        
+        [Signal]
+        public delegate void ServerCorrectionReceivedEventHandler(Vector3 serverPos, float error);
 
         public override void _Ready()
         {
@@ -75,11 +104,15 @@ namespace DarkAges
             
             _predictedPosition = GlobalPosition;
             _correctionTargetPosition = GlobalPosition;
+            _correctionStartPosition = GlobalPosition;
             
             // Hide mouse cursor for gameplay
             Input.MouseMode = Input.MouseModeEnum.Captured;
             
-            GD.Print("[PredictedPlayer] Initialized with prediction buffer");
+            // Create debug visualization
+            CreateDebugVisualization();
+            
+            GD.Print("[PredictedPlayer] Initialized with prediction buffer (WP-7-2)");
         }
 
         public override void _Input(InputEvent @event)
@@ -104,18 +137,23 @@ namespace DarkAges
                     ? Input.MouseModeEnum.Visible 
                     : Input.MouseModeEnum.Captured;
             }
+            
+            // Toggle debug visualization
+            if (@event.IsActionPressed("toggle_debug"))
+            {
+                ToggleDebugVisualization();
+            }
         }
 
         public override void _PhysicsProcess(double delta)
         {
-            // Apply smooth correction if active
+            float dt = (float)delta;
+            _timeSinceLastCorrection += dt;
+            
+            // Update smooth correction if active
             if (_isSmoothingCorrection)
             {
-                GlobalPosition = GlobalPosition.Lerp(_correctionTargetPosition, CorrectionSmoothing);
-                if (GlobalPosition.DistanceSquared(_correctionTargetPosition) < 0.0001f)
-                {
-                    _isSmoothingCorrection = false;
-                }
+                ApplySmoothCorrection(dt);
             }
             
             if (GameState.Instance.CurrentConnectionState != GameState.ConnectionState.Connected)
@@ -129,18 +167,145 @@ namespace DarkAges
             var input = GatherInput();
             
             // 2. Apply locally immediately (prediction)
-            ApplyMovement(input, (float)delta);
+            ApplyMovement(input, dt);
             _predictedPosition = GlobalPosition;
             _predictedVelocity = Velocity;
             
             // 3. Store for reconciliation and network sending
-            StorePredictedInput(input, _predictedPosition, _predictedVelocity, (float)delta);
+            StorePredictedInput(input, _predictedPosition, _predictedVelocity, dt);
             
             // 4. Update animations
             UpdateAnimation(input);
             
-            // 5. Update debug stats
+            // 5. Update debug stats and visualization
             UpdateDebugStats();
+            UpdateDebugVisualization();
+        }
+        
+        /// <summary>
+        /// Creates the server ghost and debug label for visualization
+        /// </summary>
+        private void CreateDebugVisualization()
+        {
+            // Create ghost mesh showing server position
+            _serverGhost = new MeshInstance3D();
+            _serverGhost.Name = "ServerGhost";
+            
+            // Use a capsule mesh similar to player
+            var ghostMesh = new CapsuleMesh
+            {
+                Height = 2.0f,
+                Radius = 0.5f
+            };
+            _serverGhost.Mesh = ghostMesh;
+            
+            // Create transparent green material
+            var ghostMaterial = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0, 1, 0, 0.3f),
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                NoDepthTest = true,
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded
+            };
+            _serverGhost.MaterialOverride = ghostMaterial;
+            
+            // Add to scene root so it moves independently
+            GetTree().Root.AddChild(_serverGhost);
+            _serverGhost.Visible = ShowServerGhost;
+            
+            // Debug label showing prediction stats
+            _debugLabel = new Label3D
+            {
+                Name = "DebugLabel",
+                Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+                PixelSize = 0.01f,
+                Position = new Vector3(0, 2.5f, 0),
+                Visible = ShowDebugLabel
+            };
+            AddChild(_debugLabel);
+        }
+        
+        /// <summary>
+        /// Toggle debug visualization on/off
+        /// </summary>
+        private void ToggleDebugVisualization()
+        {
+            ShowServerGhost = !ShowServerGhost;
+            ShowDebugLabel = !ShowDebugLabel;
+            
+            if (_serverGhost != null)
+                _serverGhost.Visible = ShowServerGhost;
+            if (_debugLabel != null)
+                _debugLabel.Visible = ShowDebugLabel;
+        }
+        
+        /// <summary>
+        /// Updates the debug visualization (ghost position, label text)
+        /// </summary>
+        private void UpdateDebugVisualization()
+        {
+            // Update server ghost position
+            if (_serverGhost != null && _serverGhost.Visible)
+            {
+                // Only show ghost if we've received at least one correction
+                if (_lastProcessedServerInput > 0)
+                {
+                    _serverGhost.GlobalPosition = _serverPosition;
+                    _serverGhost.Visible = true;
+                }
+                else
+                {
+                    _serverGhost.Visible = false;
+                }
+            }
+            
+            // Update debug label
+            if (_debugLabel != null && _debugLabel.Visible)
+            {
+                UpdateDebugLabel();
+            }
+        }
+        
+        /// <summary>
+        /// Updates the debug label text with prediction stats
+        /// </summary>
+        private void UpdateDebugLabel()
+        {
+            float error = GlobalPosition.DistanceTo(_serverPosition);
+            
+            // Determine status
+            string status;
+            Color statusColor;
+            
+            if (error < 0.1f)
+            {
+                status = "SYNCED";
+                statusColor = Colors.Green;
+            }
+            else if (_isSmoothingCorrection)
+            {
+                status = "CORRECTING";
+                statusColor = Colors.Yellow;
+            }
+            else if (error > ErrorSnapThreshold)
+            {
+                status = "SNAPPING";
+                statusColor = Colors.Red;
+            }
+            else
+            {
+                status = "OK";
+                statusColor = Colors.Green;
+            }
+            
+            // Format label text
+            var rtt = GameState.Instance.LastRttMs;
+            _debugLabel.Text = $"{status}\n" +
+                              $"Error: {error:F2}m\n" +
+                              $"Inputs: {_inputBuffer.Count}\n" +
+                              $"RTT: {rtt}ms\n" +
+                              $"Recons: {_reconciliationCount}";
+            _debugLabel.Modulate = statusColor;
         }
 
         /// <summary>
@@ -149,7 +314,7 @@ namespace DarkAges
         private void StorePredictedInput(InputState input, Vector3 predictedPos, Vector3 predictedVel, float dt)
         {
             // Enforce buffer size limit to prevent unbounded growth
-            while (_inputBuffer.Count >= MAX_INPUT_BUFFER_SIZE)
+            while (_inputBuffer.Count >= MaxInputBufferSize)
             {
                 var removed = _inputBuffer.Dequeue();
                 GD.PrintVerbose($"[PredictedPlayer] Dropping old input seq={removed.Sequence} (buffer full)");
@@ -172,13 +337,15 @@ namespace DarkAges
                 Timestamp = (uint)Time.GetTicksMsec(),
                 InputDir = inputDir,
                 Yaw = input.Yaw,
+                Pitch = input.Pitch,
                 Sprint = input.Sprint,
                 Jump = input.Jump,
                 Attack = input.Attack,
                 Block = input.Block,
                 PredictedPosition = predictedPos,
                 PredictedVelocity = predictedVel,
-                DeltaTime = dt
+                DeltaTime = dt,
+                Acknowledged = false
             };
             
             _inputBuffer.Enqueue(predInput);
@@ -239,6 +406,7 @@ namespace DarkAges
 
         /// <summary>
         /// Apply server correction with appropriate handling based on error magnitude
+        /// Implements WP-7-2 smooth error correction requirements
         /// </summary>
         private void ApplyServerCorrection(uint serverTick, Vector3 serverPos, Vector3 serverVel, uint lastProcessedSeq)
         {
@@ -246,12 +414,18 @@ namespace DarkAges
             _serverVelocity = serverVel;
             _lastProcessedServerInput = lastProcessedSeq;
             _lastCorrectionTick = serverTick;
+            _timeSinceLastCorrection = 0.0f;
+            
+            // Mark acknowledged inputs
+            MarkAcknowledgedInputs(lastProcessedSeq);
             
             // Remove acknowledged inputs from buffer (all inputs up to and including lastProcessedSeq)
             int removedCount = 0;
             while (_inputBuffer.Count > 0 && _inputBuffer.Peek().Sequence <= lastProcessedSeq)
             {
-                _inputBuffer.Dequeue();
+                var input = _inputBuffer.Dequeue();
+                input.Acknowledged = true;
+                input.ServerPositionAtAck = serverPos;
                 removedCount++;
             }
             
@@ -262,12 +436,14 @@ namespace DarkAges
             
             // Emit debug signal
             EmitSignal(SignalName.PredictionError, _predictionError, _predictionError > ErrorSnapThreshold);
+            EmitSignal(SignalName.ServerCorrectionReceived, serverPos, _predictionError);
             
             // Determine correction strategy based on error magnitude
             if (_predictionError <= ErrorCorrectThreshold)
             {
                 // Error is negligible - no correction needed
                 GD.PrintVerbose($"[PredictedPlayer] Small error ({_predictionError:F3}m) - no correction");
+                _isSmoothingCorrection = false;
                 return;
             }
             else if (_predictionError > ErrorSnapThreshold)
@@ -288,11 +464,46 @@ namespace DarkAges
             }
             else
             {
-                // Small drift - reconcile by replaying
+                // Small drift - use smooth correction over time (WP-7-2 requirement)
+                // This prevents jarring snaps for minor prediction errors
                 GD.Print($"[PredictedPlayer] Smooth correction: {_predictionError:F3}m, replaying {_inputBuffer.Count} inputs");
                 
-                _isSmoothingCorrection = false;
-                Reconcile(serverPos, serverVel, lastProcessedSeq);
+                // Start from server state
+                GlobalPosition = serverPos;
+                Velocity = serverVel;
+                
+                // Replay unacknowledged inputs to get target position
+                int replayedCount = ReplayUnacknowledgedInputs(serverPos, serverVel, lastProcessedSeq);
+                
+                // Now initiate smooth correction to the replayed position
+                // This handles the case where replay puts us at a slightly different position
+                float postReplayError = GlobalPosition.DistanceTo(_predictedPosition);
+                
+                if (postReplayError > ErrorCorrectThreshold)
+                {
+                    StartSmoothCorrection(GlobalPosition, _predictedPosition);
+                }
+                else
+                {
+                    _isSmoothingCorrection = false;
+                }
+                
+                _predictedPosition = GlobalPosition;
+                _predictedVelocity = Velocity;
+            }
+        }
+        
+        /// <summary>
+        /// Mark inputs as acknowledged without removing them
+        /// </summary>
+        private void MarkAcknowledgedInputs(uint lastProcessedSeq)
+        {
+            foreach (var input in _inputBuffer)
+            {
+                if (input.Sequence <= lastProcessedSeq)
+                {
+                    input.Acknowledged = true;
+                }
             }
         }
 
@@ -312,6 +523,49 @@ namespace DarkAges
             
             // If not found, use current position
             return _predictedPosition;
+        }
+
+        /// <summary>
+        /// Start a smooth correction from startPos to targetPos
+        /// WP-7-2: Smooth error correction (no snapping for errors < 2m)
+        /// </summary>
+        private void StartSmoothCorrection(Vector3 startPos, Vector3 targetPos)
+        {
+            _correctionStartPosition = startPos;
+            _correctionTargetPosition = targetPos;
+            _correctionProgress = 0.0f;
+            _isSmoothingCorrection = true;
+            
+            // Calculate duration based on distance and correction speed
+            float distance = startPos.DistanceTo(targetPos);
+            _correctionDuration = Mathf.Max(distance / CorrectionSpeed, FixedDt * 3); // At least 3 frames
+            
+            GD.PrintVerbose($"[PredictedPlayer] Starting smooth correction: {distance:F3}m over {_correctionDuration:F3}s");
+        }
+        
+        /// <summary>
+        /// Apply smooth correction over time
+        /// </summary>
+        private void ApplySmoothCorrection(float dt)
+        {
+            if (!_isSmoothingCorrection)
+                return;
+            
+            _correctionProgress += dt;
+            float t = Mathf.Clamp(_correctionProgress / _correctionDuration, 0.0f, 1.0f);
+            
+            // Use smoothstep for nicer interpolation
+            t = t * t * (3.0f - 2.0f * t);
+            
+            // Interpolate position
+            GlobalPosition = _correctionStartPosition.Lerp(_correctionTargetPosition, t);
+            
+            // Check if correction is complete
+            if (t >= 1.0f)
+            {
+                _isSmoothingCorrection = false;
+                GD.PrintVerbose("[PredictedPlayer] Smooth correction complete");
+            }
         }
 
         /// <summary>
@@ -343,49 +597,46 @@ namespace DarkAges
 
         /// <summary>
         /// Replay unacknowledged inputs after server correction
+        /// WP-7-2: Replays inputs to maintain responsive feel during corrections
         /// </summary>
         private int ReplayUnacknowledgedInputs(Vector3 serverPos, Vector3 serverVel, uint lastProcessedSeq)
         {
             int replayedCount = 0;
             
-            foreach (var input in _inputBuffer)
+            // Get unacknowledged inputs (those with sequence > lastProcessedSeq)
+            var unacknowledged = _inputBuffer.Where(i => i.Sequence > lastProcessedSeq).ToList();
+            
+            if (unacknowledged.Count == 0)
+                return 0;
+            
+            GD.PrintVerbose($"[PredictedPlayer] Replaying {unacknowledged.Count} unacknowledged inputs");
+            
+            foreach (var input in unacknowledged)
             {
-                // Only replay inputs that server hasn't processed yet
-                if (input.Sequence > lastProcessedSeq)
+                var inputState = new InputState
                 {
-                    var inputState = new InputState
-                    {
-                        Forward = input.InputDir.Y < -0.1f,
-                        Backward = input.InputDir.Y > 0.1f,
-                        Left = input.InputDir.X < -0.1f,
-                        Right = input.InputDir.X > 0.1f,
-                        Sprint = input.Sprint,
-                        Jump = input.Jump,
-                        Attack = input.Attack,
-                        Block = input.Block,
-                        Yaw = input.Yaw
-                    };
-                    
-                    // Use fixed timestep for deterministic replay
-                    ApplyMovement(inputState, FIXED_DT);
-                    replayedCount++;
-                    
-                    // Store the replayed result back in the input for future error calculation
-                    input.PredictedPosition = GlobalPosition;
-                    input.PredictedVelocity = Velocity;
-                }
+                    Forward = input.InputDir.Y < -0.1f,
+                    Backward = input.InputDir.Y > 0.1f,
+                    Left = input.InputDir.X < -0.1f,
+                    Right = input.InputDir.X > 0.1f,
+                    Sprint = input.Sprint,
+                    Jump = input.Jump,
+                    Attack = input.Attack,
+                    Block = input.Block,
+                    Yaw = input.Yaw,
+                    Pitch = input.Pitch
+                };
+                
+                // Use fixed timestep for deterministic replay
+                ApplyMovement(inputState, FixedDt);
+                replayedCount++;
+                
+                // Store the replayed result back in the input for future error calculation
+                input.PredictedPosition = GlobalPosition;
+                input.PredictedVelocity = Velocity;
             }
             
             return replayedCount;
-        }
-
-        /// <summary>
-        /// Smoothly correct position over time (used for minor drift)
-        /// </summary>
-        private void SmoothCorrect(Vector3 targetPos)
-        {
-            _correctionTargetPosition = targetPos;
-            _isSmoothingCorrection = true;
         }
 
         private InputState GatherInput()
@@ -407,6 +658,7 @@ namespace DarkAges
 
         /// <summary>
         /// Apply movement - MUST MATCH SERVER PHYSICS EXACTLY
+        /// WP-7-2: Local physics simulation matching server
         /// </summary>
         private void ApplyMovement(InputState input, float dt)
         {
@@ -505,8 +757,10 @@ namespace DarkAges
         public uint GetLastProcessedServerInput() => _lastProcessedServerInput;
         public int GetReconciliationCount() => _reconciliationCount;
         public bool IsReconciling() => _reconciling;
+        public bool IsSmoothingCorrection() => _isSmoothingCorrection;
         public Vector3 GetServerPosition() => _serverPosition;
         public Vector3 GetPredictedPosition() => _predictedPosition;
+        public float GetTimeSinceLastCorrection() => _timeSinceLastCorrection;
         
         /// <summary>
         /// Get the next input sequence number for NetworkManager to send
@@ -517,5 +771,26 @@ namespace DarkAges
         /// Get all pending inputs for NetworkManager to send
         /// </summary>
         public Queue<PredictedInput> GetPendingInputs() => _inputBuffer;
+        
+        /// <summary>
+        /// Get unacknowledged inputs (for replay after correction)
+        /// </summary>
+        public List<PredictedInput> GetUnacknowledgedInputs()
+        {
+            return _inputBuffer.Where(i => !i.Acknowledged).ToList();
+        }
+        
+        public override void _ExitTree()
+        {
+            // Clean up debug visualization
+            if (_serverGhost != null && IsInstanceValid(_serverGhost))
+            {
+                _serverGhost.QueueFree();
+            }
+            if (_debugLabel != null && IsInstanceValid(_debugLabel))
+            {
+                _debugLabel.QueueFree();
+            }
+        }
     }
 }

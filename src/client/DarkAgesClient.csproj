@@ -7,6 +7,8 @@
     <RootNamespace>DarkAges</RootNamespace>
     <AssemblyName>DarkAgesClient</AssemblyName>
     <Nullable>enable</Nullable>
+    <LangVersion>10.0</LangVersion>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
   
   <ItemGroup>
@@ -14,5 +16,13 @@
     <PackageReference Include="Google.FlatBuffers" Version="23.5.26" />
     <!-- MessagePack for alternative serialization -->
     <PackageReference Include="MessagePack" Version="2.5.129" />
+    <!-- System.Text.Json for config files -->
+    <PackageReference Include="System.Text.Json" Version="8.0.0" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <!-- Compile all C# scripts recursively -->
+    <Compile Include="scripts/**/*.cs" />
+    <Compile Include="src/**/*.cs" />
   </ItemGroup>
 </Project>

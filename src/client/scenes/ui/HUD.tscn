@@ -1,0 +1,187 @@
+[gd_scene load_steps=8 format=3 uid="uid://hudmain"]
+
+[ext_resource type="Script" path="res://src/ui/HUDController.cs" id="1_hudctrl"]
+[ext_resource type="Script" path="res://src/ui/HealthBarSystem.cs" id="2_health"]
+[ext_resource type="Script" path="res://src/ui/AbilityBar.cs" id="3_ability"]
+[ext_resource type="Script" path="res://src/ui/TargetLockSystem.cs" id="4_targetlock"]
+[ext_resource type="Script" path="res://src/ui/CombatTextSystem.cs" id="5_combattext"]
+[ext_resource type="Script" path="res://src/ui/DeathRespawnUI.cs" id="6_deathui"]
+
+[sub_resource type="GradientTexture2D" id="1_crosshair"]
+width = 32
+height = 32
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(0.5, 0)
+
+[node name="HUD" type="CanvasLayer"]
+script = ExtResource("1_hudctrl")
+
+[node name="SafeArea" type="MarginContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = -20.0
+
+[node name="MainLayout" type="VBoxContainer" parent="SafeArea"]
+layout_mode = 2
+
+[node name="TopBar" type="HBoxContainer" parent="SafeArea/MainLayout"]
+layout_mode = 2
+size_flags_vertical = 0
+
+[node name="PlayerHealth" type="Control" parent="SafeArea/MainLayout/TopBar"]
+custom_minimum_size = Vector2(250, 80)
+layout_mode = 2
+script = ExtResource("2_health")
+
+[node name="HealthBar" type="ProgressBar" parent="SafeArea/MainLayout/TopBar/PlayerHealth"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -27.0
+offset_bottom = -4.0
+grow_vertical = 0
+value = 100.0
+
+[node name="HealthText" type="Label" parent="SafeArea/MainLayout/TopBar/PlayerHealth"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -27.0
+offset_bottom = -4.0
+grow_vertical = 0
+text = "100/100"
+horizontal_alignment = 1
+
+[node name="PlayerName" type="Label" parent="SafeArea/MainLayout/TopBar/PlayerHealth"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 26.0
+grow_horizontal = 2
+text = "Player"
+horizontal_alignment = 1
+
+[node name="DamageFlash" type="Panel" parent="SafeArea/MainLayout/TopBar/PlayerHealth"]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="SafeArea/MainLayout/TopBar/PlayerHealth"]
+
+[node name="TargetHealth" type="Control" parent="SafeArea/MainLayout/TopBar"]
+custom_minimum_size = Vector2(250, 60)
+layout_mode = 2
+size_flags_horizontal = 3
+script = ExtResource("2_health")
+
+[node name="HealthBar" type="ProgressBar" parent="SafeArea/MainLayout/TopBar/TargetHealth"]
+layout_mode = 1
+anchors_preset = 14
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = 100.0
+offset_top = -10.0
+offset_right = -100.0
+offset_bottom = 10.0
+grow_horizontal = 2
+grow_vertical = 2
+value = 100.0
+
+[node name="HealthText" type="Label" parent="SafeArea/MainLayout/TopBar/TargetHealth"]
+layout_mode = 1
+anchors_preset = 14
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = 100.0
+offset_top = 12.0
+offset_right = -100.0
+offset_bottom = 35.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "Target"
+horizontal_alignment = 1
+
+[node name="PlayerName" type="Label" parent="SafeArea/MainLayout/TopBar/TargetHealth"]
+layout_mode = 1
+anchors_preset = 14
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = 100.0
+offset_top = -35.0
+offset_right = -100.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "No Target"
+horizontal_alignment = 1
+
+[node name="PartyPanel" type="Panel" parent="SafeArea/MainLayout/TopBar"]
+custom_minimum_size = Vector2(200, 100)
+layout_mode = 2
+size_flags_horizontal = 8
+
+[node name="Center" type="Control" parent="SafeArea/MainLayout"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Crosshair" type="TextureRect" parent="SafeArea/MainLayout/Center"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -16.0
+offset_top = -16.0
+offset_right = 16.0
+offset_bottom = 16.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = SubResource("1_crosshair")
+stretch_mode = 4
+
+[node name="HitMarker" type="TextureRect" parent="SafeArea/MainLayout/Center/Crosshair"]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="BottomBar" type="HBoxContainer" parent="SafeArea/MainLayout"]
+layout_mode = 2
+size_flags_vertical = 8
+alignment = 1
+
+[node name="AbilityBar" type="HBoxContainer" parent="SafeArea/MainLayout/BottomBar"]
+custom_minimum_size = Vector2(0, 80)
+layout_mode = 2
+script = ExtResource("3_ability")
+
+[node name="TargetLockSystem" type="Node" parent="."]
+script = ExtResource("4_targetlock")
+
+[node name="CombatTextSystem" type="Node" parent="."]
+script = ExtResource("5_combattext")
+
+[node name="DeathRespawnUI" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 0
+script = ExtResource("6_deathui")

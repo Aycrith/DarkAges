@@ -152,6 +152,13 @@ public:
     void subscribeToZoneChannel(uint32_t myZoneId, 
                                 std::function<void(const ZoneMessage&)> callback);
     
+    // === Pipeline Batching ===
+    
+    // Batch SET operations for high throughput (10k+ ops/sec)
+    void pipelineSet(const std::vector<std::pair<std::string, std::string>>& kvs,
+                     uint32_t ttlSeconds = Constants::REDIS_KEY_TTL_SECONDS,
+                     SetCallback callback = nullptr);
+    
     // === Metrics ===
     
     [[nodiscard]] uint64_t getCommandsSent() const;

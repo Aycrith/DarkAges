@@ -1,29 +1,63 @@
-[gd_scene load_steps=4 format=3 uid="uid://remoteplayer"]
+[gd_scene load_steps=6 format=3 uid="uid://remoteplayer"]
 
 [ext_resource type="Script" path="res://src/entities/RemotePlayer.cs" id="1_remoteplayer"]
-
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_remote"]
-radius = 0.3
-height = 1.8
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_remote"]
 radius = 0.3
 height = 1.8
 
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_remote"]
+radius = 0.3
+height = 1.8
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_remote"]
+albedo_color = Color(0.8, 0.3, 0.3, 1)
+roughness = 0.5
+
+[sub_resource type="Animation" id="Animation_default"]
+resource_name = "Idle"
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Model:position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Vector3(0, 0, 0)]
+}
+
 [node name="RemotePlayer" type="CharacterBody3D"]
-collision_layer = 2
+collision_layer = 4
 collision_mask = 3
 script = ExtResource("1_remoteplayer")
 InterpolationDelay = 0.1
-InterpolationSpeed = 15.0
+ExtrapolationLimit = 0.5
+PositionSmoothing = 15.0
+RotationSmoothing = 10.0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 shape = SubResource("CapsuleShape3D_remote")
 
 [node name="Model" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Model"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 mesh = SubResource("CapsuleMesh_remote")
+surface_material_override/0 = SubResource("StandardMaterial3D_remote")
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="Model"]
+root_node = NodePath("..")
+anims/Idle = SubResource("Animation_default")
+
+[node name="NameLabel" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
+pixel_size = 0.015
+billboard = 1
+no_depth_test = true
+text = "Player"
+font_size = 32
+outline_size = 8

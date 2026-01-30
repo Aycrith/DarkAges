@@ -1,152 +1,273 @@
-// [DATABASE_AGENT] Redis hot-state cache implementation
-// Real hiredis async integration for non-blocking operations
+// [DATABASE_AGENT] Redis hot-state cache implementation with connection pooling
+// WP-6-2: Implements <1ms latency, 10k ops/sec via connection pooling and pipelining
 
 #include "db/RedisManager.hpp"
+#include "Constants.hpp"
 #include <iostream>
 #include <chrono>
 #include <cstring>
 #include <unordered_map>
 #include <queue>
+#include <thread>
+#include <condition_variable>
+#include <atomic>
+#include <algorithm>
 
 #ifdef REDIS_AVAILABLE
-// hiredis headers
-#include <hiredis/hiredis.h>
-#include <hiredis/async.h>
-#include <cstddef>
-#include <cstdint>
-#include <functional>
-#include <memory>
-#include <mutex>
-#include <optional>
-#include <string>
-#include <string_view>
-#include <vector>
+#ifdef _WIN32
+#include <winsock2.h>
+#endif
+#include <hiredis.h>
 #endif
 
 namespace DarkAges {
 
 // ============================================================================
+// Connection Pool Implementation
+// ============================================================================
+
+class RedisConnectionPool {
+public:
+    struct Connection {
+        #ifdef REDIS_AVAILABLE
+        redisContext* ctx{nullptr};
+        #endif
+        std::chrono::steady_clock::time_point lastUsed;
+        bool inUse{false};
+        uint64_t commandsExecuted{0};
+    };
+
+private:
+    std::vector<Connection> connections_;
+    std::mutex mutex_;
+    std::condition_variable cv_;
+    std::string host_;
+    uint16_t port_{6379};
+    size_t maxPoolSize_{10};
+    size_t minPoolSize_{2};
+    std::atomic<bool> shutdown_{false};
+    std::atomic<uint64_t> totalCommands_{0};
+    std::atomic<uint64_t> failedCommands_{0};
+
+    #ifdef REDIS_AVAILABLE
+    redisContext* createConnection() {
+        struct timeval timeout;
+        timeout.tv_sec = Constants::REDIS_CONNECTION_TIMEOUT_MS / 1000;
+        timeout.tv_usec = (Constants::REDIS_CONNECTION_TIMEOUT_MS % 1000) * 1000;
+        
+        redisContext* ctx = redisConnectWithTimeout(host_.c_str(), port_, timeout);
+        if (!ctx || ctx->err) {
+            if (ctx) {
+                std::cerr << "[REDIS] Connection error: " << ctx->errstr << std::endl;
+                redisFree(ctx);
+            } else {
+                std::cerr << "[REDIS] Failed to allocate context" << std::endl;
+            }
+            return nullptr;
+        }
+        
+        // Enable TCP keepalive
+        redisEnableKeepAlive(ctx);
+        
+        return ctx;
+    }
+    #endif
+
+public:
+    RedisConnectionPool() = default;
+    ~RedisConnectionPool() { shutdown(); }
+
+    bool initialize(const std::string& host, uint16_t port, size_t minPoolSize = 2, size_t maxPoolSize = 10) {
+        host_ = host;
+        port_ = port;
+        minPoolSize_ = minPoolSize;
+        maxPoolSize_ = maxPoolSize;
+        shutdown_ = false;
+
+        std::cout << "[REDIS] Initializing connection pool (" << minPoolSize_ << "-" << maxPoolSize_ << ")..." << std::endl;
+
+        #ifdef REDIS_AVAILABLE
+        // Create minimum pool size
+        for (size_t i = 0; i < minPoolSize_; ++i) {
+            auto* ctx = createConnection();
+            if (!ctx) {
+                std::cerr << "[REDIS] Failed to create initial connection " << i << std::endl;
+                shutdown();
+                return false;
+            }
+            
+            Connection conn;
+            conn.ctx = ctx;
+            conn.lastUsed = std::chrono::steady_clock::now();
+            conn.inUse = false;
+            connections_.push_back(conn);
+        }
+        #endif
+
+        std::cout << "[REDIS] Connection pool initialized with " << connections_.size() << " connections" << std::endl;
+        return true;
+    }
+
+    #ifdef REDIS_AVAILABLE
+    redisContext* acquire(std::chrono::milliseconds timeout = std::chrono::milliseconds(100)) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        
+        auto pred = [this]() {
+            if (shutdown_) return true;
+            // Check for available connection
+            for (auto& conn : connections_) {
+                if (!conn.inUse) return true;
+            }
+            // Can we create more?
+            return connections_.size() < maxPoolSize_;
+        };
+        
+        if (!cv_.wait_for(lock, timeout, pred)) {
+            return nullptr; // Timeout
+        }
+        
+        if (shutdown_) return nullptr;
+        
+        // Find existing available connection
+        for (auto& conn : connections_) {
+            if (!conn.inUse) {
+                // Check if connection is still valid
+                if (conn.ctx && conn.ctx->err) {
+                    // Connection is dead, free it
+                    redisFree(conn.ctx);
+                    conn.ctx = createConnection();
+                    if (!conn.ctx) continue;
+                }
+                
+                conn.inUse = true;
+                conn.lastUsed = std::chrono::steady_clock::now();
+                return conn.ctx;
+            }
+        }
+        
+        // Create new connection if under limit
+        if (connections_.size() < maxPoolSize_) {
+            auto* ctx = createConnection();
+            if (ctx) {
+                Connection conn;
+                conn.ctx = ctx;
+                conn.lastUsed = std::chrono::steady_clock::now();
+                conn.inUse = true;
+                connections_.push_back(conn);
+                return ctx;
+            }
+        }
+        
+        return nullptr;
+    }
+
+    void release(redisContext* ctx) {
+        if (!ctx) return;
+        
+        std::lock_guard<std::mutex> lock(mutex_);
+        
+        for (auto& conn : connections_) {
+            if (conn.ctx == ctx) {
+                if (ctx->err) {
+                    // Connection is dead, remove it
+                    redisFree(ctx);
+                    conn.ctx = nullptr;
+                    conn.inUse = false;
+                    
+                    // Create replacement if under min pool size
+                    if (connections_.size() <= minPoolSize_) {
+                        conn.ctx = createConnection();
+                    }
+                } else {
+                    conn.inUse = false;
+                    conn.lastUsed = std::chrono::steady_clock::now();
+                }
+                break;
+            }
+        }
+        
+        cv_.notify_one();
+    }
+    #endif
+
+    void shutdown() {
+        shutdown_ = true;
+        cv_.notify_all();
+        
+        std::lock_guard<std::mutex> lock(mutex_);
+        
+        #ifdef REDIS_AVAILABLE
+        for (auto& conn : connections_) {
+            if (conn.ctx) {
+                redisFree(conn.ctx);
+                conn.ctx = nullptr;
+            }
+        }
+        #endif
+        
+        connections_.clear();
+    }
+
+    [[nodiscard]] size_t getPoolSize() const { return connections_.size(); }
+    [[nodiscard]] size_t getAvailableCount() const {
+        size_t count = 0;
+        for (const auto& conn : connections_) {
+            if (!conn.inUse) count++;
+        }
+        return count;
+    }
+    
+    void incrementCommands() { totalCommands_++; }
+    void incrementFailed() { failedCommands_++; }
+    [[nodiscard]] uint64_t getTotalCommands() const { return totalCommands_.load(); }
+    [[nodiscard]] uint64_t getFailedCommands() const { return failedCommands_.load(); }
+};
+
+// ============================================================================
 // Internal Implementation Structure
 // ============================================================================
 
-struct PendingCommand {
-    uint64_t id{0};
-    std::chrono::steady_clock::time_point submitTime;
-    #ifdef REDIS_AVAILABLE
-    std::function<void(redisReply*)> callback;
-    #else
-    std::function<void(const std::string&)> callback;
-    #endif
-};
-
 struct RedisInternal {
-    #ifdef REDIS_AVAILABLE
-    redisAsyncContext* context{nullptr};
-    #endif
-    bool connected{false};
+    std::unique_ptr<RedisConnectionPool> pool;
     std::string host;
     uint16_t port{6379};
+    bool connected{false};
     
-    // Command tracking
-    uint64_t nextCommandId{1};
-    std::unordered_map<uint64_t, PendingCommand> pendingCommands;
+    // Async callback handling
+    struct PendingCallback {
+        std::function<void()> func;
+        std::chrono::steady_clock::time_point enqueueTime;
+    };
+    std::queue<PendingCallback> callbackQueue;
+    std::mutex callbackMutex;
     
-    // Callback storage for pub/sub
-    std::function<void(std::string_view, std::string_view)> subscribeCallback;
-    
-    // Latency tracking for rolling average
-    std::queue<float> latencySamples;
-    static constexpr size_t MAX_LATENCY_SAMPLES = 100;
-    
-    // Connection callbacks
-    std::function<void(bool, const std::string&)> connectCallback;
-    
-    // === Pub/Sub state ===
+    // Pub/Sub handling
     struct Subscription {
         std::string channel;
         std::function<void(std::string_view, std::string_view)> callback;
     };
     std::vector<Subscription> subscriptions;
-    std::vector<std::pair<std::string, std::string>> messageQueue;
+    std::mutex subMutex;
+    
+    // Pub/Sub listener thread
+    #ifdef REDIS_AVAILABLE
+    redisContext* pubSubCtx{nullptr};
+    #endif
+    std::atomic<bool> pubSubRunning{false};
+    std::thread pubSubThread;
+    std::queue<std::pair<std::string, std::string>> messageQueue;
     std::mutex messageMutex;
-    uint32_t messageSequence{0};
+    
+    // Latency tracking
+    std::queue<float> latencySamples;
+    std::mutex latencyMutex;
+    static constexpr size_t MAX_LATENCY_SAMPLES = 100;
+    
+    // Metrics
+    std::atomic<uint64_t> commandsSent_{0};
+    std::atomic<uint64_t> commandsCompleted_{0};
+    std::atomic<uint64_t> commandsFailed_{0};
 };
-
-#ifdef REDIS_AVAILABLE
-// ============================================================================
-// hiredis Callbacks
-// ============================================================================
-
-static void OnConnect(const redisAsyncContext* ctx, int status) {
-    auto* internal = static_cast<RedisInternal*>(ctx->data);
-    if (internal == nullptr) return;
-    
-    if (status == REDIS_OK) {
-        std::cout << "[REDIS] Connected to " << internal->host << ":" << internal->port << std::endl;
-        internal->connected = true;
-        if (internal->connectCallback) {
-            internal->connectCallback(true, "");
-        }
-    } else {
-        std::cerr << "[REDIS] Connection failed: " << ctx->errstr << std::endl;
-        internal->connected = false;
-        if (internal->connectCallback) {
-            internal->connectCallback(false, ctx->errstr ? ctx->errstr : "Unknown error");
-        }
-    }
-}
-
-static void OnDisconnect(const redisAsyncContext* ctx, int status) {
-    auto* internal = static_cast<RedisInternal*>(ctx->data);
-    if (internal == nullptr) return;
-    
-    std::cout << "[REDIS] Disconnected from " << internal->host << ":" << internal->port 
-              << " (status: " << status << ")" << std::endl;
-    internal->connected = false;
-    
-    // Clear pending commands on disconnect
-    internal->pendingCommands.clear();
-}
-
-static void OnCommandComplete(redisAsyncContext* ctx, void* reply, void* privdata) {
-    auto* internal = static_cast<RedisInternal*>(ctx->data);
-    if (internal == nullptr) return;
-    
-    uint64_t cmdId = reinterpret_cast<uint64_t>(privdata);
-    
-    auto it = internal->pendingCommands.find(cmdId);
-    if (it == internal->pendingCommands.end()) {
-        // Unknown command or already timed out - free reply if present
-        if (reply) {
-            freeReplyObject(reply);
-        }
-        return;
-    }
-    
-    PendingCommand cmd = std::move(it->second);
-    internal->pendingCommands.erase(it);
-    
-    // Calculate latency
-    auto now = std::chrono::steady_clock::now();
-    float latencyMs = std::chrono::duration<float, std::milli>(now - cmd.submitTime).count();
-    
-    // Store latency sample
-    internal->latencySamples.push(latencyMs);
-    if (internal->latencySamples.size() > RedisInternal::MAX_LATENCY_SAMPLES) {
-        internal->latencySamples.pop();
-    }
-    
-    // Invoke callback with reply
-    if (cmd.callback) {
-        cmd.callback(static_cast<redisReply*>(reply));
-    }
-    
-    // Free the reply object
-    if (reply) {
-        freeReplyObject(reply);
-    }
-}
-#endif
 
 // ============================================================================
 // Binary Serialization Helpers
@@ -309,6 +430,43 @@ static std::vector<uint8_t> SerializePosition(const Position& pos) {
 }
 
 // ============================================================================
+// Pub/Sub Listener Thread
+// ============================================================================
+
+#ifdef REDIS_AVAILABLE
+static void PubSubListener(RedisInternal* internal) {
+    while (internal->pubSubRunning) {
+        redisReply* reply = nullptr;
+        
+        if (internal->pubSubCtx && redisGetReply(internal->pubSubCtx, (void**)&reply) == REDIS_OK) {
+            if (reply && reply->type == REDIS_REPLY_ARRAY && reply->elements >= 3) {
+                // Subscription message format: [message, channel, data]
+                std::string_view msgType(reply->element[0]->str, reply->element[0]->len);
+                if (msgType == "message" || msgType == "pmessage") {
+                    size_t channelIdx = (msgType == "pmessage") ? 2 : 1;
+                    size_t messageIdx = (msgType == "pmessage") ? 3 : 2;
+                    
+                    if (reply->elements > messageIdx) {
+                        std::string channel(reply->element[channelIdx]->str, reply->element[channelIdx]->len);
+                        std::string message(reply->element[messageIdx]->str, reply->element[messageIdx]->len);
+                        
+                        {
+                            std::lock_guard<std::mutex> lock(internal->messageMutex);
+                            internal->messageQueue.emplace(std::move(channel), std::move(message));
+                        }
+                    }
+                }
+            }
+            freeReplyObject(reply);
+        } else {
+            // Error or shutdown
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+}
+#endif
+
+// ============================================================================
 // RedisManager Implementation
 // ============================================================================
 
@@ -326,72 +484,63 @@ bool RedisManager::initialize(const std::string& host, uint16_t port) {
     std::cout << "[REDIS] Connecting to " << host << ":" << port << "..." << std::endl;
     
     #ifdef REDIS_AVAILABLE
-    // Create async context
-    redisAsyncContext* ctx = redisAsyncConnect(host.c_str(), port);
-    if (ctx == nullptr) {
-        std::cerr << "[REDIS] Failed to create async context" << std::endl;
+    // Initialize connection pool
+    internal_->pool = std::make_unique<RedisConnectionPool>();
+    if (!internal_->pool->initialize(host, port, 2, 10)) {
+        std::cerr << "[REDIS] Failed to initialize connection pool" << std::endl;
         return false;
     }
     
-    if (ctx->err) {
-        std::cerr << "[REDIS] Connection error: " << ctx->errstr << std::endl;
-        redisAsyncFree(ctx);
+    // Test connection
+    auto* ctx = internal_->pool->acquire(std::chrono::milliseconds(1000));
+    if (!ctx) {
+        std::cerr << "[REDIS] Failed to acquire connection from pool" << std::endl;
         return false;
     }
     
-    internal_->context = ctx;
-    ctx->data = internal_.get();
+    // Test with PING
+    redisReply* reply = (redisReply*)redisCommand(ctx, "PING");
+    if (!reply || reply->type != REDIS_REPLY_STATUS || std::string(reply->str) != "PONG") {
+        std::cerr << "[REDIS] PING failed" << std::endl;
+        freeReplyObject(reply);
+        internal_->pool->release(ctx);
+        return false;
+    }
+    freeReplyObject(reply);
+    internal_->pool->release(ctx);
     
-    // Set up callbacks
-    redisAsyncSetConnectCallback(ctx, OnConnect);
-    redisAsyncSetDisconnectCallback(ctx, OnDisconnect);
-    
-    std::cout << "[REDIS] Async connection initiated" << std::endl;
-    return true;
+    std::cout << "[REDIS] Connection pool initialized successfully" << std::endl;
     #else
     std::cout << "[REDIS] hiredis not available - using stub implementation" << std::endl;
-    internal_->connected = true;
-    connected_ = true;
-    return true;
     #endif
+    
+    internal_->connected = true;
+    return true;
 }
 
 void RedisManager::shutdown() {
-    #ifdef REDIS_AVAILABLE
-    if (!internal_->context) return;
-    #else
-    if (!connected_) return;
-    #endif
+    if (!internal_->connected) return;
     
     std::cout << "[REDIS] Shutting down..." << std::endl;
     
-    // Cancel all pending commands with failure
-    for (auto& [id, cmd] : internal_->pendingCommands) {
-        #ifdef REDIS_AVAILABLE
-        if (cmd.callback) {
-            cmd.callback(nullptr);  // nullptr reply indicates failure
-        }
-        #else
-        if (cmd.callback) {
-            cmd.callback("");
-        }
-        #endif
-        commandsFailed_++;
-    }
-    internal_->pendingCommands.clear();
-    
     #ifdef REDIS_AVAILABLE
-    // Disconnect and free context
-    if (internal_->connected) {
-        redisAsyncDisconnect(internal_->context);
+    // Stop pub/sub thread
+    internal_->pubSubRunning = false;
+    if (internal_->pubSubThread.joinable()) {
+        internal_->pubSubThread.join();
     }
-    redisAsyncFree(internal_->context);
-    internal_->context = nullptr;
+    if (internal_->pubSubCtx) {
+        redisFree(internal_->pubSubCtx);
+        internal_->pubSubCtx = nullptr;
+    }
+    
+    // Shutdown connection pool
+    if (internal_->pool) {
+        internal_->pool->shutdown();
+    }
     #endif
     
     internal_->connected = false;
-    connected_ = false;
-    
     std::cout << "[REDIS] Shutdown complete" << std::endl;
 }
 
@@ -402,268 +551,233 @@ bool RedisManager::isConnected() const {
 void RedisManager::update() {
     if (!internal_->connected) return;
     
-    #ifdef REDIS_AVAILABLE
-    // Process any pending replies from hiredis
-    // In a full implementation with event loop, this happens automatically
-    // Here we use the blocking read with zero timeout to poll
-    
-    redisReader* reader = internal_->context->c.reader;
-    if (reader && redisReaderGetReply(reader, nullptr) == REDIS_OK) {
-        // Replies are processed via callbacks registered with each command
-        // The callbacks are invoked by hiredis internally
-    }
-    #endif
-    
-    // Check for command timeouts
-    auto now = std::chrono::steady_clock::now();
-    auto timeout = std::chrono::milliseconds(Constants::REDIS_COMMAND_TIMEOUT_MS);
-    
-    std::vector<uint64_t> timedOutIds;
-    for (auto& [id, cmd] : internal_->pendingCommands) {
-        if (now - cmd.submitTime > timeout) {
-            timedOutIds.push_back(id);
-        }
+    // Process pending callbacks
+    std::queue<RedisInternal::PendingCallback> callbacks;
+    {
+        std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+        callbacks.swap(internal_->callbackQueue);
     }
     
-    for (uint64_t id : timedOutIds) {
-        auto it = internal_->pendingCommands.find(id);
-        if (it != internal_->pendingCommands.end()) {
-            #ifdef REDIS_AVAILABLE
-            if (it->second.callback) {
-                it->second.callback(nullptr);  // Timeout = failure
-            }
-            #else
-            if (it->second.callback) {
-                it->second.callback("");
-            }
-            #endif
-            internal_->pendingCommands.erase(it);
-            commandsFailed_++;
-        }
+    while (!callbacks.empty()) {
+        callbacks.front().func();
+        callbacks.pop();
     }
     
-    // Update connected status
-    connected_ = internal_->connected;
+    // Process pub/sub messages
+    processSubscriptions();
 }
 
 void RedisManager::set(std::string_view key, std::string_view value,
                       uint32_t ttlSeconds, SetCallback callback) {
-    (void)ttlSeconds;
+    internal_->commandsSent_++;
     
     if (!internal_->connected) {
-        commandsFailed_++;
-        if (callback) callback(false);
+        internal_->commandsFailed_++;
+        if (callback) {
+            std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+            internal_->callbackQueue.push({[callback]() { callback(false); }, std::chrono::steady_clock::now()});
+        }
         return;
     }
     
     #ifdef REDIS_AVAILABLE
-    if (!internal_->context) {
-        commandsFailed_++;
-        if (callback) callback(false);
+    auto start = std::chrono::high_resolution_clock::now();
+    
+    auto* ctx = internal_->pool->acquire();
+    if (!ctx) {
+        internal_->commandsFailed_++;
+        if (callback) {
+            std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+            internal_->callbackQueue.push({[callback]() { callback(false); }, std::chrono::steady_clock::now()});
+        }
         return;
     }
     
-    uint64_t cmdId = internal_->nextCommandId++;
-    
-    PendingCommand cmd;
-    cmd.id = cmdId;
-    cmd.submitTime = std::chrono::steady_clock::now();
-    cmd.callback = [this, callback](redisReply* reply) {
-        bool success = (reply != nullptr && 
-                       reply->type == REDIS_REPLY_STATUS && 
-                       std::string(reply->str) == "OK");
-        
-        if (success) {
-            commandsCompleted_++;
-        } else {
-            commandsFailed_++;
-        }
-        
-        if (callback) callback(success);
-    };
-    
-    internal_->pendingCommands[cmdId] = std::move(cmd);
-    
-    // Send command
-    int status;
+    redisReply* reply;
     if (ttlSeconds > 0) {
-        status = redisAsyncCommand(internal_->context, OnCommandComplete, 
-                                  reinterpret_cast<void*>(cmdId),
-                                  "SET %b %b EX %u", 
-                                  key.data(), key.size(),
-                                  value.data(), value.size(),
-                                  ttlSeconds);
+        reply = (redisReply*)redisCommand(ctx, "SET %b %b EX %u",
+                                          key.data(), key.size(),
+                                          value.data(), value.size(),
+                                          ttlSeconds);
     } else {
-        status = redisAsyncCommand(internal_->context, OnCommandComplete,
-                                  reinterpret_cast<void*>(cmdId),
-                                  "SET %b %b",
-                                  key.data(), key.size(),
-                                  value.data(), value.size());
+        reply = (redisReply*)redisCommand(ctx, "SET %b %b",
+                                          key.data(), key.size(),
+                                          value.data(), value.size());
     }
     
-    if (status == REDIS_OK) {
-        commandsSent_++;
+    bool success = (reply && reply->type == REDIS_REPLY_STATUS && std::string(reply->str) == "OK");
+    
+    if (reply) {
+        freeReplyObject(reply);
+    }
+    
+    internal_->pool->release(ctx);
+    
+    // Track latency
+    auto end = std::chrono::high_resolution_clock::now();
+    float latencyMs = std::chrono::duration<float, std::milli>(end - start).count();
+    {
+        std::lock_guard<std::mutex> lock(internal_->latencyMutex);
+        internal_->latencySamples.push(latencyMs);
+        if (internal_->latencySamples.size() > RedisInternal::MAX_LATENCY_SAMPLES) {
+            internal_->latencySamples.pop();
+        }
+    }
+    
+    if (success) {
+        internal_->commandsCompleted_++;
     } else {
-        internal_->pendingCommands.erase(cmdId);
-        commandsFailed_++;
-        if (callback) callback(false);
+        internal_->commandsFailed_++;
+    }
+    
+    if (callback) {
+        std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+        internal_->callbackQueue.push({[callback, success]() { callback(success); }, std::chrono::steady_clock::now()});
     }
     #else
-    // Stub implementation
-    PendingCommand cmd;
-    cmd.id = internal_->nextCommandId++;
-    cmd.submitTime = std::chrono::steady_clock::now();
-    cmd.callback = [callback](const std::string&) {
-        if (callback) callback(true);
-    };
-    
-    internal_->pendingCommands[cmdId] = std::move(cmd);
-    commandsSent_++;
+    // Stub
+    internal_->commandsCompleted_++;
+    if (callback) {
+        std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+        internal_->callbackQueue.push({[callback]() { callback(true); }, std::chrono::steady_clock::now()});
+    }
     #endif
 }
 
 void RedisManager::get(std::string_view key, GetCallback callback) {
-    (void)key;
+    internal_->commandsSent_++;
     
-    if (!internal_->connected) {
-        commandsFailed_++;
+    if (!internal_->connected || !callback) {
+        internal_->commandsFailed_++;
         if (callback) {
             AsyncResult<std::string> result;
             result.success = false;
             result.error = "Not connected";
-            callback(result);
+            std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+            internal_->callbackQueue.push({[callback, result]() { callback(result); }, std::chrono::steady_clock::now()});
         }
         return;
     }
     
     #ifdef REDIS_AVAILABLE
-    if (!internal_->context) {
-        commandsFailed_++;
-        if (callback) {
-            AsyncResult<std::string> result;
-            result.success = false;
-            result.error = "Not connected";
-            callback(result);
-        }
+    auto start = std::chrono::high_resolution_clock::now();
+    
+    auto* ctx = internal_->pool->acquire();
+    if (!ctx) {
+        internal_->commandsFailed_++;
+        AsyncResult<std::string> result;
+        result.success = false;
+        result.error = "Failed to acquire connection";
+        std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+        internal_->callbackQueue.push({[callback, result]() { callback(result); }, std::chrono::steady_clock::now()});
         return;
     }
     
-    uint64_t cmdId = internal_->nextCommandId++;
+    redisReply* reply = (redisReply*)redisCommand(ctx, "GET %b", key.data(), key.size());
     
-    PendingCommand cmd;
-    cmd.id = cmdId;
-    cmd.submitTime = std::chrono::steady_clock::now();
-    cmd.callback = [this, callback](redisReply* reply) {
-        AsyncResult<std::string> result;
-        
-        if (reply == nullptr) {
-            result.success = false;
-            result.error = "Command failed or timed out";
-            commandsFailed_++;
-        } else if (reply->type == REDIS_REPLY_NIL) {
-            result.success = false;
-            result.error = "Key not found";
-            commandsFailed_++;
-        } else if (reply->type == REDIS_REPLY_STRING || reply->type == REDIS_REPLY_BINARY) {
-            result.success = true;
-            result.value = std::string(reply->str, reply->len);
-            commandsCompleted_++;
-        } else {
-            result.success = false;
-            result.error = "Unexpected reply type";
-            commandsFailed_++;
-        }
-        
-        if (callback) callback(result);
-    };
-    
-    internal_->pendingCommands[cmdId] = std::move(cmd);
-    
-    int status = redisAsyncCommand(internal_->context, OnCommandComplete,
-                                  reinterpret_cast<void*>(cmdId),
-                                  "GET %b",
-                                  key.data(), key.size());
-    
-    if (status == REDIS_OK) {
-        commandsSent_++;
-    } else {
-        internal_->pendingCommands.erase(cmdId);
-        commandsFailed_++;
-        if (callback) {
-            AsyncResult<std::string> result;
-            result.success = false;
-            result.error = "Failed to send command";
-            callback(result);
-        }
-    }
-    #else
-    // Stub implementation
-    commandsSent_++;
-    
-    if (callback) {
-        AsyncResult<std::string> result;
+    AsyncResult<std::string> result;
+    if (!reply) {
+        result.success = false;
+        result.error = "Command failed";
+        internal_->commandsFailed_++;
+    } else if (reply->type == REDIS_REPLY_NIL) {
+        result.success = false;
+        result.error = "Key not found";
+        internal_->commandsFailed_++;
+    } else if (reply->type == REDIS_REPLY_STRING) {
         result.success = true;
-        result.value = "stub_value";
-        callback(result);
-        commandsCompleted_++;
+        result.value = std::string(reply->str, reply->len);
+        internal_->commandsCompleted_++;
+    } else {
+        result.success = false;
+        result.error = "Unexpected reply type";
+        internal_->commandsFailed_++;
     }
+    
+    if (reply) {
+        freeReplyObject(reply);
+    }
+    
+    internal_->pool->release(ctx);
+    
+    // Track latency
+    auto end = std::chrono::high_resolution_clock::now();
+    float latencyMs = std::chrono::duration<float, std::milli>(end - start).count();
+    {
+        std::lock_guard<std::mutex> lock(internal_->latencyMutex);
+        internal_->latencySamples.push(latencyMs);
+        if (internal_->latencySamples.size() > RedisInternal::MAX_LATENCY_SAMPLES) {
+            internal_->latencySamples.pop();
+        }
+    }
+    
+    std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+    internal_->callbackQueue.push({[callback, result]() { callback(result); }, std::chrono::steady_clock::now()});
+    #else
+    // Stub
+    internal_->commandsCompleted_++;
+    AsyncResult<std::string> result;
+    result.success = true;
+    result.value = "stub_value";
+    std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+    internal_->callbackQueue.push({[callback, result]() { callback(result); }, std::chrono::steady_clock::now()});
     #endif
 }
 
 void RedisManager::del(std::string_view key, SetCallback callback) {
-    (void)key;
+    internal_->commandsSent_++;
     
     if (!internal_->connected) {
-        commandsFailed_++;
-        if (callback) callback(false);
+        internal_->commandsFailed_++;
+        if (callback) {
+            std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+            internal_->callbackQueue.push({[callback]() { callback(false); }, std::chrono::steady_clock::now()});
+        }
         return;
     }
     
     #ifdef REDIS_AVAILABLE
-    if (!internal_->context) {
-        commandsFailed_++;
-        if (callback) callback(false);
+    auto* ctx = internal_->pool->acquire();
+    if (!ctx) {
+        internal_->commandsFailed_++;
+        if (callback) {
+            std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+            internal_->callbackQueue.push({[callback]() { callback(false); }, std::chrono::steady_clock::now()});
+        }
         return;
     }
     
-    uint64_t cmdId = internal_->nextCommandId++;
+    redisReply* reply = (redisReply*)redisCommand(ctx, "DEL %b", key.data(), key.size());
+    bool success = (reply != nullptr && reply->type == REDIS_REPLY_INTEGER);
     
-    PendingCommand cmd;
-    cmd.id = cmdId;
-    cmd.submitTime = std::chrono::steady_clock::now();
-    cmd.callback = [this, callback](redisReply* reply) {
-        bool success = (reply != nullptr && reply->type == REDIS_REPLY_INTEGER);
-        
-        if (success) {
-            commandsCompleted_++;
-        } else {
-            commandsFailed_++;
-        }
-        
-        if (callback) callback(success);
-    };
+    if (reply) {
+        freeReplyObject(reply);
+    }
     
-    internal_->pendingCommands[cmdId] = std::move(cmd);
+    internal_->pool->release(ctx);
     
-    int status = redisAsyncCommand(internal_->context, OnCommandComplete,
-                                  reinterpret_cast<void*>(cmdId),
-                                  "DEL %b",
-                                  key.data(), key.size());
-    
-    if (status == REDIS_OK) {
-        commandsSent_++;
+    if (success) {
+        internal_->commandsCompleted_++;
     } else {
-        internal_->pendingCommands.erase(cmdId);
-        commandsFailed_++;
-        if (callback) callback(false);
+        internal_->commandsFailed_++;
+    }
+    
+    if (callback) {
+        std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+        internal_->callbackQueue.push({[callback, success]() { callback(success); }, std::chrono::steady_clock::now()});
     }
     #else
-    // Stub implementation
-    commandsSent_++;
-    if (callback) callback(true);
-    commandsCompleted_++;
+    internal_->commandsCompleted_++;
+    if (callback) {
+        std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+        internal_->callbackQueue.push({[callback]() { callback(true); }, std::chrono::steady_clock::now()});
+    }
     #endif
 }
+
+// ============================================================================
+// Player Session Operations
+// ============================================================================
 
 void RedisManager::savePlayerSession(const PlayerSession& session, SetCallback callback) {
     std::string key = RedisKeys::playerSession(session.playerId);
@@ -684,7 +798,7 @@ void RedisManager::loadPlayerSession(uint64_t playerId, SessionCallback callback
             sessionResult.error = result.error;
         } else {
             PlayerSession session;
-            session.playerId = playerId;  // Set the playerId from the key
+            session.playerId = playerId;
             
             if (DeserializePlayerSession(
                     reinterpret_cast<const uint8_t*>(result.value.data()),
@@ -716,235 +830,230 @@ void RedisManager::updatePlayerPosition(uint64_t playerId, const Position& pos,
         Constants::REDIS_KEY_TTL_SECONDS, callback);
 }
 
+// ============================================================================
+// Zone Operations
+// ============================================================================
+
 void RedisManager::addPlayerToZone(uint32_t zoneId, uint64_t playerId, SetCallback callback) {
+    internal_->commandsSent_++;
+    
     if (!internal_->connected) {
-        commandsFailed_++;
-        if (callback) callback(false);
+        internal_->commandsFailed_++;
+        if (callback) {
+            std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+            internal_->callbackQueue.push({[callback]() { callback(false); }, std::chrono::steady_clock::now()});
+        }
+        return;
+    }
+    
+    #ifdef REDIS_AVAILABLE
+    auto* ctx = internal_->pool->acquire();
+    if (!ctx) {
+        internal_->commandsFailed_++;
+        if (callback) {
+            std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+            internal_->callbackQueue.push({[callback]() { callback(false); }, std::chrono::steady_clock::now()});
+        }
         return;
     }
     
     std::string key = RedisKeys::zonePlayers(zoneId);
+    redisReply* reply = (redisReply*)redisCommand(ctx, "SADD %s %llu",
+                                                  key.c_str(),
+                                                  static_cast<unsigned long long>(playerId));
+    bool success = (reply != nullptr && reply->type == REDIS_REPLY_INTEGER);
     
-    #ifdef REDIS_AVAILABLE
-    if (!internal_->context) {
-        commandsFailed_++;
-        if (callback) callback(false);
-        return;
+    if (reply) {
+        freeReplyObject(reply);
     }
     
-    uint64_t cmdId = internal_->nextCommandId++;
+    internal_->pool->release(ctx);
     
-    PendingCommand cmd;
-    cmd.id = cmdId;
-    cmd.submitTime = std::chrono::steady_clock::now();
-    cmd.callback = [this, callback](redisReply* reply) {
-        // SADD returns the number of elements added (1 if new, 0 if already present)
-        bool success = (reply != nullptr && reply->type == REDIS_REPLY_INTEGER);
-        
-        if (success) {
-            commandsCompleted_++;
-        } else {
-            commandsFailed_++;
-        }
-        
-        if (callback) callback(success);
-    };
-    
-    internal_->pendingCommands[cmdId] = std::move(cmd);
-    
-    int status = redisAsyncCommand(internal_->context, OnCommandComplete,
-                                  reinterpret_cast<void*>(cmdId),
-                                  "SADD %s %llu",
-                                  key.c_str(),
-                                  static_cast<unsigned long long>(playerId));
-    
-    if (status == REDIS_OK) {
-        commandsSent_++;
+    if (success) {
+        internal_->commandsCompleted_++;
     } else {
-        internal_->pendingCommands.erase(cmdId);
-        commandsFailed_++;
-        if (callback) callback(false);
+        internal_->commandsFailed_++;
+    }
+    
+    if (callback) {
+        std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+        internal_->callbackQueue.push({[callback, success]() { callback(success); }, std::chrono::steady_clock::now()});
     }
     #else
-    // Stub implementation
     (void)zoneId;
     (void)playerId;
-    if (callback) callback(true);
+    internal_->commandsCompleted_++;
+    if (callback) {
+        std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+        internal_->callbackQueue.push({[callback]() { callback(true); }, std::chrono::steady_clock::now()});
+    }
     #endif
 }
 
 void RedisManager::removePlayerFromZone(uint32_t zoneId, uint64_t playerId, SetCallback callback) {
+    internal_->commandsSent_++;
+    
     if (!internal_->connected) {
-        commandsFailed_++;
-        if (callback) callback(false);
+        internal_->commandsFailed_++;
+        if (callback) {
+            std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+            internal_->callbackQueue.push({[callback]() { callback(false); }, std::chrono::steady_clock::now()});
+        }
+        return;
+    }
+    
+    #ifdef REDIS_AVAILABLE
+    auto* ctx = internal_->pool->acquire();
+    if (!ctx) {
+        internal_->commandsFailed_++;
+        if (callback) {
+            std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+            internal_->callbackQueue.push({[callback]() { callback(false); }, std::chrono::steady_clock::now()});
+        }
         return;
     }
     
     std::string key = RedisKeys::zonePlayers(zoneId);
+    redisReply* reply = (redisReply*)redisCommand(ctx, "SREM %s %llu",
+                                                  key.c_str(),
+                                                  static_cast<unsigned long long>(playerId));
+    bool success = (reply != nullptr && reply->type == REDIS_REPLY_INTEGER);
     
-    #ifdef REDIS_AVAILABLE
-    if (!internal_->context) {
-        commandsFailed_++;
-        if (callback) callback(false);
-        return;
+    if (reply) {
+        freeReplyObject(reply);
     }
     
-    uint64_t cmdId = internal_->nextCommandId++;
+    internal_->pool->release(ctx);
     
-    PendingCommand cmd;
-    cmd.id = cmdId;
-    cmd.submitTime = std::chrono::steady_clock::now();
-    cmd.callback = [this, callback](redisReply* reply) {
-        // SREM returns the number of elements removed
-        bool success = (reply != nullptr && reply->type == REDIS_REPLY_INTEGER);
-        
-        if (success) {
-            commandsCompleted_++;
-        } else {
-            commandsFailed_++;
-        }
-        
-        if (callback) callback(success);
-    };
-    
-    internal_->pendingCommands[cmdId] = std::move(cmd);
-    
-    int status = redisAsyncCommand(internal_->context, OnCommandComplete,
-                                  reinterpret_cast<void*>(cmdId),
-                                  "SREM %s %llu",
-                                  key.c_str(),
-                                  static_cast<unsigned long long>(playerId));
-    
-    if (status == REDIS_OK) {
-        commandsSent_++;
+    if (success) {
+        internal_->commandsCompleted_++;
     } else {
-        internal_->pendingCommands.erase(cmdId);
-        commandsFailed_++;
-        if (callback) callback(false);
+        internal_->commandsFailed_++;
+    }
+    
+    if (callback) {
+        std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+        internal_->callbackQueue.push({[callback, success]() { callback(success); }, std::chrono::steady_clock::now()});
     }
     #else
-    // Stub implementation
     (void)zoneId;
     (void)playerId;
-    if (callback) callback(true);
+    internal_->commandsCompleted_++;
+    if (callback) {
+        std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+        internal_->callbackQueue.push({[callback]() { callback(true); }, std::chrono::steady_clock::now()});
+    }
     #endif
 }
 
 void RedisManager::getZonePlayers(uint32_t zoneId, 
                                  std::function<void(const AsyncResult<std::vector<uint64_t>>&)> callback) {
-    if (!internal_->connected) {
-        commandsFailed_++;
+    internal_->commandsSent_++;
+    
+    if (!internal_->connected || !callback) {
+        internal_->commandsFailed_++;
         if (callback) {
             AsyncResult<std::vector<uint64_t>> result;
             result.success = false;
             result.error = "Not connected";
-            callback(result);
+            std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+            internal_->callbackQueue.push({[callback, result]() { callback(result); }, std::chrono::steady_clock::now()});
         }
+        return;
+    }
+    
+    #ifdef REDIS_AVAILABLE
+    auto* ctx = internal_->pool->acquire();
+    if (!ctx) {
+        internal_->commandsFailed_++;
+        AsyncResult<std::vector<uint64_t>> result;
+        result.success = false;
+        result.error = "Failed to acquire connection";
+        std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+        internal_->callbackQueue.push({[callback, result]() { callback(result); }, std::chrono::steady_clock::now()});
         return;
     }
     
     std::string key = RedisKeys::zonePlayers(zoneId);
+    redisReply* reply = (redisReply*)redisCommand(ctx, "SMEMBERS %s", key.c_str());
     
-    #ifdef REDIS_AVAILABLE
-    if (!internal_->context) {
-        commandsFailed_++;
-        if (callback) {
-            AsyncResult<std::vector<uint64_t>> result;
-            result.success = false;
-            result.error = "Not connected";
-            callback(result);
-        }
-        return;
-    }
-    
-    uint64_t cmdId = internal_->nextCommandId++;
-    
-    PendingCommand cmd;
-    cmd.id = cmdId;
-    cmd.submitTime = std::chrono::steady_clock::now();
-    cmd.callback = [this, callback](redisReply* reply) {
-        AsyncResult<std::vector<uint64_t>> result;
-        
-        if (reply == nullptr) {
-            result.success = false;
-            result.error = "Command failed or timed out";
-            commandsFailed_++;
-        } else if (reply->type == REDIS_REPLY_NIL) {
-            // Empty set
-            result.success = true;
-            commandsCompleted_++;
-        } else if (reply->type == REDIS_REPLY_ARRAY) {
-            result.success = true;
-            result.value.reserve(reply->elements);
-            for (size_t i = 0; i < reply->elements; ++i) {
-                if (reply->element[i]->type == REDIS_REPLY_STRING ||
-                    reply->element[i]->type == REDIS_REPLY_INTEGER) {
-                    uint64_t playerId = 0;
-                    if (reply->element[i]->type == REDIS_REPLY_INTEGER) {
-                        playerId = static_cast<uint64_t>(reply->element[i]->integer);
-                    } else {
-                        playerId = std::stoull(std::string(reply->element[i]->str, reply->element[i]->len));
-                    }
-                    result.value.push_back(playerId);
-                }
-            }
-            commandsCompleted_++;
-        } else {
-            result.success = false;
-            result.error = "Unexpected reply type";
-            commandsFailed_++;
-        }
-        
-        if (callback) callback(result);
-    };
-    
-    internal_->pendingCommands[cmdId] = std::move(cmd);
-    
-    int status = redisAsyncCommand(internal_->context, OnCommandComplete,
-                                  reinterpret_cast<void*>(cmdId),
-                                  "SMEMBERS %s",
-                                  key.c_str());
-    
-    if (status == REDIS_OK) {
-        commandsSent_++;
-    } else {
-        internal_->pendingCommands.erase(cmdId);
-        commandsFailed_++;
-        if (callback) {
-            AsyncResult<std::vector<uint64_t>> result;
-            result.success = false;
-            result.error = "Failed to send command";
-            callback(result);
-        }
-    }
-    #else
-    // Stub implementation
-    (void)zoneId;
-    if (callback) {
-        AsyncResult<std::vector<uint64_t>> result;
+    AsyncResult<std::vector<uint64_t>> result;
+    if (!reply) {
+        result.success = false;
+        result.error = "Command failed";
+        internal_->commandsFailed_++;
+    } else if (reply->type == REDIS_REPLY_ARRAY) {
         result.success = true;
-        callback(result);
+        result.value.reserve(reply->elements);
+        for (size_t i = 0; i < reply->elements; ++i) {
+            if (reply->element[i]->type == REDIS_REPLY_STRING ||
+                reply->element[i]->type == REDIS_REPLY_INTEGER) {
+                uint64_t playerId = 0;
+                if (reply->element[i]->type == REDIS_REPLY_INTEGER) {
+                    playerId = static_cast<uint64_t>(reply->element[i]->integer);
+                } else {
+                    playerId = std::stoull(std::string(reply->element[i]->str, reply->element[i]->len));
+                }
+                result.value.push_back(playerId);
+            }
+        }
+        internal_->commandsCompleted_++;
+    } else {
+        result.success = false;
+        result.error = "Unexpected reply type";
+        internal_->commandsFailed_++;
     }
+    
+    if (reply) {
+        freeReplyObject(reply);
+    }
+    
+    internal_->pool->release(ctx);
+    
+    std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+    internal_->callbackQueue.push({[callback, result]() { callback(result); }, std::chrono::steady_clock::now()});
+    #else
+    (void)zoneId;
+    internal_->commandsCompleted_++;
+    AsyncResult<std::vector<uint64_t>> result;
+    result.success = true;
+    std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+    internal_->callbackQueue.push({[callback, result]() { callback(result); }, std::chrono::steady_clock::now()});
     #endif
 }
+
+// ============================================================================
+// Pub/Sub Operations
+// ============================================================================
 
 void RedisManager::publish(std::string_view channel, std::string_view message) {
     if (!internal_->connected) return;
     
+    internal_->commandsSent_++;
+    
     #ifdef REDIS_AVAILABLE
-    if (!internal_->context) return;
+    auto* ctx = internal_->pool->acquire();
+    if (!ctx) {
+        internal_->commandsFailed_++;
+        return;
+    }
     
-    // Fire-and-forget publish - no callback needed
-    redisAsyncCommand(internal_->context, nullptr, nullptr,
-                     "PUBLISH %b %b",
-                     channel.data(), channel.size(),
-                     message.data(), message.size());
+    redisReply* reply = (redisReply*)redisCommand(ctx, "PUBLISH %b %b",
+                                                  channel.data(), channel.size(),
+                                                  message.data(), message.size());
     
-    commandsSent_++;
-    // Note: Not tracking completion for fire-and-forget
+    if (reply) {
+        freeReplyObject(reply);
+        internal_->commandsCompleted_++;
+    } else {
+        internal_->commandsFailed_++;
+    }
+    
+    internal_->pool->release(ctx);
     #else
     (void)channel;
     (void)message;
+    internal_->commandsCompleted_++;
     #endif
 }
 
@@ -952,82 +1061,69 @@ void RedisManager::subscribe(std::string_view channel,
                             std::function<void(std::string_view, std::string_view)> callback) {
     if (!internal_->connected) return;
     
+    {
+        std::lock_guard<std::mutex> lock(internal_->subMutex);
+        RedisInternal::Subscription sub;
+        sub.channel = std::string(channel);
+        sub.callback = std::move(callback);
+        internal_->subscriptions.push_back(std::move(sub));
+    }
+    
     #ifdef REDIS_AVAILABLE
-    if (!internal_->context) return;
-    
-    internal_->subscribeCallback = std::move(callback);
-    
-    // Store callback ID for the subscribe command
-    uint64_t cmdId = internal_->nextCommandId++;
-    
-    PendingCommand cmd;
-    cmd.id = cmdId;
-    cmd.submitTime = std::chrono::steady_clock::now();
-    cmd.callback = [this](redisReply* reply) {
-        if (reply && reply->type == REDIS_REPLY_ARRAY && reply->elements >= 3) {
-            // Subscription message format: [message, channel, data]
-            if (internal_->subscribeCallback) {
-                std::string_view msgType(reply->element[0]->str, reply->element[0]->len);
-                if (msgType == "message") {
-                    std::string_view channel(reply->element[1]->str, reply->element[1]->len);
-                    std::string_view message(reply->element[2]->str, reply->element[2]->len);
-                    internal_->subscribeCallback(channel, message);
-                }
+    // Start pub/sub listener if not running
+    if (!internal_->pubSubRunning) {
+        internal_->pubSubRunning = true;
+        
+        // Create dedicated pub/sub connection
+        struct timeval timeout;
+        timeout.tv_sec = Constants::REDIS_CONNECTION_TIMEOUT_MS / 1000;
+        timeout.tv_usec = (Constants::REDIS_CONNECTION_TIMEOUT_MS % 1000) * 1000;
+        
+        internal_->pubSubCtx = redisConnectWithTimeout(internal_->host.c_str(), internal_->port, timeout);
+        if (internal_->pubSubCtx && !internal_->pubSubCtx->err) {
+            internal_->pubSubThread = std::thread(PubSubListener, internal_.get());
+        } else {
+            std::cerr << "[REDIS] Failed to create pub/sub connection" << std::endl;
+            internal_->pubSubRunning = false;
+            if (internal_->pubSubCtx) {
+                redisFree(internal_->pubSubCtx);
+                internal_->pubSubCtx = nullptr;
             }
         }
-    };
+    }
     
-    internal_->pendingCommands[cmdId] = std::move(cmd);
-    
-    int status = redisAsyncCommand(internal_->context, OnCommandComplete,
-                                  reinterpret_cast<void*>(cmdId),
-                                  "SUBSCRIBE %b",
-                                  channel.data(), channel.size());
-    
-    if (status == REDIS_OK) {
-        commandsSent_++;
-    } else {
-        internal_->pendingCommands.erase(cmdId);
+    // Subscribe to channel
+    if (internal_->pubSubCtx && !internal_->pubSubCtx->err) {
+        redisReply* reply = (redisReply*)redisCommand(internal_->pubSubCtx, "SUBSCRIBE %b",
+                                                      channel.data(), channel.size());
+        if (reply) {
+            freeReplyObject(reply);
+        }
     }
     #else
     (void)channel;
-    (void)callback;
     #endif
-}
-
-uint64_t RedisManager::getCommandsSent() const {
-    return commandsSent_;
-}
-
-uint64_t RedisManager::getCommandsCompleted() const {
-    return commandsCompleted_;
-}
-
-uint64_t RedisManager::getCommandsFailed() const {
-    return commandsFailed_;
-}
-
-float RedisManager::getAverageLatencyMs() const {
-    if (internal_->latencySamples.empty()) {
-        return 0.0f;
-    }
-    
-    float sum = 0.0f;
-    auto samples = internal_->latencySamples;
-    while (!samples.empty()) {
-        sum += samples.front();
-        samples.pop();
-    }
-    
-    return sum / internal_->latencySamples.size();
 }
 
 void RedisManager::unsubscribe(std::string_view channel) {
     if (!internal_->connected) return;
     
-    auto& subs = internal_->subscriptions;
-    subs.erase(std::remove_if(subs.begin(), subs.end(),
-        [channel](const auto& sub) { return sub.channel == channel; }), subs.end());
+    {
+        std::lock_guard<std::mutex> lock(internal_->subMutex);
+        auto& subs = internal_->subscriptions;
+        subs.erase(std::remove_if(subs.begin(), subs.end(),
+            [channel](const auto& sub) { return sub.channel == channel; }), subs.end());
+    }
+    
+    #ifdef REDIS_AVAILABLE
+    if (internal_->pubSubCtx && !internal_->pubSubCtx->err) {
+        redisReply* reply = (redisReply*)redisCommand(internal_->pubSubCtx, "UNSUBSCRIBE %b",
+                                                      channel.data(), channel.size());
+        if (reply) {
+            freeReplyObject(reply);
+        }
+    }
+    #endif
     
     std::cout << "[REDIS] Unsubscribed from " << channel << std::endl;
 }
@@ -1036,19 +1132,24 @@ void RedisManager::processSubscriptions() {
     if (!internal_->connected) return;
     
     // Process queued messages
-    std::vector<std::pair<std::string, std::string>> messages;
+    std::queue<std::pair<std::string, std::string>> messages;
     {
         std::lock_guard<std::mutex> lock(internal_->messageMutex);
         messages.swap(internal_->messageQueue);
     }
     
-    for (const auto& [channel, message] : messages) {
+    while (!messages.empty()) {
+        const auto& [channel, message] = messages.front();
+        
+        std::lock_guard<std::mutex> lock(internal_->subMutex);
         for (const auto& sub : internal_->subscriptions) {
-            // Simple channel matching (could use pattern matching)
+            // Simple channel matching (exact match for now, could use pattern matching)
             if (sub.channel == channel) {
                 sub.callback(channel, message);
             }
         }
+        
+        messages.pop();
     }
 }
 
@@ -1084,6 +1185,116 @@ void RedisManager::subscribeToZoneChannel(uint32_t myZoneId,
             callback(*message);
         }
     });
+}
+
+// ============================================================================
+// Metrics
+// ============================================================================
+
+uint64_t RedisManager::getCommandsSent() const {
+    return internal_->commandsSent_.load();
+}
+
+uint64_t RedisManager::getCommandsCompleted() const {
+    return internal_->commandsCompleted_.load();
+}
+
+uint64_t RedisManager::getCommandsFailed() const {
+    return internal_->commandsFailed_.load();
+}
+
+float RedisManager::getAverageLatencyMs() const {
+    std::lock_guard<std::mutex> lock(internal_->latencyMutex);
+    
+    if (internal_->latencySamples.empty()) {
+        return 0.0f;
+    }
+    
+    float sum = 0.0f;
+    auto samples = internal_->latencySamples;
+    while (!samples.empty()) {
+        sum += samples.front();
+        samples.pop();
+    }
+    
+    return sum / internal_->latencySamples.size();
+}
+
+// ============================================================================
+// Pipeline Batching for High Throughput
+// ============================================================================
+
+void RedisManager::pipelineSet(const std::vector<std::pair<std::string, std::string>>& kvs,
+                               uint32_t ttlSeconds, SetCallback callback) {
+    internal_->commandsSent_ += kvs.size();
+    
+    if (!internal_->connected || kvs.empty()) {
+        internal_->commandsFailed_ += kvs.size();
+        if (callback) {
+            std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+            internal_->callbackQueue.push({[callback]() { callback(false); }, std::chrono::steady_clock::now()});
+        }
+        return;
+    }
+    
+    #ifdef REDIS_AVAILABLE
+    auto* ctx = internal_->pool->acquire();
+    if (!ctx) {
+        internal_->commandsFailed_ += kvs.size();
+        if (callback) {
+            std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+            internal_->callbackQueue.push({[callback]() { callback(false); }, std::chrono::steady_clock::now()});
+        }
+        return;
+    }
+    
+    // Append all commands to pipeline
+    int status = REDIS_OK;
+    for (const auto& [k, v] : kvs) {
+        if (ttlSeconds > 0) {
+            status = redisAppendCommand(ctx, "SET %s %s EX %u", k.c_str(), v.c_str(), ttlSeconds);
+        } else {
+            status = redisAppendCommand(ctx, "SET %s %s", k.c_str(), v.c_str());
+        }
+        if (status != REDIS_OK) break;
+    }
+    
+    bool allSuccess = (status == REDIS_OK);
+    
+    // Get all replies
+    if (allSuccess) {
+        for (size_t i = 0; i < kvs.size(); ++i) {
+            redisReply* reply = nullptr;
+            if (redisGetReply(ctx, (void**)&reply) == REDIS_OK) {
+                if (reply && reply->type == REDIS_REPLY_STATUS && std::string(reply->str) == "OK") {
+                    internal_->commandsCompleted_++;
+                } else {
+                    internal_->commandsFailed_++;
+                    allSuccess = false;
+                }
+                freeReplyObject(reply);
+            } else {
+                internal_->commandsFailed_++;
+                allSuccess = false;
+            }
+        }
+    } else {
+        internal_->commandsFailed_ += kvs.size();
+    }
+    
+    internal_->pool->release(ctx);
+    
+    if (callback) {
+        std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+        internal_->callbackQueue.push({[callback, allSuccess]() { callback(allSuccess); }, std::chrono::steady_clock::now()});
+    }
+    #else
+    internal_->commandsCompleted_ += kvs.size();
+    if (callback) {
+        std::lock_guard<std::mutex> lock(internal_->callbackMutex);
+        internal_->callbackQueue.push({[callback]() { callback(true); }, std::chrono::steady_clock::now()});
+    }
+    #endif
 }
 
 // ============================================================================

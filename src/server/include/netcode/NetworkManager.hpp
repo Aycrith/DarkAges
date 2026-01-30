@@ -90,8 +90,14 @@ public:
     void broadcastSnapshot(std::span<const uint8_t> data);
     void broadcastEvent(std::span<const uint8_t> data);
     
+    // Send to multiple specific connections
+    void sendToMultiple(const std::vector<ConnectionID>& conns, std::span<const uint8_t> data);
+    
     // Get pending inputs (call after update())
     [[nodiscard]] std::vector<ClientInputPacket> getPendingInputs();
+    
+    // Clear processed inputs up to a sequence number
+    void clearProcessedInputs(uint32_t upToSequence);
     
     // Connection management
     void disconnect(ConnectionID connectionId, const char* reason = nullptr);
@@ -230,6 +236,13 @@ namespace Protocol {
         const Velocity& velocity,
         uint32_t lastProcessedInput
     );
+    
+    // [NETWORK_AGENT] Protocol versioning
+    // Returns the current protocol version (major << 16 | minor)
+    uint32_t getProtocolVersion();
+    
+    // Check if client version is compatible with server
+    bool isVersionCompatible(uint32_t clientVersion);
 }
 
 } // namespace DarkAges
