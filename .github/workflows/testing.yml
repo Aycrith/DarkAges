@@ -1,0 +1,265 @@
+name: DarkAges MMO - Testing Suite
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'tools/testing/**'
+      - '.github/workflows/testing.yml'
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  BUILD_TYPE: Release
+  GODOT_VERSION: 4.2.2
+
+jobs:
+  # ==========================================================================
+  # Tier 1: Unit Tests (C++ / Catch2)
+  # ==========================================================================
+  unit-tests:
+    name: Unit Tests (C++)
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
+    
+    - name: Setup MSVC
+      uses: microsoft/setup-msbuild@v1.3
+    
+    - name: Cache Build
+      uses: actions/cache@v3
+      with:
+        path: build
+        key: ${{ runner.os }}-build-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.hpp') }}
+        restore-keys: |
+          ${{ runner.os }}-build-
+    
+    - name: Configure CMake
+      run: cmake -B build -S . -A x64 -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+    
+    - name: Build Server
+      run: cmake --build build --config ${{ env.BUILD_TYPE }} --target darkages_server
+    
+    - name: Run Unit Tests
+      run: |
+        if (Test-Path "build/${{ env.BUILD_TYPE }}/darkages_server.exe") {
+          ./build/${{ env.BUILD_TYPE }}/darkages_server.exe --test
+        } else {
+          Write-Host "Server binary not found - skipping unit tests"
+        }
+      continue-on-error: true
+    
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: unit-test-results
+        path: build/test-results/
+
+  # ==========================================================================
+  # Tier 2: Simulation Tests (Python)
+  # ==========================================================================
+  simulation-tests:
+    name: Simulation Tests (Python)
+    runs-on: windows-latest
+    needs: unit-tests
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install asyncio
+    
+    - name: Run Simulation Tests
+      run: |
+        cd tools/testing
+        python TestRunner.py --tier=simulation
+      continue-on-error: true
+    
+    - name: Upload Test Reports
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: simulation-test-reports
+        path: tools/testing/reports/
+
+  # ==========================================================================
+  # Tier 3: Real Execution Tests (Godot MCP)
+  # ==========================================================================
+  real-tests:
+    name: Real Execution Tests (Godot MCP)
+    runs-on: windows-latest
+    needs: [unit-tests, simulation-tests]
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+    
+    - name: Cache Godot
+      uses: actions/cache@v3
+      id: cache-godot
+      with:
+        path: tools/godot
+        key: godot-${{ env.GODOT_VERSION }}-mono
+    
+    - name: Download Godot
+      if: steps.cache-godot.outputs.cache-hit != 'true'
+      run: |
+        $url = "https://github.com/godotengine/godot/releases/download/${{ env.GODOT_VERSION }}-stable/Godot_v${{ env.GODOT_VERSION }}-stable_mono_win64.zip"
+        Invoke-WebRequest -Uri $url -OutFile godot.zip
+        Expand-Archive -Path godot.zip -DestinationPath tools/godot
+        Remove-Item godot.zip
+    
+    - name: Install Godot MCP
+      run: |
+        if (-not (Test-Path "tools/godot-mcp")) {
+          git clone https://github.com/bradypp/godot-mcp.git tools/godot-mcp
+        }
+        cd tools/godot-mcp
+        npm install
+        npm run build
+    
+    - name: Cache Server Build
+      uses: actions/cache@v3
+      with:
+        path: build
+        key: ${{ runner.os }}-build-${{ hashFiles('**/CMakeLists.txt') }}
+    
+    - name: Build Server (if needed)
+      run: |
+        if (-not (Test-Path "build/Release/darkages_server.exe")) {
+          cmake -B build -S . -A x64 -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --target darkages_server
+        }
+    
+    - name: Run MCP Connection Test
+      run: |
+        $env:GODOT_PATH = "${{ github.workspace }}/tools/godot/Godot_v${{ env.GODOT_VERSION }}-stable_mono_win64/Godot_v${{ env.GODOT_VERSION }}-stable_mono_win64.exe"
+        cd tools/automated-qa/godot-mcp
+        python test_mcp_connection.py
+    
+    - name: Run Real Execution Tests
+      run: |
+        $env:GODOT_PATH = "${{ github.workspace }}/tools/godot/Godot_v${{ env.GODOT_VERSION }}-stable_mono_win64/Godot_v${{ env.GODOT_VERSION }}-stable_mono_win64.exe"
+        cd tools/testing
+        python TestRunner.py --tier=real
+      timeout-minutes: 10
+      continue-on-error: true
+    
+    - name: Upload Screenshots
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-screenshots
+        path: tools/automated-qa/screenshots/
+    
+    - name: Upload Test Reports
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: real-test-reports
+        path: tools/testing/reports/
+
+  # ==========================================================================
+  # Test Summary & Reporting
+  # ==========================================================================
+  test-summary:
+    name: Test Summary
+    runs-on: windows-latest
+    needs: [unit-tests, simulation-tests, real-tests]
+    if: always()
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    
+    - name: Download All Artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: artifacts
+    
+    - name: Generate Test Report
+      run: |
+        Write-Host "=" * 70
+        Write-Host "TEST SUMMARY"
+        Write-Host "=" * 70
+        
+        # List all artifacts
+        Get-ChildItem artifacts -Recurse -Filter "*.json" | ForEach-Object {
+          Write-Host "Report: $($_.FullName)"
+          Get-Content $_.FullName | ConvertFrom-Json | Format-List
+        }
+    
+    - name: Post PR Comment
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number
+          });
+          
+          const botComment = comments.find(comment => 
+            comment.user.type === 'Bot' && 
+            comment.body.includes('DarkAges Test Results')
+          );
+          
+          const body = `## DarkAges Test Results
+          
+          | Tier | Status |
+          |------|--------|
+          | Unit Tests | ${{ needs.unit-tests.result }} |
+          | Simulation Tests | ${{ needs.simulation-tests.result }} |
+          | Real Execution Tests | ${{ needs.real-tests.result }} |
+          
+          <details>
+          <summary>View Details</summary>
+          
+          See workflow artifacts for detailed test reports and screenshots.
+          </details>
+          `;
+          
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: body
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+          }

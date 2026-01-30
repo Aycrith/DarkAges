@@ -1,0 +1,49 @@
+{
+  "test_name": "infrastructure_validation",
+  "session_id": "abc123",
+  "start_time": 1769812200,
+  "end_time": 1769812205,
+  "duration_seconds": 5.0,
+  "summary": {
+    "total_metrics": 42,
+    "total_events": 15,
+    "total_traces": 3,
+    "event_breakdown": {
+      "INFO": 12,
+      "DEBUG": 3
+    },
+    "error_count": 0
+  },
+  "statistics": {
+    "timing.prediction.error": {
+      "count": 100,
+      "min": 5.2,
+      "max": 48.5,
+      "mean": 16.8,
+      "median": 15.5,
+      "p95": 35.2,
+      "p99": 45.1,
+      "std_dev": 8.3
+    },
+    "gauge.server.entity_count": {
+      "count": 50,
+      "min": 1,
+      "max": 100,
+      "mean": 50.5
+    }
+  },
+  "errors": [],
+  "traces": {
+    "trace001": {
+      "operation": "player_movement",
+      "start_time": 1769812201,
+      "end_time": 1769812202,
+      "total_duration_ms": 150.5,
+      "spans": [
+        {"name": "input_processing", "duration_ms": 16.5, "status": "ok"},
+        {"name": "prediction", "duration_ms": 8.2, "status": "ok"},
+        {"name": "reconciliation", "duration_ms": 25.3, "status": "ok"}
+      ]
+    }
+  }
+}
