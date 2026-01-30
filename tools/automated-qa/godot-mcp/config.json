@@ -1,0 +1,31 @@
+{
+    "darkages":  {
+                     "client_project_path":  "C:/Dev/DarkAges/src/client",
+                     "test_scenarios_path":  "C:/Dev/DarkAges/tools/automated-qa/scenarios",
+                     "server_address":  "localhost:7777",
+                     "screenshot_output_path":  "C:/Dev/DarkAges/tools/automated-qa/screenshots"
+                 },
+    "mcpServers":  {
+                       "godot":  {
+                                     "args":  [
+                                                  "C:/Dev/DarkAges/tools/godot-mcp/build/index.js"
+                                              ],
+                                     "env":  {
+                                                 "DEBUG":  "true",
+                                                 "GODOT_PATH":  "C:/Dev/DarkAges/tools/godot/Godot_v4.2.2-stable_mono_win64/Godot_v4.2.2-stable_mono_win64.exe",
+                                                 "READ_ONLY_MODE":  "false"
+                                             },
+                                     "command":  "node",
+                                     "autoApprove":  [
+                                                         "launch_editor",
+                                                         "run_project",
+                                                         "get_debug_output",
+                                                         "stop_project",
+                                                         "take_screenshot",
+                                                         "create_scene",
+                                                         "add_node"
+                                                     ],
+                                     "disabled":  false
+                                 }
+                   }
+}

@@ -109,3 +109,11 @@ desktop.ini
 # Large installer files (development tools only)
 *.exe
 !verify_build.bat
+
+# Godot MCP Tools (installed via setup script)
+/tools/godot/
+/tools/godot-mcp/
+
+# Screenshots from testing
+/tools/automated-qa/screenshots/
+!tools/automated-qa/screenshots/.gitkeep
