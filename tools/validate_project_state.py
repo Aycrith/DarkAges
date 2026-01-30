@@ -80,10 +80,10 @@ class ValidationReport:
         
         summary = self.summary()
         print(f"Total Checks: {summary['total']}")
-        print(f"  ✅ PASS:    {summary['passed']}")
-        print(f"  ❌ FAIL:    {summary['failed']}")
-        print(f"  ⚠️  WARNING: {summary['warnings']}")
-        print(f"  ⏭️  SKIP:    {summary['skipped']}")
+        print(f"  [PASS]     {summary['passed']}")
+        print(f"  [FAIL]     {summary['failed']}")
+        print(f"  [WARN]     {summary['warnings']}")
+        print(f"  [SKIP]     {summary['skipped']}")
         print(f"  Success Rate: {summary['success_rate']*100:.1f}%")
         print()
         
@@ -92,11 +92,11 @@ class ValidationReport:
         
         for check in self.checks:
             icon = {
-                ValidationStatus.PASS: "✅",
-                ValidationStatus.FAIL: "❌",
-                ValidationStatus.WARNING: "⚠️",
-                ValidationStatus.SKIP: "⏭️"
-            }.get(check.status, "❓")
+                ValidationStatus.PASS: "[PASS]",
+                ValidationStatus.FAIL: "[FAIL]",
+                ValidationStatus.WARNING: "[WARN]",
+                ValidationStatus.SKIP: "[SKIP]"
+            }.get(check.status, "[?]")
             
             print(f"\n{icon} {check.name}")
             print(f"   Status: {check.status.value}")
@@ -108,16 +108,16 @@ class ValidationReport:
         print("\n" + "="*70)
         
         if summary['failed'] > 0:
-            print("\n❌ VALIDATION FAILED")
+            print("\n[FAIL] VALIDATION FAILED")
             print(f"   {summary['failed']} critical checks failed.")
             print("   Project is NOT ready for deployment.")
             return False
         elif summary['warnings'] > 0:
-            print("\n⚠️  VALIDATION PASSED WITH WARNINGS")
+            print("\n[WARN] VALIDATION PASSED WITH WARNINGS")
             print("   Project is functional but has issues to address.")
             return True
         else:
-            print("\n✅ VALIDATION PASSED")
+            print("\n[PASS] VALIDATION PASSED")
             print("   All checks passed. Project is ready for deployment.")
             return True
 
