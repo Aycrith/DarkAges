@@ -87,10 +87,12 @@ Total: 0 errors, 0 warnings
 |------------|---------|----------|--------|
 | EnTT | 3.13.0 | `deps/entt/` | ✅ Available |
 | GLM | 0.9.9.8 | `deps/glm/` | ✅ Available |
-| GameNetworkingSockets | Latest | FetchContent | ⚠️ Will fetch on build |
-| hiredis | Latest | FetchContent | ⚠️ Will fetch on build |
-| FlatBuffers | Latest | FetchContent | ⚠️ Will fetch on build |
-| Catch2 | 3.5.0 | FetchContent | ⚠️ Will fetch for tests |
+| **FlatBuffers** | **v24.3.25** | **FetchContent** | ✅ Phase 6 |
+| **GameNetworkingSockets** | **v1.4.1** | **FetchContent** | ✅ Phase 6 |
+| **hiredis** | **v1.2.0** | **FetchContent** | ✅ Phase 6 |
+| **cassandra-cpp-driver** | **v2.17.1** | **FetchContent** | ✅ Phase 6 |
+| **nlohmann/json** | **v3.11.3** | **FetchContent** | ✅ Phase 6 |
+| Catch2 | v3.5.0 | FetchContent | ⚠️ Will fetch for tests |
 
 ---
 
