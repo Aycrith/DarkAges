@@ -1,0 +1,68 @@
+[
+  {
+    "type": "move",
+    "forward": true,
+    "backward": false,
+    "left": false,
+    "right": false,
+    "delay": 0.0
+  },
+  {
+    "type": "wait",
+    "duration": 2.0
+  },
+  {
+    "type": "move",
+    "forward": false,
+    "backward": false,
+    "left": true,
+    "right": false,
+    "delay": 0.0
+  },
+  {
+    "type": "wait",
+    "duration": 2.0
+  },
+  {
+    "type": "move",
+    "forward": false,
+    "backward": true,
+    "left": false,
+    "right": false,
+    "delay": 0.0
+  },
+  {
+    "type": "wait",
+    "duration": 2.0
+  },
+  {
+    "type": "move",
+    "forward": false,
+    "backward": false,
+    "left": false,
+    "right": true,
+    "delay": 0.0
+  },
+  {
+    "type": "wait",
+    "duration": 2.0
+  },
+  {
+    "type": "move",
+    "forward": false,
+    "backward": false,
+    "left": false,
+    "right": false,
+    "delay": 0.0
+  },
+  {
+    "type": "key",
+    "key": "space",
+    "state": "press",
+    "delay": 0.5
+  },
+  {
+    "type": "wait",
+    "duration": 1.0
+  }
+]

@@ -1,0 +1,96 @@
+[
+  {
+    "type": "wait",
+    "duration": 3.0,
+    "comment": "Wait for client to fully connect and spawn"
+  },
+  {
+    "type": "move",
+    "forward": true,
+    "delay": 0.0
+  },
+  {
+    "type": "wait",
+    "duration": 3.0,
+    "comment": "Move toward target"
+  },
+  {
+    "type": "move",
+    "forward": false,
+    "delay": 0.0
+  },
+  {
+    "type": "key",
+    "key": "mouse1",
+    "state": "press",
+    "delay": 0.0,
+    "comment": "Initiate attack"
+  },
+  {
+    "type": "wait",
+    "duration": 0.1
+  },
+  {
+    "type": "key",
+    "key": "mouse1",
+    "state": "release",
+    "delay": 0.0
+  },
+  {
+    "type": "wait",
+    "duration": 1.0,
+    "comment": "Wait for attack animation and hit detection"
+  },
+  {
+    "type": "key",
+    "key": "1",
+    "state": "press",
+    "delay": 0.0,
+    "comment": "Use ability 1"
+  },
+  {
+    "type": "wait",
+    "duration": 0.1
+  },
+  {
+    "type": "key",
+    "key": "1",
+    "state": "release",
+    "delay": 0.0
+  },
+  {
+    "type": "wait",
+    "duration": 2.0,
+    "comment": "Observe ability effect"
+  },
+  {
+    "type": "move",
+    "forward": true,
+    "delay": 0.0
+  },
+  {
+    "type": "wait",
+    "duration": 2.0
+  },
+  {
+    "type": "key",
+    "key": "mouse1",
+    "state": "press",
+    "delay": 0.0
+  },
+  {
+    "type": "wait",
+    "duration": 0.5
+  },
+  {
+    "type": "key",
+    "key": "mouse1",
+    "state": "release",
+    "delay": 0.0
+  },
+  {
+    "type": "wait",
+    "duration": 3.0,
+    "comment": "End of combat sequence"
+  }
+]
