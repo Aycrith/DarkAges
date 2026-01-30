@@ -603,6 +603,7 @@ if(BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
         src/server/tests/TestGNSIntegration.cpp
         src/server/tests/TestRedisIntegration.cpp
         src/server/tests/TestScyllaManager.cpp
+        tests/integration/gamestate/TestGamestateSynchronization.cpp
     )
     
     # Filter out tests that don't exist yet
