@@ -1,15 +1,15 @@
 # DarkAges MMO - AI Agent Context Document
 
 **Project**: DarkAges - High-Density PvP MMO  
-**Status**: Planning & Foundation Phase  
-**Current Phase**: Phase 0 - Foundation (Week 1-2)  
+**Status**: Phase 0 - Foundation COMPLETE with Testing Infrastructure  
+**Current Phase**: Testing & Validation Phase  
 **Language**: English (All code and documentation)  
 
 ---
 
 ## 1. Project Overview
 
-DarkAges is a third-person PvP MMO inspired by Dark Age of Camelot and Ark Raiders, designed for high-density combat scenarios. The project is currently in the architectural planning phase with extensive documentation but **no implementation code yet**.
+DarkAges is a third-person PvP MMO inspired by Dark Age of Camelot and Ark Raiders, designed for high-density combat scenarios. The project has moved from planning into the **Testing & Validation Phase** with comprehensive three-tier testing infrastructure now operational.
 
 ### Core Design Goals
 - **100-1000 concurrent players per shard** via spatial sharding
@@ -29,6 +29,7 @@ DarkAges is a third-person PvP MMO inspired by Dark Age of Camelot and Ark Raide
 | **Persistence** | ScyllaDB | Cassandra-compatible, high write throughput |
 | **Physics** | Custom Kinematic | Deterministic, O(n) spatial hash |
 | **Build** | CMake + Docker | Cross-platform, reproducible builds |
+| **Testing** | Three-Tier Strategy | Unit → Simulation → Real Execution (MCP) |
 
 ---
 
@@ -41,15 +42,18 @@ C:\Dev\DarkAges\
 ├── ImplementationRoadmapGuide.md  # Technical specs and code examples
 ├── Prompt.md                      # AI agent implementation directive
 ├── ResearchForPlans.md            # Architectural research and decisions
+├── TESTING_STRATEGY.md            # Canonical testing strategy
+├── MCP_INTEGRATION_COMPLETE.md    # Godot MCP integration summary
+├── TESTING_INFRASTRUCTURE_COMPLETE.md # Testing infrastructure summary
 │
-# FUTURE STRUCTURE (to be created):
 ├── src/
-│   ├── client/                    # Godot 4.x project
+│   ├── client/                    # Godot 4.x project (C#)
 │   │   ├── assets/
-│   │   ├── src/                   # GDScript/C# source
+│   │   ├── src/                   # C# source
 │   │   │   ├── networking/
 │   │   │   ├── prediction/
 │   │   │   └── combat/
+│   │   ├── scenes/                # .tscn scene files
 │   │   └── project.godot
 │   │
 │   ├── server/                    # C++ ECS server
@@ -80,10 +84,32 @@ C:\Dev\DarkAges\
 ├── docs/                         # Living documentation
 │   ├── architecture/             # ADRs, system diagrams
 │   ├── network-protocol/         # Protocol specs
-│   └── database-schema/          # Schema definitions
+│   ├── database-schema/          # Schema definitions
+│   └── testing/                  # Testing documentation
+│       ├── COMPREHENSIVE_TESTING_PLAN.md
+│       └── ARCHITECTURE_RECONCILIATION.md
 │
 └── tools/                        # Development utilities
-    ├── stress-test/              # Python bot swarms
+    ├── testing/                  # TESTING INFRASTRUCTURE
+    │   ├── TestRunner.py         # Master orchestrator
+    │   ├── TestDashboard.py      # Web/console dashboard
+    │   ├── telemetry/            # Metrics collection
+    │   │   └── MetricsCollector.py
+    │   ├── scenarios/            # Test scenarios
+    │   │   └── MovementTestScenarios.py
+    │   └── reports/              # Test output (generated)
+    │
+    ├── automated-qa/             # REAL EXECUTION TESTING
+    │   ├── AutomatedQA.py        # Process orchestration
+    │   └── godot-mcp/            # Godot MCP integration
+    │       ├── client.py
+    │       ├── test_movement_sync_mcp.py
+    │       └── README.md
+    │
+    ├── test-orchestrator/        # SIMULATION TESTING
+    │   └── TestOrchestrator.py   # Network simulation
+    │
+    ├── stress-test/              # Load testing
     ├── packet-analyzer/          # Network debugging
     └── db-migrations/            # Schema migrations
 ```
@@ -92,19 +118,20 @@ C:\Dev\DarkAges\
 
 ## 3. Development Phases
 
-### Phase 0: Foundation (Current - Weeks 1-2)
+### Phase 0: Foundation ✅ COMPLETE
 **Goal**: Single player moves on screen with server authority
 
 **Deliverables**:
-- [ ] Godot project setup with CharacterBody3D
-- [ ] C++ server skeleton with EnTT ECS
-- [ ] GameNetworkingSockets basic UDP communication
-- [ ] Redis connection for session data
-- [ ] FlatBuffers protocol definition
+- [x] Godot project setup with CharacterBody3D
+- [x] C++ server skeleton with EnTT ECS
+- [x] GameNetworkingSockets basic UDP communication
+- [x] Redis connection for session data
+- [x] FlatBuffers protocol definition
+- [x] **Three-tier testing infrastructure**
 
 **Quality Gate**: Client moves cube @ 60 FPS, server validates positions, no memory leaks in 1-hour test
 
-### Phase 1: Prediction & Reconciliation (Weeks 3-4)
+### Phase 1: Prediction & Reconciliation (Current)
 **Goal**: Client predicts, server corrects errors
 
 **Deliverables**:
@@ -112,6 +139,7 @@ C:\Dev\DarkAges\
 - [ ] Server reconciliation protocol
 - [ ] Delta compression for position updates
 - [ ] Position validation (anti-cheat)
+- [x] **Testing infrastructure for validation** ✅
 
 ### Phase 2: Multi-Player Sync (Weeks 5-6)
 **Goal**: 10 players see each other smoothly
@@ -147,42 +175,188 @@ C:\Dev\DarkAges\
 
 ---
 
-## 4. Agent Specializations
+## 4. Testing Architecture (UPDATED - CRITICAL)
 
-When implementing code, identify your specialization and stay within your domain:
+The project now has a **comprehensive three-tier testing infrastructure**. All agents must understand and work within this framework.
+
+### Three-Tier Testing Model
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      VALIDATION TIER (Real Execution)                        │
+│                                                                              │
+│  Components: Godot MCP + AutomatedQA.py                                      │
+│  Purpose:    Critical gamestate validation with real services                │
+│  Usage:      python TestRunner.py --tier=validation --mcp                    │
+│                                                                              │
+│  Key Files:                                                                  │
+│   - tools/automated-qa/godot-mcp/client.py                                  │
+│   - tools/automated-qa/AutomatedQA.py                                       │
+│   - tools/testing/scenarios/MovementTestScenarios.py                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      SIMULATION TIER (Protocol Testing)                      │
+│                                                                              │
+│  Components: TestOrchestrator.py + MetricsCollector.py                       │
+│  Purpose:    Validate sync logic without real processes                      │
+│  Usage:      python TestRunner.py --tier=simulation                          │
+│                                                                              │
+│  Key Files:                                                                  │
+│   - tools/test-orchestrator/TestOrchestrator.py                             │
+│   - tools/testing/scenarios/MovementTestScenarios.py                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      FOUNDATION TIER (Unit Tests)                            │
+│                                                                              │
+│  Components: Catch2 + C++ Test Suite                                         │
+│  Purpose:    Fast, deterministic component testing                           │
+│  Usage:      ./darkages_server --test  OR  ctest                             │
+│                                                                              │
+│  Key Files:                                                                  │
+│   - src/server/tests/*.cpp                                                  │
+│   - Any new component should have Test[Component].cpp                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Testing Workflow for Agents
+
+**When Implementing New Features:**
+
+1. **Write Foundation Tests First**
+   ```cpp
+   // Create Test[Feature].cpp
+   TEST_CASE("[feature] basic functionality", "[foundation]") {
+       // Test isolated component
+   }
+   ```
+
+2. **Add Simulation Tests**
+   ```python
+   # Add scenario to tools/testing/scenarios/
+   async def scenario_[feature]():
+       with MetricsCollector("[feature]") as collector:
+           # Test protocol/sync logic
+   ```
+
+3. **Create Validation Test (if UI/network involved)**
+   ```python
+   # Add to godot-mcp test suite
+   # Tests real Godot client interaction
+   ```
+
+### Test Orchestration
+
+**Master Test Runner:** `tools/testing/TestRunner.py`
+
+```bash
+# Run all tiers
+python tools/testing/TestRunner.py --tier=all
+
+# Run specific tier
+python tools/testing/TestRunner.py --tier=foundation
+python tools/testing/TestRunner.py --tier=simulation
+python tools/testing/TestRunner.py --tier=validation --mcp
+
+# View results
+python tools/testing/TestDashboard.py --console
+```
+
+### Human-in-the-Loop (Validation Tier)
+
+The Validation Tier supports human oversight for critical tests:
+
+```python
+# In your test scenario
+from automated_qa.harness import HumanInterface
+
+human = HumanInterface()
+response = human.request_validation(
+    message="Does the character movement look smooth?",
+    screenshot="path/to/screenshot.png",
+    level=HumanInterface.QUESTION
+)
+# Response: continue, pause, skip, retry, abort
+```
+
+### Performance Budgets (Testing)
+
+| Tier | Target Duration | Parallel Execution |
+|------|-----------------|-------------------|
+| Foundation | < 1ms per test | Yes (unlimited) |
+| Simulation | < 5s per scenario | Yes (up to 10) |
+| Validation | < 60s per test | Limited (2-3) |
+
+---
+
+## 5. Agent Specializations (UPDATED)
+
+When implementing code, identify your specialization and stay within your domain. **All agents must now consider testing requirements.**
 
 ### NETWORK_AGENT
 - **Scope**: GameNetworkingSockets, packet serialization, delta compression, latency compensation
 - **Key Files**: `src/server/net/*`, `src/shared/proto/*`
+- **Testing Requirements**:
+  - Unit tests for packet serialization
+  - Simulation tests for latency effects
+  - Validation tests with real network stack
 - **Constraints**: Downstream bandwidth < 20 KB/s per player, support IPv4/IPv6
 
 ### PHYSICS_AGENT
 - **Scope**: EnTT ECS, spatial hashing, kinematic controllers, collision detection
 - **Key Files**: `src/server/ecs/*`, `src/server/physics/*`, `src/server/spatial/*`
+- **Testing Requirements**:
+  - Unit tests for spatial queries
+  - Simulation tests for collision scenarios
 - **Constraints**: Tick budget < 16ms, O(n) collision detection, no allocations during tick
 
 ### DATABASE_AGENT
 - **Scope**: Redis hot-state, ScyllaDB persistence, write-through caching, event sourcing
 - **Key Files**: `src/server/db/*`, `infra/docker-compose*.yml`, SQL/CQL migrations
+- **Testing Requirements**:
+  - Unit tests for DB operations
+  - Integration tests for Redis/ScyllaDB
 - **Constraints**: Redis < 1ms latency, ScyllaDB async writes only
 
 ### CLIENT_AGENT
 - **Scope**: Godot 4.x, client-side prediction, entity interpolation, GDScript/C#
 - **Key Files**: `src/client/*`, protocol serialization code
+- **Testing Requirements**:
+  - Unit tests for prediction algorithms
+  - MCP validation tests for rendering
 - **Constraints**: Match server physics exactly, 60 FPS minimum
 
 ### SECURITY_AGENT
 - **Scope**: Input validation, anti-cheat, server authority enforcement, cryptography
 - **Key Files**: `src/server/auth/*`, validation layers
+- **Testing Requirements**:
+  - Unit tests for validation functions
+  - Simulation tests for cheat detection
 - **Constraints**: Clamp all inputs, validate movement bounds, enable SRV encryption
 
 ### DEVOPS_AGENT
 - **Scope**: Docker, CI/CD, monitoring, deployment scripts, stress testing tools
 - **Key Files**: `infra/*`, `.github/workflows/*`, `tools/stress-test/*`
+- **Testing Requirements**:
+  - Maintain CI/CD pipeline
+  - Ensure all test tiers run in CI
+- **Constraints**: CI must pass all tiers before merge
+
+### QA_AGENT (NEW)
+- **Scope**: Test scenario development, metrics analysis, test automation
+- **Key Files**: `tools/testing/*`, `tools/automated-qa/*`
+- **Responsibilities**:
+  - Create test scenarios for new features
+  - Analyze test metrics and reports
+  - Maintain test documentation
+- **Constraints**: All scenarios must have clear pass/fail criteria
 
 ---
 
-## 5. Coding Standards
+## 6. Coding Standards (UPDATED WITH TESTING)
 
 ### Performance (Non-Negotiable)
 ```cpp
@@ -199,6 +373,30 @@ constexpr Fixed FIXED_PRECISION = 1000;
 
 // Latency: No blocking I/O in game thread
 // All DB writes async via job queue
+```
+
+### Testing Requirements (NEW)
+```cpp
+// Every system class MUST have corresponding test file
+
+// Example: src/server/physics/SpatialHash.hpp
+//          src/server/tests/TestSpatialHash.cpp
+
+#define CATCH_CONFIG_MAIN
+#include <catch2/catch.hpp>
+#include "physics/SpatialHash.hpp"
+
+TEST_CASE("Spatial Hash basic operations", "[foundation]") {
+    SpatialHash hash;
+    hash.insert(1, 5.0f, 5.0f);
+    auto nearby = hash.query(5.0f, 5.0f, 1.0f);
+    REQUIRE(nearby.size() == 1);
+}
+
+// Agent signature comment for cross-domain functions
+// [AGENT-PHYSICS] Contract for NetworkAgent:
+// - Must call within 1ms of collision detection
+// - See NetworkManager.hpp line 45
 ```
 
 ### Safety
@@ -219,10 +417,12 @@ constexpr Fixed FIXED_PRECISION = 1000;
 - **Commit messages**: `[AGENT] Brief description - Performance impact`  
   Example: `[NETWORK] Implement delta compression - Reduces bandwidth by 80%`
 - **Never commit**: Build artifacts (`/build`, `*.exe`), IDE files (`.vscode`), large assets
+- **Test commits**: Include `[TEST]` tag for test-only changes  
+  Example: `[TEST] Add spatial hash collision scenarios`
 
 ---
 
-## 6. Performance Budgets (Hard Constraints)
+## 7. Performance Budgets (Hard Constraints)
 
 ### Per-Zone Server Limits
 ```yaml
@@ -252,11 +452,17 @@ Network:
     2. reduce_position_precision              # 32-bit -> 16-bit
     3. cull_non_essential_animations
     4. disable_physics_for_static_objects
+
+Testing:
+  foundation_tier_max_ms: 1        # Per test
+  simulation_tier_max_s: 5         # Per scenario
+  validation_tier_max_s: 60        # Per test
+  ci_total_max_m: 15               # Total CI pipeline
 ```
 
 ---
 
-## 7. Cross-Agent Communication
+## 8. Cross-Agent Communication
 
 When agents need to coordinate, use **structured comments** in code:
 
@@ -271,19 +477,34 @@ When agents need to coordinate, use **structured comments** in code:
 1. Create/update header in `src/shared/include/`
 2. Provide stub implementation for compilation
 3. Create GitHub issue tagged with agent name
-4. Run integration tests together
+4. **Run integration tests together** using TestRunner.py
+
+### Testing Coordination Protocol
+
+When your changes affect multiple domains:
+
+```bash
+# 1. Run Foundation Tier first
+./build/Release/darkages_server.exe --test
+
+# 2. Run Simulation Tier for integration
+python tools/testing/TestRunner.py --tier=simulation
+
+# 3. Coordinate with other agents for Validation Tier
+python tools/testing/TestRunner.py --tier=validation --mcp --human-oversight
+```
 
 ---
 
-## 8. Testing Strategy
+## 9. Testing Strategy (CRITICAL)
 
-### Unit Tests (C++ Catch2)
+### Unit Tests (Foundation Tier)
 ```cpp
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 #include "spatial/SpatialHash.hpp"
 
-TEST_CASE("Spatial Hash basic operations", "[spatial]") {
+TEST_CASE("Spatial Hash basic operations", "[foundation]") {
     SpatialHash hash;
     hash.insert(1, 5.0f, 5.0f);
     auto nearby = hash.query(5.0f, 5.0f, 1.0f);
@@ -291,10 +512,29 @@ TEST_CASE("Spatial Hash basic operations", "[spatial]") {
 }
 ```
 
-### Integration Tests (Python Bots)
+### Integration Tests (Simulation Tier)
 ```python
-# tools/stress-test/bot_swarm.py
-# Spawns N bots, validates server maintains 60Hz
+# tools/testing/scenarios/MovementTestScenarios.py
+
+async def scenario_basic_movement():
+    with MetricsCollector("movement") as collector:
+        # Simulate client prediction
+        # Simulate server reconciliation
+        # Validate sync metrics
+        pass
+```
+
+### Real Execution Tests (Validation Tier)
+```python
+# tools/automated-qa/godot-mcp/test_movement_sync_mcp.py
+
+async def test_movement_synchronization():
+    # Launch real server
+    # Launch Godot client via MCP
+    # Inject inputs
+    # Capture screenshots
+    # Validate results
+    pass
 ```
 
 ### Chaos Engineering
@@ -305,7 +545,7 @@ TEST_CASE("Spatial Hash basic operations", "[spatial]") {
 
 ---
 
-## 9. Security Checklist
+## 10. Security Checklist
 
 Before claiming any feature complete:
 
@@ -315,41 +555,56 @@ Before claiming any feature complete:
 - [ ] **Memory Safety**: AddressSanitizer in debug builds
 - [ ] **Network Encryption**: Enable SRV encryption in GNS
 - [ ] **Anti-Cheat Logging**: Log all damage events with context
+- [ ] **Foundation Tests**: Unit tests pass
+- [ ] **Simulation Tests**: Sync scenarios pass
+- [ ] **Validation Tests**: Real execution passes (if applicable)
 
 ---
 
-## 10. Emergency Procedures
+## 11. Emergency Procedures
 
 ### If Tick Overrun Detected (>16ms)
 1. Immediately log which system took too long
 2. Activate QoS degradation (reduce replication rate, coarser collision)
 3. Notify all agents to profile their systems
+4. **Run Simulation Tier** to identify bottleneck
 
 ### If Memory Leak Detected
 1. Use AddressSanitizer or Valgrind
 2. Check for missing `registry.destroy(entity)` calls
 3. Check network buffers growing unbounded
+4. **Run Foundation Tier** memory tests
 
 ### If Desynchronization Detected
 1. Log client and server state hashes
 2. Enable full packet capture
 3. Check floating-point determinism
-4. Fallback: Force full snapshot resync
+4. **Run Validation Tier** with MCP to capture real behavior
+5. Fallback: Force full snapshot resync
+
+### If CI/CD Tests Fail
+1. Check which tier failed
+2. Run that tier locally: `python TestRunner.py --tier=[tier]`
+3. Fix issues and re-run
+4. **Never merge with failing tests**
 
 ---
 
-## 11. Reference Documents
+## 12. Reference Documents
 
 Read these in priority order when implementing:
 
-1. **ResearchForPlans.md** - Architectural rationale, technology choices, performance budgets
-2. **ImplementationRoadmapGuide.md** - Technical specs, API contracts, code examples
-3. **AI_COORDINATION_PROTOCOL.md** - Multi-agent coordination, failure recovery
-4. **Prompt.md** - Implementation phases, coding standards, immediate actions
+1. **TESTING_STRATEGY.md** - Canonical testing strategy and success criteria
+2. **ResearchForPlans.md** - Architectural rationale, technology choices, performance budgets
+3. **ImplementationRoadmapGuide.md** - Technical specs, API contracts, code examples
+4. **AI_COORDINATION_PROTOCOL.md** - Multi-agent coordination, failure recovery
+5. **docs/testing/COMPREHENSIVE_TESTING_PLAN.md** - Detailed test scenarios
+6. **docs/testing/ARCHITECTURE_RECONCILIATION.md** - Deviation resolution
+7. **Prompt.md** - Implementation phases, coding standards, immediate actions
 
 ---
 
-## 12. Glossary
+## 13. Glossary
 
 | Term | Definition |
 |------|------------|
@@ -364,38 +619,59 @@ Read these in priority order when implementing:
 | **Fixed Point** | Integer math simulating decimals for determinism |
 | **Kinematic** | Movement controlled by code, not physics simulation |
 | **AOI** | Area of Interest - entities within player visibility |
+| **MCP** | Model Context Protocol - AI assistant integration |
+| **Foundation Tier** | Unit tests (C++/Catch2) |
+| **Simulation Tier** | Protocol testing (Python/TestOrchestrator) |
+| **Validation Tier** | Real execution (Godot MCP/AutomatedQA) |
 
 ---
 
-## 13. Current Status & Next Actions
+## 14. Current Status & Next Actions
 
-**Current Phase**: Phase 0 - Foundation  
-**Project State**: Planning complete, implementation pending  
-**No code exists yet** - This is a greenfield project
+**Current Phase**: Phase 1 - Prediction & Reconciliation  
+**Project State**: Foundation COMPLETE, Testing Infrastructure OPERATIONAL  
+**Testing Status**: Three-tier infrastructure deployed and validated
 
 ### Immediate Next Steps (for any agent starting work):
 
-1. Read your specialization section above
-2. Review relevant sections in `ImplementationRoadmapGuide.md`
-3. Create feature branch: `git checkout -b feature/[agent]-foundation`
-4. Implement Phase 0 deliverable for your domain
-5. Write test before moving to next deliverable
-6. Commit with signature: `[AGENT] Implemented [feature] - Tested under [conditions]`
+1. **Read your specialization section above**
+2. **Review TESTING_STRATEGY.md** for test requirements
+3. **Understand the three-tier testing model**
+4. Create feature branch: `git checkout -b feature/[agent]-[description]`
+5. **Write tests BEFORE implementation** (Foundation Tier first)
+6. Implement feature
+7. Run all three tiers: `python TestRunner.py --tier=all`
+8. Commit with signature: `[AGENT] Implemented [feature] - [TEST] Added coverage`
 
 ### Example First Tasks by Agent:
 
-**NETWORK_AGENT**: Implement GameNetworkingSockets wrapper that can send/receive 100-byte packets between two C++ processes.
+**NETWORK_AGENT**: 
+- Implement GameNetworkingSockets wrapper
+- **Write**: `TestNetworkProtocol.cpp` (Foundation)
+- **Write**: `scenario_packet_loss.py` (Simulation)
+- Test with: `python TestRunner.py --tier=simulation`
 
-**PHYSICS_AGENT**: Setup EnTT registry. Create Position component. Create 1000 entities and update positions - must be <1ms.
+**PHYSICS_AGENT**: 
+- Setup EnTT registry with Position component
+- **Write**: `TestSpatialHash.cpp` (Foundation)
+- Create 1000 entities, verify <1ms update
+- Test with: `python TestRunner.py --tier=foundation`
 
-**CLIENT_AGENT**: Setup Godot 4.0 project. Create CharacterBody3D that moves with WASD. Display connection status UI.
+**CLIENT_AGENT**: 
+- Setup Godot 4.0 project with CharacterBody3D
+- **Write**: MCP validation test for movement (Validation)
+- Display connection status UI
+- Test with: `python TestRunner.py --tier=validation --mcp`
 
-**DATABASE_AGENT**: Write docker-compose.yml with Redis + ScyllaDB. Write C++ class that SET/GET strings from Redis.
-
-**SECURITY_AGENT**: Create input validation module. Function `clampPosition(Vector3)` ensuring coordinates in world bounds.
-
-**DEVOPS_AGENT**: Setup CI workflow that builds server on commit and runs `ctest`.
+**QA_AGENT**: 
+- Create 5 new test scenarios for movement edge cases
+- Analyze test metrics from recent runs
+- Update test documentation
 
 ---
 
 *This document is living documentation. Update it when architecture changes or new conventions are established.*
+
+**Last Updated:** 2026-01-30  
+**Update Reason:** Testing infrastructure reconciliation  
+**Status:** ARCHITECTURALLY ALIGNED
