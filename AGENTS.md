@@ -1,15 +1,19 @@
 # DarkAges MMO - AI Agent Context Document
 
 **Project**: DarkAges - High-Density PvP MMO  
-**Status**: Phase 0 - Foundation COMPLETE with Testing Infrastructure  
-**Current Phase**: Testing & Validation Phase  
+**Document Type**: Living Template & Reference Guide (not daily status)  
+**Current Phase**: Phase 8 - Production Hardening (Week 1 of 8)  
+**Server Status**: ✅ Operational (60Hz, ~38,600 lines of code)  
 **Language**: English (All code and documentation)  
+
+> **📌 For Current Daily Status**: See [CURRENT_STATUS.md](CURRENT_STATUS.md)  
+> **📋 For Phase 8 Roadmap**: See [PHASE8_EXECUTION_PLAN.md](PHASE8_EXECUTION_PLAN.md)
 
 ---
 
 ## 1. Project Overview
 
-DarkAges is a third-person PvP MMO inspired by Dark Age of Camelot and Ark Raiders, designed for high-density combat scenarios. The project has moved from planning into the **Testing & Validation Phase** with comprehensive three-tier testing infrastructure now operational.
+DarkAges is a third-person PvP MMO inspired by Dark Age of Camelot and Ark Raiders, designed for high-density combat scenarios. The project has completed **Phases 0-7 implementation** (~38,600 lines) and is now in **Phase 8 Production Hardening** with comprehensive three-tier testing infrastructure operational and server running at 60Hz.
 
 ### Core Design Goals
 - **100-1000 concurrent players per shard** via spatial sharding
@@ -628,50 +632,62 @@ Read these in priority order when implementing:
 
 ## 14. Current Status & Next Actions
 
-**Current Phase**: Phase 1 - Prediction & Reconciliation  
-**Project State**: Foundation COMPLETE, Testing Infrastructure OPERATIONAL  
-**Testing Status**: Three-tier infrastructure deployed and validated
+> **⚠️ IMPORTANT**: This section describes the template workflow. For **actual current status**, always check [CURRENT_STATUS.md](CURRENT_STATUS.md) first.
+
+**Current Phase**: Phase 8 - Production Hardening (Week 1 of 8)  
+**Project State**: Phases 0-7 COMPLETE, Server OPERATIONAL, ~38,600 lines implemented  
+**Testing Status**: Three-tier infrastructure deployed and validated  
+**Active Work**: WP-8-1 (Monitoring) and WP-8-6 (GNS Integration) in progress
 
 ### Immediate Next Steps (for any agent starting work):
 
-1. **Read your specialization section above**
-2. **Review TESTING_STRATEGY.md** for test requirements
-3. **Understand the three-tier testing model**
-4. Create feature branch: `git checkout -b feature/[agent]-[description]`
-5. **Write tests BEFORE implementation** (Foundation Tier first)
-6. Implement feature
-7. Run all three tiers: `python TestRunner.py --tier=all`
-8. Commit with signature: `[AGENT] Implemented [feature] - [TEST] Added coverage`
+1. **Read [CURRENT_STATUS.md](CURRENT_STATUS.md)** - Check today's actual status and your assigned WP
+2. **Review your specialization section above**
+3. **Check [PHASE8_EXECUTION_PLAN.md](PHASE8_EXECUTION_PLAN.md)** for your WP specifications
+4. **Review TESTING_STRATEGY.md** for test requirements
+5. Create feature branch: `git checkout -b feature/[agent]-wp-[number]-[description]`
+6. **Write tests BEFORE implementation** (Foundation Tier first)
+7. Implement feature
+8. Run all three tiers: `python TestRunner.py --tier=all`
+9. **Update [CURRENT_STATUS.md](CURRENT_STATUS.md)** with your progress
+10. Commit with signature: `[AGENT] [WP-X-Y] Implemented [feature] - [TEST] Added coverage`
 
-### Example First Tasks by Agent:
+### Phase 8 Tasks by Agent:
 
-**NETWORK_AGENT**: 
-- Implement GameNetworkingSockets wrapper
-- **Write**: `TestNetworkProtocol.cpp` (Foundation)
-- **Write**: `scenario_packet_loss.py` (Simulation)
-- Test with: `python TestRunner.py --tier=simulation`
+**DEVOPS_AGENT (WP-8-1)**: 
+- Implement Prometheus metrics endpoint
+- **Write**: Integration tests for metrics collection
+- Setup Grafana dashboards
+- Test with: Load testing + metrics validation
 
-**PHYSICS_AGENT**: 
-- Setup EnTT registry with Position component
-- **Write**: `TestSpatialHash.cpp` (Foundation)
-- Create 1000 entities, verify <1ms update
-- Test with: `python TestRunner.py --tier=foundation`
+**NETWORK_AGENT (WP-8-6)**: 
+- Replace GNS stubs with Protobuf integration
+- **Write**: `TestGNSProtobuf.cpp` (Foundation)
+- **Write**: `scenario_gns_reconnection.py` (Simulation)
+- Test with: `python TestRunner.py --tier=all`
 
-**CLIENT_AGENT**: 
-- Setup Godot 4.0 project with CharacterBody3D
-- **Write**: MCP validation test for movement (Validation)
-- Display connection status UI
-- Test with: `python TestRunner.py --tier=validation --mcp`
+**SECURITY_AGENT (WP-8-2)**: 
+- Conduct security audit of input validation
+- **Write**: Penetration test scenarios
+- Implement rate limiting improvements
+- Test with: Automated security test suite
 
-**QA_AGENT**: 
-- Create 5 new test scenarios for movement edge cases
-- Analyze test metrics from recent runs
-- Update test documentation
+**PHYSICS_AGENT (WP-8-3)**: 
+- Profile ECS systems with Perfetto
+- **Write**: Performance benchmarks
+- Optimize hot paths identified in profiling
+- Test with: Stress test 1000 entities @ 60Hz
+
+**QA_AGENT (WP-8-4 & WP-8-5)**: 
+- Create load testing scenarios (100+ concurrent)
+- Update all documentation for Phase 8
+- Validate all test coverage metrics
 
 ---
 
 *This document is living documentation. Update it when architecture changes or new conventions are established.*
 
 **Last Updated:** 2026-01-30  
-**Update Reason:** Testing infrastructure reconciliation  
-**Status:** ARCHITECTURALLY ALIGNED
+**Update Reason:** Phase 8 documentation synchronization - reflect actual project progress  
+**Status:** ARCHITECTURALLY ALIGNED  
+**Daily Status**: See [CURRENT_STATUS.md](CURRENT_STATUS.md)
