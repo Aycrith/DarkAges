@@ -117,3 +117,5 @@ desktop.ini
 # Screenshots from testing
 /tools/automated-qa/screenshots/
 !tools/automated-qa/screenshots/.gitkeep
+
+nul
