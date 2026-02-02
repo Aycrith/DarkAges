@@ -68,6 +68,10 @@ std::vector<uint8_t> EntitySnapshot::serialize() const {
         data.insert(data.end(), bytes, bytes + size);
     };
     
+    // Magic number for validation (4 bytes: "DAES" = DarkAges Entity Snapshot)
+    const uint32_t magic = 0x53454144;  // "DAES" in little-endian
+    writeBytes(&magic, sizeof(uint32_t));
+    
     // Header section
     writeBytes(&entity, sizeof(EntityID));
     writeBytes(&playerId, sizeof(uint64_t));
@@ -139,7 +143,7 @@ std::vector<uint8_t> EntitySnapshot::serialize() const {
 }
 
 std::optional<EntitySnapshot> EntitySnapshot::deserialize(const std::vector<uint8_t>& data) {
-    if (data.size() < 100) {  // Minimum expected size
+    if (data.size() < 104) {  // Minimum expected size (including 4-byte magic)
         return std::nullopt;
     }
     
@@ -154,6 +158,13 @@ std::optional<EntitySnapshot> EntitySnapshot::deserialize(const std::vector<uint
         offset += size;
         return true;
     };
+    
+    // Check magic number (4 bytes: "DAES" = 0x53454144)
+    uint32_t magic = 0;
+    if (!readBytes(&magic, sizeof(uint32_t))) return std::nullopt;
+    if (magic != 0x53454144) {
+        return std::nullopt;  // Invalid magic number
+    }
     
     // Header section
     if (!readBytes(&snapshot.entity, sizeof(EntityID))) return std::nullopt;
@@ -237,6 +248,13 @@ EntityMigrationManager::EntityMigrationManager(uint32_t myZoneId, RedisManager* 
 bool EntityMigrationManager::initiateMigration(EntityID entity, uint32_t targetZoneId,
                                                Registry& registry,
                                                MigrationCallback callback) {
+    // Check if entity exists in registry first
+    if (!registry.valid(entity)) {
+        std::cerr << "[MIGRATION] Entity " << static_cast<uint32_t>(entity) 
+                  << " does not exist in registry" << std::endl;
+        return false;
+    }
+    
     // Check if already migrating
     if (isMigrating(entity)) {
         std::cerr << "[MIGRATION] Entity " << static_cast<uint32_t>(entity) 
@@ -246,14 +264,6 @@ bool EntityMigrationManager::initiateMigration(EntityID entity, uint32_t targetZ
     
     // Capture entity state
     auto snapshot = captureEntityState(entity, registry, targetZoneId);
-    if (snapshot.playerId == 0) {
-        // Could be an NPC - check if entity exists
-        if (!registry.valid(entity)) {
-            std::cerr << "[MIGRATION] Entity " << static_cast<uint32_t>(entity) 
-                      << " does not exist" << std::endl;
-            return false;
-        }
-    }
     
     // Create active migration record
     ActiveMigration migration;
@@ -262,7 +272,7 @@ bool EntityMigrationManager::initiateMigration(EntityID entity, uint32_t targetZ
     migration.sourceZoneId = myZoneId_;
     migration.targetZoneId = targetZoneId;
     migration.state = MigrationState::PREPARING;
-    migration.startTime = 0;  // Will be set in update
+    migration.startTime = UINT32_MAX;  // Will be set in first update() call
     migration.timeoutMs = defaultTimeoutMs_;
     migration.sequence = ++migrationSequence_;
     migration.snapshot = std::move(snapshot);
@@ -279,7 +289,7 @@ bool EntityMigrationManager::initiateMigration(EntityID entity, uint32_t targetZ
     // Send migration request to target zone
     sendMigrationData(targetZoneId, activeMigrations_[entity].snapshot);
     
-    stats_.totalMigrations++;
+    // Note: stats_.totalMigrations is updated on completion/failure, not on start
     
     std::cout << "[MIGRATION] Started migration of entity " << static_cast<uint32_t>(entity)
               << " to zone " << targetZoneId << std::endl;
@@ -313,13 +323,14 @@ void EntityMigrationManager::onMigrationStateUpdate(EntityID entity, uint32_t fr
 void EntityMigrationManager::update(Registry& registry, uint32_t currentTimeMs) {
     // Process all active migrations
     std::vector<EntityID> completed;
-    std::vector<EntityID> timedOut;
+    std::vector<std::pair<EntityID, std::string>> failed;  // entity + reason
     
     for (auto& [entity, migration] : activeMigrations_) {
-        // Check for timeout
-        if (migration.startTime > 0 && 
+        // Check for timeout (startTime is UINT32_MAX until first update)
+        if (migration.startTime != UINT32_MAX && 
             (currentTimeMs - migration.startTime) > migration.timeoutMs) {
-            timedOut.push_back(entity);
+            stats_.timeoutCount++;
+            failed.push_back({entity, "Migration timed out"});
             continue;
         }
         
@@ -341,7 +352,7 @@ void EntityMigrationManager::update(Registry& registry, uint32_t currentTimeMs) 
                 completed.push_back(entity);
                 break;
             case MigrationState::FAILED:
-                timedOut.push_back(entity);
+                failed.push_back({entity, "Migration cancelled"});
                 break;
             default:
                 break;
@@ -352,6 +363,7 @@ void EntityMigrationManager::update(Registry& registry, uint32_t currentTimeMs) 
     for (EntityID entity : completed) {
         auto it = activeMigrations_.find(entity);
         if (it != activeMigrations_.end()) {
+            stats_.totalMigrations++;  // Count successful completions
             if (it->second.onSuccess) {
                 it->second.onSuccess();
             }
@@ -359,9 +371,9 @@ void EntityMigrationManager::update(Registry& registry, uint32_t currentTimeMs) 
         }
     }
     
-    // Handle timeouts
-    for (EntityID entity : timedOut) {
-        onFailed(entity, "Migration timed out");
+    // Handle failures (timeouts and cancellations)
+    for (const auto& [entity, reason] : failed) {
+        onFailed(entity, reason);
     }
 }
 
@@ -383,13 +395,12 @@ bool EntityMigrationManager::cancelMigration(EntityID entity) {
         return false;
     }
     
+    // Mark as cancelled - will be processed in update()
+    it->second.state = MigrationState::FAILED;
     stats_.cancelledMigrations++;
     
-    if (it->second.onFailure) {
-        it->second.onFailure("Migration cancelled");
-    }
-    
-    cleanupMigration(entity);
+    // Note: migration record stays until update() processes it
+    // Callback will be invoked in update() when processing FAILED state
     return true;
 }
 
@@ -411,7 +422,7 @@ void EntityMigrationManager::onPreparing(EntityID entity, Registry& registry, ui
     auto it = activeMigrations_.find(entity);
     if (it == activeMigrations_.end()) return;
     
-    if (it->second.startTime == 0) {
+    if (it->second.startTime == UINT32_MAX) {
         it->second.startTime = currentTimeMs;
     }
     
