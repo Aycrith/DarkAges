@@ -31,6 +31,8 @@ set(TEST_SOURCES
     TestMemoryPool.cpp
     TestProfiling.cpp
     TestDDoSProtection.cpp
+    TestRedisIntegration.cpp
+    BenchmarkRedis.cpp
 )
 
 # Server sources needed for tests (excluding main.cpp)
@@ -69,6 +71,13 @@ target_link_libraries(darkages-tests PRIVATE
     glm::glm
     Threads::Threads
 )
+
+# Link Redis if available (same check as main CMakeLists.txt)
+if(REDIS_AVAILABLE)
+    target_link_libraries(darkages-tests PRIVATE ${HIREDIS_LIBRARIES})
+    target_include_directories(darkages-tests PRIVATE ${HIREDIS_INCLUDE_DIRS})
+    target_compile_definitions(darkages-tests PRIVATE REDIS_AVAILABLE=1)
+endif()
 
 # Register tests with CTest
 include(Catch)
