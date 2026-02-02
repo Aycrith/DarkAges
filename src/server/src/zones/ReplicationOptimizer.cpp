@@ -170,7 +170,9 @@ std::vector<Protocol::EntityStateData> ReplicationOptimizer::buildEntityStates(
             data.entityType = 2;  // Loot/other
         }
         
-        // Timestamp is implicit in the snapshot tick
+        // Set timestamp for lag compensation and reconciliation
+        data.timestamp = currentTick;
+        
         states.push_back(data);
     }
     
@@ -216,6 +218,7 @@ bool ReplicationOptimizer::needsUpdate(ConnectionID connId, EntityID entity,
     uint32_t ticksPerUpdate = getUpdateInterval(priority);
     
     // Check if enough ticks have passed since last update
+    // If updated at tick 100 with interval 3, next update at tick 103 (3 ticks later)
     return (currentTick - lastTick) >= ticksPerUpdate;
 }
 

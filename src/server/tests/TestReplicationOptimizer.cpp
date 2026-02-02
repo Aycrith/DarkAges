@@ -72,8 +72,9 @@ TEST_CASE("ReplicationOptimizer - Entity Update Tracking", "[replication]") {
         optimizer.markEntityUpdated(connId, entity, tick);
         
         // Should need update after enough ticks pass
-        REQUIRE(optimizer.needsUpdate(connId, entity, tick + 3, 0) == false);  // Near: 3 tick interval
-        REQUIRE(optimizer.needsUpdate(connId, entity, tick + 4, 0) == true);   // 4 > 3
+        // Interval of 3 means: update every 3 ticks (at 100, 103, 106, etc.)
+        REQUIRE(optimizer.needsUpdate(connId, entity, tick + 2, 0) == false);  // 2 < 3, not yet
+        REQUIRE(optimizer.needsUpdate(connId, entity, tick + 3, 0) == true);   // 3 >= 3, time to update
     }
     
     SECTION("Different priorities have different intervals") {
@@ -414,6 +415,6 @@ TEST_CASE("ReplicationOptimizer - Remove Entity Tracking", "[replication]") {
     REQUIRE(optimizer.needsUpdate(conn1, entity1, 200, 0) == true);
     REQUIRE(optimizer.needsUpdate(conn2, entity1, 200, 0) == true);
     
-    // entity2 should still be tracked
-    REQUIRE(optimizer.needsUpdate(conn1, entity2, 104, 0) == false);  // 4 ticks < 3 interval
+    // entity2 should still be tracked (updated at 100, checking at 102: 2 ticks < 3 interval)
+    REQUIRE(optimizer.needsUpdate(conn1, entity2, 102, 0) == false);
 }
