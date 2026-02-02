@@ -436,16 +436,17 @@ TEST_CASE("LagCompensatedCombat edge cases", "[combat][lag][edge]") {
         // Record history
         fixture.recordHistory(0);
         
-        // Set attacker on cooldown
+        // Set attacker on cooldown by simulating a recent attack
+        // Attack was at time 0, checking at time 100ms (well within 500ms cooldown)
         if (CombatState* combat = fixture.registry.try_get<CombatState>(fixture.attacker)) {
-            combat->lastAttackTime = 0;  // Just attacked
+            combat->lastAttackTime = 1;  // Attack happened at 1ms (very recent)
         }
         
         LagCompensatedAttack attack;
         attack.attacker = fixture.attacker;
         attack.input.type = AttackInput::MELEE;
         attack.clientTimestamp = 0;
-        attack.serverTimestamp = 100;  // Within 500ms cooldown
+        attack.serverTimestamp = 100;  // Within 500ms cooldown (99ms since last attack)
         attack.rttMs = 100;
         
         auto results = fixture.lagCombat.processAttackWithRewind(fixture.registry, attack);

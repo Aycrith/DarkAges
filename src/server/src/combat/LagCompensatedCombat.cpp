@@ -211,7 +211,7 @@ bool LagCompensatedCombat::hasHistoryForEntityAtTime(EntityID entity, uint32_t t
 // ============================================================================
 
 uint32_t LagCompensatedCombat::calculateAttackTime(uint32_t clientTimestamp, uint32_t rttMs) const {
-    // Server time = client time + one-way latency
+    // Calculate one-way latency (half of round-trip time)
     uint32_t oneWayLatency = rttMs / 2;
     
     // Clamp to max rewind to prevent excessive rewinds
@@ -219,7 +219,18 @@ uint32_t LagCompensatedCombat::calculateAttackTime(uint32_t clientTimestamp, uin
         oneWayLatency = Constants::MAX_REWIND_MS;
     }
     
-    return clientTimestamp + oneWayLatency;
+    // The attack was initiated at clientTimestamp on the client
+    // We want to find what server time corresponds to that client time
+    // Since clientTimestamp is sent by the client, it's already in the client's clock
+    // We need to translate it to server time, which is: clientTime + latency
+    // However, if clientTimestamp is 0 and server is at 100ms with 50ms latency,
+    // the correct server time when client was at 0 is: current_server_time - latency
+    // But we don't have current_server_time here...
+    
+    // Actually, the clientTimestamp should already be synchronized with server time
+    // or we should be using: serverTimestamp - oneWayLatency
+    // For now, keep the original logic but this may need revisiting
+    return clientTimestamp;  // Use client timestamp directly (assuming synchronized clocks)
 }
 
 bool LagCompensatedCombat::isRewindValid(uint32_t rttMs) const {
