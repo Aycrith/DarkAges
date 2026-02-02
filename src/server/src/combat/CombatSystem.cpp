@@ -172,6 +172,11 @@ bool CombatSystem::canAttack(Registry& registry, EntityID attacker, uint32_t cur
     }
     
     // Check cooldown
+    // lastAttackTime == 0 means never attacked, allow first attack
+    if (combat->lastAttackTime == 0) {
+        return true;
+    }
+    
     uint32_t timeSinceLastAttack = currentTimeMs - combat->lastAttackTime;
     if (timeSinceLastAttack < config_.attackCooldownMs) {
         return false;
