@@ -95,6 +95,20 @@ bool DDoSProtection::shouldAcceptConnection(const std::string& ipAddress) {
         }
     }
     
+    // Accept connection - register it
+    // Create a placeholder connection entry
+    static uint32_t nextConnectionId = 1;
+    uint32_t connectionId = nextConnectionId++;
+    
+    ConnectionStats stats;
+    stats.connectionId = connectionId;
+    stats.ipAddress = ipAddress;
+    stats.firstSeenTime = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    
+    connections_[connectionId] = stats;
+    ipToConnections_[ipAddress].push_back(connectionId);
+    
     return true;
 }
 
