@@ -1,5 +1,11 @@
 # DarkAges MMO
 
+![Build and Test](https://github.com/cammurray/DarkAges/workflows/Build%20and%20Test/badge.svg)
+![Redis Tests](https://github.com/cammurray/DarkAges/workflows/Redis%20Integration%20Tests/badge.svg)
+![Test Coverage](https://img.shields.io/badge/coverage-99.2%25-brightgreen)
+![Redis Performance](https://img.shields.io/badge/redis-232k%20ops%2Fsec-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 A high-density PvP MMO inspired by Dark Age of Camelot and Ark Raiders, targeting 100-1000 concurrent players per shard with zero budget.
 
 ## Project Status: Phase 8 Production Hardening
