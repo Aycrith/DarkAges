@@ -169,8 +169,9 @@ bool LagCompensatedCombat::validateHitClaim(Registry& registry, EntityID attacke
 // ============================================================================
 
 void LagCompensatedCombat::rewindEntitiesInArea(Registry& registry, const Position& center,
-                                               float radius, uint32_t targetTimestamp,
-                                               std::vector<EntityID>& outAffectedEntities) {
+                                                float radius, uint32_t targetTimestamp,
+                                                std::vector<EntityID>& outAffectedEntities,
+                                                EntityID excludeEntity) {
     // Clear output vector
     outAffectedEntities.clear();
     
@@ -178,6 +179,9 @@ void LagCompensatedCombat::rewindEntitiesInArea(Registry& registry, const Positi
     auto view = registry.view<Position, CombatState>();
     
     view.each([&](EntityID entity, const Position& currentPos, const CombatState& combat) {
+        // Skip excluded entity (e.g., the caster of an AOE attack)
+        if (entity == excludeEntity) return;
+        
         // Skip dead entities
         if (combat.isDead) return;
         
@@ -220,17 +224,10 @@ uint32_t LagCompensatedCombat::calculateAttackTime(uint32_t clientTimestamp, uin
     }
     
     // The attack was initiated at clientTimestamp on the client
-    // We want to find what server time corresponds to that client time
-    // Since clientTimestamp is sent by the client, it's already in the client's clock
-    // We need to translate it to server time, which is: clientTime + latency
-    // However, if clientTimestamp is 0 and server is at 100ms with 50ms latency,
-    // the correct server time when client was at 0 is: current_server_time - latency
-    // But we don't have current_server_time here...
-    
-    // Actually, the clientTimestamp should already be synchronized with server time
-    // or we should be using: serverTimestamp - oneWayLatency
-    // For now, keep the original logic but this may need revisiting
-    return clientTimestamp;  // Use client timestamp directly (assuming synchronized clocks)
+    // By the time the server receives it, one-way latency has elapsed
+    // So the server time when the attack was initiated is: clientTimestamp + oneWayLatency
+    // This is the time we need to rewind to for lag compensation
+    return clientTimestamp + oneWayLatency;
 }
 
 bool LagCompensatedCombat::isRewindValid(uint32_t rttMs) const {

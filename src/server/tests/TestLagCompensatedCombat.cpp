@@ -325,9 +325,9 @@ TEST_CASE("LagCompensatedCombat AOE rewind", "[combat][lag][aoe]") {
         std::vector<EntityID> affected;
         Position center = Position::fromVec3(glm::vec3(0, 0, 0), 0);
         
-        fixture.lagCombat.rewindEntitiesInArea(fixture.registry, center, 5.0f, 0, affected);
+        fixture.lagCombat.rewindEntitiesInArea(fixture.registry, center, 5.0f, 0, affected, fixture.attacker);
         
-        // Should find target (2m) and target2 (3m), but not target3 (10m)
+        // Should find target (2m) and target2 (3m), but not target3 (10m) or attacker (excluded)
         REQUIRE(affected.size() == 2);
         REQUIRE(std::find(affected.begin(), affected.end(), fixture.target) != affected.end());
         REQUIRE(std::find(affected.begin(), affected.end(), target2) != affected.end());

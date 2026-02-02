@@ -65,9 +65,11 @@ public:
     // [COMBAT_AGENT] Contract for Ability System:
     // - Call this before processing AOE damage
     // - Pass affected entities to applyDamage() individually
+    // - optionally exclude an entity (typically the caster) using excludeEntity parameter
     void rewindEntitiesInArea(Registry& registry, const Position& center, float radius,
                              uint32_t targetTimestamp,
-                             std::vector<EntityID>& outAffectedEntities);
+                             std::vector<EntityID>& outAffectedEntities,
+                             EntityID excludeEntity = entt::null);
     
     // Check if we have position history for an entity at a given time
     // Useful for debugging and logging
