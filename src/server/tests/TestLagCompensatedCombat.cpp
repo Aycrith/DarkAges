@@ -83,8 +83,10 @@ TEST_CASE("LagCompensatedCombat basic attack processing", "[combat][lag][combat]
             p = Position::fromVec3(glm::vec3(0, 0, 2.0f), 0);
         });
         
-        // Record history at t=0
+        // Record history at t=0 and t=50 (attack time with RTT=100ms)
+        // With clientTimestamp=0 and RTT=100ms, attackTime = 0 + 50 = 50ms
         fixture.recordHistory(0);
+        fixture.recordHistory(50);
         
         // Build attack input
         LagCompensatedAttack attack;
@@ -167,16 +169,14 @@ TEST_CASE("LagCompensatedCombat timing calculations", "[combat][lag][timing]") {
     
     SECTION("Attack time calculation with latency") {
         // With 100ms RTT, attack time = clientTime + 50ms
-        // At t=0, target at (0,0,2)
+        // At t=0, target at (0,0,2) - in melee range
         fixture.registry.patch<Position>(fixture.target, [](Position& p) {
             p = Position::fromVec3(glm::vec3(0, 0, 2.0f), 0);
         });
         fixture.recordHistory(0);
         
-        // At t=100, target has moved
-        fixture.registry.patch<Position>(fixture.target, [](Position& p) {
-            p = Position::fromVec3(glm::vec3(10.0f, 0, 10.0f), 100);
-        });
+        // At t=100, target is still in range (hasn't moved yet)
+        // This allows interpolation to t=50 to still be in range
         fixture.recordHistory(100);
         
         // Attack sent at client t=0, received at server t=100 with 100ms RTT
@@ -189,7 +189,7 @@ TEST_CASE("LagCompensatedCombat timing calculations", "[combat][lag][timing]") {
         
         auto results = fixture.lagCombat.processAttackWithRewind(fixture.registry, attack);
         
-        // Should hit at historical position (t=50, which interpolates to t=0 position)
+        // Should hit at historical position (t=50 interpolates between t=0 and t=100, both in range)
         REQUIRE(results[0].hit == true);
     }
     
