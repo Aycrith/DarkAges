@@ -20,9 +20,24 @@ namespace DarkAges {
 
 bool ZoneDefinition::containsPosition(float x, float z) const {
     // Exclude aura buffer from main zone
+    // Core region is the natural zone bounds (shrunk by buffer on interior edges)
+    // For zones with buffer, we shrink by buffer amount
+    // For zones at world edges, they don't extend beyond world bounds
+    // We use < instead of <= to avoid overlap at exact boundaries
     float buffer = Constants::AURA_BUFFER_METERS;
-    return x >= (minX + buffer) && x <= (maxX - buffer) &&
-           z >= (minZ + buffer) && z <= (maxZ - buffer);
+    
+    // Check if this zone has buffer on each edge by checking if min/max are "round" numbers
+    // Zones at world edges have natural bounds, interior zones have buffer
+    // Simple heuristic: if maxX-minX is larger than expected, we have buffer on edges
+    
+    // For now, use simple logic: shrink by buffer, use strict < for upper bounds
+    float coreMinX = minX + buffer;
+    float coreMaxX = maxX - buffer;
+    float coreMinZ = minZ + buffer;
+    float coreMaxZ = maxZ - buffer;
+    
+    return x > coreMinX && x < coreMaxX &&
+           z > coreMinZ && z < coreMaxZ;
 }
 
 bool ZoneDefinition::isInAuraBuffer(float x, float z) const {
@@ -37,6 +52,25 @@ bool ZoneDefinition::isInAuraBuffer(float x, float z) const {
 }
 
 float ZoneDefinition::distanceToEdge(float x, float z) const {
+    // Check if point is inside the zone
+    bool insideX = (x >= minX && x <= maxX);
+    bool insideZ = (z >= minZ && z <= maxZ);
+    
+    if (insideX && insideZ) {
+        // Inside - return negative distance to nearest edge
+        float distToMinX = x - minX;
+        float distToMaxX = maxX - x;
+        float distToMinZ = z - minZ;
+        float distToMaxZ = maxZ - z;
+        
+        float minDistX = std::min(distToMinX, distToMaxX);
+        float minDistZ = std::min(distToMinZ, distToMaxZ);
+        float minDist = std::min(minDistX, minDistZ);
+        
+        return -minDist;  // Negative when inside
+    }
+    
+    // Outside - return positive distance to nearest edge
     float dx = 0.0f;
     if (x < minX) dx = minX - x;
     else if (x > maxX) dx = x - maxX;
