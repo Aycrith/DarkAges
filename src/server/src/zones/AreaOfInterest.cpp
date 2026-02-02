@@ -48,8 +48,10 @@ AOIResult AreaOfInterestSystem::queryVisibleEntities(
 
 int AreaOfInterestSystem::getUpdatePriority(const Position& viewerPos, const Position& targetPos) const {
     // Calculate distance using fixed-point math for consistency
-    float distSq = viewerPos.distanceSqTo(targetPos);
-    float dist = std::sqrt(distSq) * Constants::FIXED_TO_FLOAT;
+    // distanceSqTo() returns distance-squared in fixed-point units
+    // We need to convert to float first (meters squared), then sqrt to get distance in meters
+    float distSq = viewerPos.distanceSqTo(targetPos) * Constants::FIXED_TO_FLOAT;
+    float dist = std::sqrt(distSq);
     
     // Return priority based on distance tiers
     if (dist <= Constants::AOI_RADIUS_NEAR) {

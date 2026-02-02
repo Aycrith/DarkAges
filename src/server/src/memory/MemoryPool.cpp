@@ -5,6 +5,11 @@
 #include <cstddef>
 #include <mutex>
 #include <vector>
+#include <cstdlib>  // For aligned_alloc/free
+
+#ifdef _WIN32
+#include <malloc.h>  // For _aligned_malloc/_aligned_free
+#endif
 
 namespace DarkAges {
 namespace Memory {
@@ -15,11 +20,21 @@ namespace Memory {
 
 StackAllocator::StackAllocator(size_t capacity) 
     : capacity_(capacity), offset_(0) {
-    buffer_ = new uint8_t[capacity];
+    // Allocate with extra space for alignment
+    // Use alignas or aligned_alloc for proper alignment
+    #ifdef _WIN32
+        buffer_ = static_cast<uint8_t*>(_aligned_malloc(capacity, 64));
+    #else
+        buffer_ = static_cast<uint8_t*>(std::aligned_alloc(64, capacity));
+    #endif
 }
 
 StackAllocator::~StackAllocator() {
-    delete[] buffer_;
+    #ifdef _WIN32
+        _aligned_free(buffer_);
+    #else
+        std::free(buffer_);
+    #endif
 }
 
 void* StackAllocator::allocate(size_t size, size_t alignment) {

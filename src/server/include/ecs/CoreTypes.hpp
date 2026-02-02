@@ -49,7 +49,12 @@ struct Position {
         const Constants::Fixed dx = x - other.x;
         const Constants::Fixed dy = y - other.y;
         const Constants::Fixed dz = z - other.z;
-        return (dx * dx + dy * dy + dz * dz) / Constants::FIXED_PRECISION;
+        // Cast to int64_t to avoid overflow for large distances (200m = 200000 units)
+        // 200000 * 200000 = 40,000,000,000 which overflows int32_t (max ~2.1 billion)
+        const int64_t dx64 = dx;
+        const int64_t dy64 = dy;
+        const int64_t dz64 = dz;
+        return static_cast<Constants::Fixed>((dx64 * dx64 + dy64 * dy64 + dz64 * dz64) / Constants::FIXED_PRECISION);
     }
 };
 
