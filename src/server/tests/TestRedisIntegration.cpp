@@ -12,15 +12,25 @@
 
 using namespace DarkAges;
 
-// Skip Redis tests if not available
-#ifndef REDIS_AVAILABLE
-#define SKIP_REDIS_TESTS true
-#else
-#define SKIP_REDIS_TESTS false
-#endif
+// Helper function to check if Redis is available
+static bool isRedisAvailable() {
+    static bool checked = false;
+    static bool available = false;
+    
+    if (!checked) {
+        RedisManager testRedis;
+        available = testRedis.initialize("localhost", 6379);
+        if (available) {
+            testRedis.shutdown();
+        }
+        checked = true;
+    }
+    
+    return available;
+}
 
 TEST_CASE("Redis Connection Pool", "[redis][database]") {
-    if (SKIP_REDIS_TESTS) {
+    if (!isRedisAvailable()) {
         SKIP("Redis not available - skipping tests");
     }
 
@@ -38,7 +48,7 @@ TEST_CASE("Redis Connection Pool", "[redis][database]") {
 }
 
 TEST_CASE("Redis Basic Operations", "[redis][database]") {
-    if (SKIP_REDIS_TESTS) {
+    if (!isRedisAvailable()) {
         SKIP("Redis not available - skipping tests");
     }
 
@@ -120,7 +130,7 @@ TEST_CASE("Redis Basic Operations", "[redis][database]") {
 }
 
 TEST_CASE("Redis Latency < 1ms", "[redis][database][performance]") {
-    if (SKIP_REDIS_TESTS) {
+    if (!isRedisAvailable()) {
         SKIP("Redis not available - skipping tests");
     }
 
@@ -193,7 +203,7 @@ TEST_CASE("Redis Latency < 1ms", "[redis][database][performance]") {
 }
 
 TEST_CASE("Redis 10k Ops/sec Throughput", "[redis][database][performance]") {
-    if (SKIP_REDIS_TESTS) {
+    if (!isRedisAvailable()) {
         SKIP("Redis not available - skipping tests");
     }
 
@@ -243,7 +253,7 @@ TEST_CASE("Redis 10k Ops/sec Throughput", "[redis][database][performance]") {
 }
 
 TEST_CASE("Redis Player Session Operations", "[redis][database]") {
-    if (SKIP_REDIS_TESTS) {
+    if (!isRedisAvailable()) {
         SKIP("Redis not available - skipping tests");
     }
 
@@ -301,7 +311,7 @@ TEST_CASE("Redis Player Session Operations", "[redis][database]") {
 }
 
 TEST_CASE("Redis Zone Operations", "[redis][database]") {
-    if (SKIP_REDIS_TESTS) {
+    if (!isRedisAvailable()) {
         SKIP("Redis not available - skipping tests");
     }
 
@@ -357,7 +367,7 @@ TEST_CASE("Redis Zone Operations", "[redis][database]") {
 }
 
 TEST_CASE("Redis Pub/Sub Cross-Zone", "[redis][database]") {
-    if (SKIP_REDIS_TESTS) {
+    if (!isRedisAvailable()) {
         SKIP("Redis not available - skipping tests");
     }
 
@@ -435,7 +445,7 @@ TEST_CASE("Redis Pub/Sub Cross-Zone", "[redis][database]") {
 }
 
 TEST_CASE("Redis Failover Recovery", "[redis][database]") {
-    if (SKIP_REDIS_TESTS) {
+    if (!isRedisAvailable()) {
         SKIP("Redis not available - skipping tests");
     }
 
@@ -465,7 +475,7 @@ TEST_CASE("Redis Failover Recovery", "[redis][database]") {
 }
 
 TEST_CASE("Redis Metrics", "[redis][database]") {
-    if (SKIP_REDIS_TESTS) {
+    if (!isRedisAvailable()) {
         SKIP("Redis not available - skipping tests");
     }
 
