@@ -13,29 +13,6 @@ namespace DarkAges {
 namespace Profiling {
 
 // ============================================================================
-// PerformanceCounter
-// ============================================================================
-
-void PerformanceCounter::record(uint64_t timeUs) {
-    count++;
-    totalTimeUs += timeUs;
-    maxTimeUs = std::max(maxTimeUs, timeUs);
-    minTimeUs = std::min(minTimeUs, timeUs);
-}
-
-double PerformanceCounter::averageTimeUs() const {
-    if (count == 0) return 0.0;
-    return static_cast<double>(totalTimeUs) / static_cast<double>(count);
-}
-
-void PerformanceCounter::reset() {
-    count = 0;
-    totalTimeUs = 0;
-    maxTimeUs = 0;
-    minTimeUs = ~0ULL;
-}
-
-// ============================================================================
 // ScopedTraceEvent
 // ============================================================================
 

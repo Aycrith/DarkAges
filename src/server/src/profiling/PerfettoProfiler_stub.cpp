@@ -8,18 +8,21 @@ PerfettoProfiler& PerfettoProfiler::instance() {
     return inst;
 }
 
-bool PerfettoProfiler::initialize(const std::string&) { return true; }
-void PerfettoProfiler::shutdown() {}
+bool PerfettoProfiler::initialize(const std::string&) { 
+    active_ = true;
+    return true; 
+}
+
+void PerfettoProfiler::shutdown() { 
+    active_ = false; 
+}
 void PerfettoProfiler::beginEvent(const char*, TraceCategory) {}
 void PerfettoProfiler::endEvent(const char*, TraceCategory) {}
 void PerfettoProfiler::instantEvent(const char*, TraceCategory) {}
 void PerfettoProfiler::counterEvent(const char*, int64_t) {}
 ScopedTraceEvent PerfettoProfiler::scopedEvent(const char* name, TraceCategory category) { return ScopedTraceEvent(name, category); }
 
-// PerformanceCounter methods
-void PerformanceCounter::record(uint64_t) {}
-double PerformanceCounter::averageTimeUs() const { return 0.0; }
-void PerformanceCounter::reset() {}
+// Note: PerformanceCounter methods are now inline in the header
 
 // ScopedTraceEvent methods
 ScopedTraceEvent::ScopedTraceEvent(const char* name, TraceCategory category) 

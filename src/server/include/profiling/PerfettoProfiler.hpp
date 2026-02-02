@@ -56,9 +56,24 @@ struct PerformanceCounter {
     uint64_t maxTimeUs{0};
     uint64_t minTimeUs{~0ULL};
     
-    void record(uint64_t timeUs);
-    double averageTimeUs() const;
-    void reset();
+    void record(uint64_t timeUs) {
+        count++;
+        totalTimeUs += timeUs;
+        maxTimeUs = std::max(maxTimeUs, timeUs);
+        minTimeUs = std::min(minTimeUs, timeUs);
+    }
+    
+    double averageTimeUs() const {
+        if (count == 0) return 0.0;
+        return static_cast<double>(totalTimeUs) / static_cast<double>(count);
+    }
+    
+    void reset() {
+        count = 0;
+        totalTimeUs = 0;
+        maxTimeUs = 0;
+        minTimeUs = ~0ULL;
+    }
 };
 
 // [PERFORMANCE_AGENT] Main profiler interface
