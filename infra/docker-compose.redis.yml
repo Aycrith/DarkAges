@@ -1,0 +1,37 @@
+# DarkAges MMO - Minimal Redis for Testing
+# 
+# Quick start Redis container for running integration tests
+# Optimized for local development and testing
+#
+# Usage:
+#   Start:  docker-compose -f infra/docker-compose.redis.yml up -d
+#   Stop:   docker-compose -f infra/docker-compose.redis.yml down
+#   Clean:  docker-compose -f infra/docker-compose.redis.yml down -v
+
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: darkages-redis
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 1s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - darkages-test
+
+networks:
+  darkages-test:
+    driver: bridge
