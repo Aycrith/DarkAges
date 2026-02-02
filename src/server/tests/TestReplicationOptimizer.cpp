@@ -20,10 +20,10 @@ TEST_CASE("ReplicationOptimizer - Priority Calculation", "[replication]") {
     SECTION("Near entities get high priority (0)") {
         // Entity at 30m should be near (0-50m)
         float dist = 30.0f;
-        auto priorities = optimizer.calculatePriorities;
-        // We'll test through full integration
+        // Test priority calculation indirectly through update interval
+        uint8_t priority = optimizer.calculatePriority(dist);
+        REQUIRE(priority == 0);  // Near priority
         (void)dist;
-        (void)priorities;
     }
 }
 
@@ -66,7 +66,7 @@ TEST_CASE("ReplicationOptimizer - Entity Update Tracking", "[replication]") {
     
     SECTION("Mark entity as updated") {
         ConnectionID connId = 1;
-        EntityID entity = entt::entity{42};
+        EntityID entity = static_cast<entt::entity>(42);
         uint32_t tick = 100;
         
         optimizer.markEntityUpdated(connId, entity, tick);
@@ -78,7 +78,7 @@ TEST_CASE("ReplicationOptimizer - Entity Update Tracking", "[replication]") {
     
     SECTION("Different priorities have different intervals") {
         ConnectionID connId = 1;
-        EntityID entity = entt::entity{42};
+        EntityID entity = static_cast<entt::entity>(42);
         uint32_t tick = 100;
         
         optimizer.markEntityUpdated(connId, entity, tick);
@@ -99,12 +99,12 @@ TEST_CASE("ReplicationOptimizer - Entity Update Tracking", "[replication]") {
     }
     
     SECTION("Unknown client always needs update") {
-        REQUIRE(optimizer.needsUpdate(999, entt::entity{42}, 100, 0) == true);
+        REQUIRE(optimizer.needsUpdate(999, static_cast<entt::entity>(42), 100, 0) == true);
     }
     
     SECTION("Remove client tracking") {
         ConnectionID connId = 1;
-        EntityID entity = entt::entity{42};
+        EntityID entity = static_cast<entt::entity>(42);
         
         optimizer.markEntityUpdated(connId, entity, 100);
         REQUIRE(optimizer.getTrackedClientCount() == 1);
@@ -122,9 +122,9 @@ TEST_CASE("ReplicationOptimizer - Filter By Update Rate", "[replication]") {
         std::vector<ReplicationPriority> priorities;
         
         // Add entities with different priorities
-        priorities.push_back({entt::entity{1}, 0, 100.0f, false});  // Near
-        priorities.push_back({entt::entity{2}, 1, 2500.0f, false}); // Mid
-        priorities.push_back({entt::entity{3}, 2, 10000.0f, false}); // Far
+        priorities.push_back({static_cast<entt::entity>(1), 0, 100.0f, false});  // Near
+        priorities.push_back({static_cast<entt::entity>(2), 1, 2500.0f, false}); // Mid
+        priorities.push_back({static_cast<entt::entity>(3), 2, 10000.0f, false}); // Far
         
         // At tick 0 (divisible by all intervals)
         auto toUpdate0 = optimizer.filterByUpdateRate(priorities, 0);
@@ -133,7 +133,7 @@ TEST_CASE("ReplicationOptimizer - Filter By Update Rate", "[replication]") {
         // At tick 3 (only near updates: 3 % 3 == 0)
         auto toUpdate3 = optimizer.filterByUpdateRate(priorities, 3);
         REQUIRE(toUpdate3.size() == 1);
-        REQUIRE(toUpdate3[0] == entt::entity{1});
+        REQUIRE(toUpdate3[0] == static_cast<entt::entity>(1));
         
         // At tick 6 (near: 6 % 3 == 0, mid: 6 % 6 == 0)
         auto toUpdate6 = optimizer.filterByUpdateRate(priorities, 6);
@@ -396,8 +396,8 @@ TEST_CASE("ReplicationOptimizer - Max Entities Limit", "[replication]") {
 TEST_CASE("ReplicationOptimizer - Remove Entity Tracking", "[replication]") {
     ReplicationOptimizer optimizer;
     
-    EntityID entity1 = entt::entity{1};
-    EntityID entity2 = entt::entity{2};
+    EntityID entity1 = static_cast<entt::entity>(1);
+    EntityID entity2 = static_cast<entt::entity>(2);
     ConnectionID conn1 = 1;
     ConnectionID conn2 = 2;
     

@@ -103,6 +103,7 @@ struct InputState {
     // Networking metadata
     uint32_t sequence{0};      // Monotonic counter for reconciliation
     uint32_t timestamp_ms{0};  // Client send time
+    uint32_t targetEntity{0};  // Target entity ID for abilities/combat
     
     // Initialize all bits to 0
     InputState() : forward(0), backward(0), left(0), right(0), 
@@ -202,6 +203,59 @@ struct AntiCheatState {
     float maxRecordedSpeed{0.0f};
     uint32_t inputCount{0};
     uint32_t inputWindowStart{0};
+};
+
+// [NETWORK_AGENT] Entity state for network serialization (WP-8-6)
+enum class EntityType : uint8_t {
+    PLAYER = 0,
+    PROJECTILE = 1,
+    LOOT = 2,
+    NPC = 3
+};
+
+enum class AnimationState : uint8_t {
+    IDLE = 0,
+    WALK = 1,
+    RUN = 2,
+    ATTACK = 3,
+    BLOCK = 4,
+    DEAD = 5
+};
+
+struct EntityState {
+    uint32_t id{0};
+    EntityType type{EntityType::PLAYER};
+    Position position{};  // Uses Fixed default constructor
+    Velocity velocity{};  // Uses Fixed default constructor
+    Rotation rotation{};  // Uses float default constructor
+    uint8_t healthPercent{100};
+    AnimationState animState{AnimationState::IDLE};
+    uint32_t teamId{0};
+};
+
+// ============================================================================
+// ABILITY COMPONENTS
+// ============================================================================
+
+// [COMBAT_AGENT] Individual ability data
+struct Ability {
+    uint32_t abilityId{0};
+    float cooldownRemaining{0.0f};
+    float manaCost{0.0f};
+};
+
+// [COMBAT_AGENT] Collection of abilities for an entity
+struct Abilities {
+    static constexpr uint32_t MAX_ABILITIES = 8;
+    Ability abilities[MAX_ABILITIES];
+    uint32_t count{0};
+};
+
+// [COMBAT_AGENT] Mana/resource pool
+struct Mana {
+    float current{100.0f};
+    float max{100.0f};
+    float regenerationRate{1.0f};  // per second
 };
 
 // ============================================================================

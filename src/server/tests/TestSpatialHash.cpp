@@ -13,7 +13,7 @@ TEST_CASE("Spatial Hash basic operations", "[spatial]") {
     SpatialHash hash;
     
     SECTION("Insert and query single entity") {
-        EntityID entity = entt::entity{1};
+        EntityID entity = static_cast<entt::entity>(1);
         hash.insert(entity, 5.0f, 5.0f);
         
         auto nearby = hash.query(5.0f, 5.0f, 1.0f);
@@ -22,9 +22,9 @@ TEST_CASE("Spatial Hash basic operations", "[spatial]") {
     }
     
     SECTION("Insert and query multiple entities in same cell") {
-        EntityID e1 = entt::entity{1};
-        EntityID e2 = entt::entity{2};
-        EntityID e3 = entt::entity{3};
+        EntityID e1 = static_cast<entt::entity>(1);
+        EntityID e2 = static_cast<entt::entity>(2);
+        EntityID e3 = static_cast<entt::entity>(3);
         
         hash.insert(e1, 5.0f, 5.0f);
         hash.insert(e2, 5.1f, 5.1f);  // Same 10m cell
@@ -44,8 +44,8 @@ TEST_CASE("Spatial Hash basic operations", "[spatial]") {
     }
     
     SECTION("Query radius filtering") {
-        EntityID e1 = entt::entity{1};
-        EntityID e2 = entt::entity{2};
+        EntityID e1 = static_cast<entt::entity>(1);
+        EntityID e2 = static_cast<entt::entity>(2);
         
         hash.insert(e1, 0.0f, 0.0f);
         hash.insert(e2, 50.0f, 0.0f);  // 50m away
@@ -58,8 +58,8 @@ TEST_CASE("Spatial Hash basic operations", "[spatial]") {
     }
     
     SECTION("Clear removes all entities") {
-        EntityID e1 = entt::entity{1};
-        EntityID e2 = entt::entity{2};
+        EntityID e1 = static_cast<entt::entity>(1);
+        EntityID e2 = static_cast<entt::entity>(2);
         
         hash.insert(e1, 5.0f, 5.0f);
         hash.insert(e2, 5.0f, 5.0f);
@@ -71,7 +71,7 @@ TEST_CASE("Spatial Hash basic operations", "[spatial]") {
     }
     
     SECTION("Update moves entity between cells") {
-        EntityID e1 = entt::entity{1};
+        EntityID e1 = static_cast<entt::entity>(1);
         
         hash.insert(e1, 5.0f, 5.0f);
         
@@ -88,9 +88,9 @@ TEST_CASE("Spatial Hash basic operations", "[spatial]") {
     SECTION("Entity count tracking") {
         REQUIRE(hash.getTotalEntityCount() == 0);
         
-        hash.insert(entt::entity{1}, 5.0f, 5.0f);
-        hash.insert(entt::entity{2}, 15.0f, 15.0f);
-        hash.insert(entt::entity{3}, 25.0f, 25.0f);
+        hash.insert(static_cast<entt::entity>(1), 5.0f, 5.0f);
+        hash.insert(static_cast<entt::entity>(2), 15.0f, 15.0f);
+        hash.insert(static_cast<entt::entity>(3), 25.0f, 25.0f);
         
         REQUIRE(hash.getTotalEntityCount() == 3);
     }
@@ -105,7 +105,7 @@ TEST_CASE("Spatial Hash performance", "[spatial][performance]") {
         BENCHMARK("Insert 1000 entities") {
             hash.clear();
             for (int i = 0; i < 1000; ++i) {
-                hash.insert(entt::entity{i}, dist(rng), dist(rng));
+                hash.insert(static_cast<entt::entity>(i), dist(rng), dist(rng));
             }
             return hash.getTotalEntityCount();
         };
@@ -114,7 +114,7 @@ TEST_CASE("Spatial Hash performance", "[spatial][performance]") {
     SECTION("Query with 1000 entities") {
         // Setup
         for (int i = 0; i < 1000; ++i) {
-            hash.insert(entt::entity{i}, dist(rng), dist(rng));
+            hash.insert(static_cast<entt::entity>(i), dist(rng), dist(rng));
         }
         
         BENCHMARK("Query 50m radius") {
@@ -129,7 +129,7 @@ TEST_CASE("Spatial Hash performance", "[spatial][performance]") {
     SECTION("Performance requirements") {
         // Insert 1000 random entities
         for (int i = 0; i < 1000; ++i) {
-            hash.insert(entt::entity{i}, dist(rng), dist(rng));
+            hash.insert(static_cast<entt::entity>(i), dist(rng), dist(rng));
         }
         
         // Query 100 times and measure total time
@@ -162,14 +162,14 @@ TEST_CASE("Spatial Hash cell calculations", "[spatial]") {
     }
     
     SECTION("Adjacent query") {
-        EntityID center = entt::entity{1};
+        EntityID center = static_cast<entt::entity>(1);
         hash.insert(center, 50.0f, 50.0f);
         
         // Insert entities in neighboring cells
-        hash.insert(entt::entity{2}, 55.0f, 55.0f);  // Same cell
-        hash.insert(entt::entity{3}, 65.0f, 50.0f);  // Adjacent cell (+1, 0)
-        hash.insert(entt::entity{4}, 35.0f, 50.0f);  // Adjacent cell (-1, 0)
-        hash.insert(entt::entity{5}, 150.0f, 150.0f);  // Far away
+        hash.insert(static_cast<entt::entity>(2), 55.0f, 55.0f);  // Same cell
+        hash.insert(static_cast<entt::entity>(3), 65.0f, 50.0f);  // Adjacent cell (+1, 0)
+        hash.insert(static_cast<entt::entity>(4), 35.0f, 50.0f);  // Adjacent cell (-1, 0)
+        hash.insert(static_cast<entt::entity>(5), 150.0f, 150.0f);  // Far away
         
         auto adjacent = hash.queryAdjacent(50.0f, 50.0f);
         
@@ -179,7 +179,7 @@ TEST_CASE("Spatial Hash cell calculations", "[spatial]") {
         // Far entity should not be included
         bool foundFar = false;
         for (EntityID e : adjacent) {
-            if (e == entt::entity{5}) foundFar = true;
+            if (e == static_cast<entt::entity>(5)) foundFar = true;
         }
         REQUIRE_FALSE(foundFar);
     }

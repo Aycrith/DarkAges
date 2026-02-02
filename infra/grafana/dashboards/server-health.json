@@ -1,216 +1,482 @@
 {
-  "dashboard": {
-    "id": null,
-    "title": "DarkAges Server Health",
-    "tags": ["darkages", "server", "monitoring"],
-    "timezone": "UTC",
-    "schemaVersion": 36,
-    "refresh": "5s",
-    "panels": [
-      {
-        "id": 1,
-        "title": "Tick Rate",
-        "type": "stat",
-        "targets": [
-          {
-            "expr": "1000 / darkages_tick_duration_ms",
-            "legendFormat": "Tick Rate",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "hertz",
-            "min": 0,
-            "max": 70,
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {"color": "red", "value": null},
-                {"color": "yellow", "value": 55},
-                {"color": "green", "value": 58}
-              ]
-            }
-          }
-        },
-        "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0}
-      },
-      {
-        "id": 2,
-        "title": "Tick Duration",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "darkages_tick_duration_ms",
-            "legendFormat": "Zone {{zone_id}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "ms",
-            "min": 0,
-            "max": 30,
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {"color": "green", "value": null},
-                {"color": "yellow", "value": 16},
-                {"color": "red", "value": 20}
-              ]
-            }
-          }
-        },
-        "gridPos": {"h": 8, "w": 12, "x": 4, "y": 0}
-      },
-      {
-        "id": 3,
-        "title": "Connected Players",
-        "type": "stat",
-        "targets": [
-          {
-            "expr": "sum(darkages_player_count)",
-            "legendFormat": "Total Players",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "short",
-            "min": 0,
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {"color": "green", "value": null},
-                {"color": "yellow", "value": 800},
-                {"color": "red", "value": 950}
-              ]
-            }
-          }
-        },
-        "gridPos": {"h": 4, "w": 4, "x": 16, "y": 0}
-      },
-      {
-        "id": 4,
-        "title": "Memory Usage",
-        "type": "gauge",
-        "targets": [
-          {
-            "expr": "darkages_memory_used_bytes / darkages_memory_total_bytes * 100",
-            "legendFormat": "Zone {{zone_id}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "percent",
-            "min": 0,
-            "max": 100,
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {"color": "green", "value": null},
-                {"color": "yellow", "value": 70},
-                {"color": "red", "value": 85}
-              ]
-            }
-          }
-        },
-        "gridPos": {"h": 4, "w": 4, "x": 20, "y": 0}
-      },
-      {
-        "id": 5,
-        "title": "Players per Zone",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "darkages_player_count",
-            "legendFormat": "Zone {{zone_id}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "short",
-            "min": 0
-          }
-        },
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
-      },
-      {
-        "id": 6,
-        "title": "Packet Loss Rate",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "rate(darkages_packets_lost_total[1m]) / rate(darkages_packets_sent_total[1m]) * 100",
-            "legendFormat": "Zone {{zone_id}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "percent",
-            "min": 0,
-            "max": 10,
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {"color": "green", "value": null},
-                {"color": "yellow", "value": 1},
-                {"color": "red", "value": 5}
-              ]
-            }
-          }
-        },
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
-      },
-      {
-        "id": 7,
-        "title": "Replication Bandwidth",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "rate(darkages_replication_bytes_total[1m])",
-            "legendFormat": "Zone {{zone_id}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "Bps",
-            "min": 0
-          }
-        },
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
-      },
-      {
-        "id": 8,
-        "title": "Error Rate",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "rate(darkages_errors_total[1m])",
-            "legendFormat": "Zone {{zone_id}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "ops",
-            "min": 0,
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {"color": "green", "value": null},
-                {"color": "yellow", "value": 5},
-                {"color": "red", "value": 10}
-              ]
-            }
-          }
-        },
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
-      }
-    ]
-  }
+    "id":  null,
+    "title":  "DarkAges Server Health",
+    "tags":  [
+                 "darkages",
+                 "server",
+                 "monitoring"
+             ],
+    "timezone":  "UTC",
+    "schemaVersion":  36,
+    "refresh":  "5s",
+    "panels":  [
+                   {
+                       "id":  1,
+                       "title":  "Tick Rate",
+                       "type":  "stat",
+                       "targets":  [
+                                       {
+                                           "expr":  "1000 / darkages_tick_duration_ms",
+                                           "legendFormat":  "Tick Rate",
+                                           "refId":  "A"
+                                       }
+                                   ],
+                       "fieldConfig":  {
+                                           "defaults":  {
+                                                            "unit":  "hertz",
+                                                            "min":  0,
+                                                            "max":  70,
+                                                            "thresholds":  {
+                                                                               "mode":  "absolute",
+                                                                               "steps":  [
+                                                                                             {
+                                                                                                 "color":  "red",
+                                                                                                 "value":  null
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "yellow",
+                                                                                                 "value":  55
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "green",
+                                                                                                 "value":  58
+                                                                                             }
+                                                                                         ]
+                                                                           }
+                                                        }
+                                       },
+                       "gridPos":  {
+                                       "h":  4,
+                                       "w":  4,
+                                       "x":  0,
+                                       "y":  0
+                                   }
+                   },
+                   {
+                       "id":  2,
+                       "title":  "Tick Duration",
+                       "type":  "graph",
+                       "targets":  [
+                                       {
+                                           "expr":  "darkages_tick_duration_ms",
+                                           "legendFormat":  "Zone {{zone_id}}",
+                                           "refId":  "A"
+                                       }
+                                   ],
+                       "fieldConfig":  {
+                                           "defaults":  {
+                                                            "unit":  "ms",
+                                                            "min":  0,
+                                                            "max":  30,
+                                                            "thresholds":  {
+                                                                               "mode":  "absolute",
+                                                                               "steps":  [
+                                                                                             {
+                                                                                                 "color":  "green",
+                                                                                                 "value":  null
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "yellow",
+                                                                                                 "value":  16
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "red",
+                                                                                                 "value":  20
+                                                                                             }
+                                                                                         ]
+                                                                           }
+                                                        }
+                                       },
+                       "gridPos":  {
+                                       "h":  8,
+                                       "w":  12,
+                                       "x":  4,
+                                       "y":  0
+                                   }
+                   },
+                   {
+                       "id":  3,
+                       "title":  "Connected Players",
+                       "type":  "stat",
+                       "targets":  [
+                                       {
+                                           "expr":  "sum(darkages_player_count)",
+                                           "legendFormat":  "Total Players",
+                                           "refId":  "A"
+                                       }
+                                   ],
+                       "fieldConfig":  {
+                                           "defaults":  {
+                                                            "unit":  "short",
+                                                            "min":  0,
+                                                            "thresholds":  {
+                                                                               "mode":  "absolute",
+                                                                               "steps":  [
+                                                                                             {
+                                                                                                 "color":  "green",
+                                                                                                 "value":  null
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "yellow",
+                                                                                                 "value":  800
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "red",
+                                                                                                 "value":  950
+                                                                                             }
+                                                                                         ]
+                                                                           }
+                                                        }
+                                       },
+                       "gridPos":  {
+                                       "h":  4,
+                                       "w":  4,
+                                       "x":  16,
+                                       "y":  0
+                                   }
+                   },
+                   {
+                       "id":  4,
+                       "title":  "Memory Usage",
+                       "type":  "gauge",
+                       "targets":  [
+                                       {
+                                           "expr":  "darkages_memory_used_bytes / darkages_memory_total_bytes * 100",
+                                           "legendFormat":  "Zone {{zone_id}}",
+                                           "refId":  "A"
+                                       }
+                                   ],
+                       "fieldConfig":  {
+                                           "defaults":  {
+                                                            "unit":  "percent",
+                                                            "min":  0,
+                                                            "max":  100,
+                                                            "thresholds":  {
+                                                                               "mode":  "absolute",
+                                                                               "steps":  [
+                                                                                             {
+                                                                                                 "color":  "green",
+                                                                                                 "value":  null
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "yellow",
+                                                                                                 "value":  70
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "red",
+                                                                                                 "value":  85
+                                                                                             }
+                                                                                         ]
+                                                                           }
+                                                        }
+                                       },
+                       "gridPos":  {
+                                       "h":  4,
+                                       "w":  4,
+                                       "x":  20,
+                                       "y":  0
+                                   }
+                   },
+                   {
+                       "id":  9,
+                       "title":  "Zone Capacity",
+                       "type":  "gauge",
+                       "targets":  [
+                                       {
+                                           "expr":  "darkages_player_count / darkages_player_capacity * 100",
+                                           "legendFormat":  "Zone {{zone_id}}",
+                                           "refId":  "A"
+                                       }
+                                   ],
+                       "fieldConfig":  {
+                                           "defaults":  {
+                                                            "unit":  "percent",
+                                                            "min":  0,
+                                                            "max":  100,
+                                                            "thresholds":  {
+                                                                               "mode":  "absolute",
+                                                                               "steps":  [
+                                                                                             {
+                                                                                                 "color":  "green",
+                                                                                                 "value":  null
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "yellow",
+                                                                                                 "value":  75
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "orange",
+                                                                                                 "value":  90
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "red",
+                                                                                                 "value":  95
+                                                                                             }
+                                                                                         ]
+                                                                           }
+                                                        }
+                                       },
+                       "gridPos":  {
+                                       "h":  4,
+                                       "w":  4,
+                                       "x":  16,
+                                       "y":  4
+                                   }
+                   },
+                   {
+                       "id":  10,
+                       "title":  "Current Packet Loss",
+                       "type":  "stat",
+                       "targets":  [
+                                       {
+                                           "expr":  "darkages_packet_loss_percent",
+                                           "legendFormat":  "Zone {{zone_id}}",
+                                           "refId":  "A"
+                                       }
+                                   ],
+                       "fieldConfig":  {
+                                           "defaults":  {
+                                                            "unit":  "percent",
+                                                            "min":  0,
+                                                            "max":  100,
+                                                            "thresholds":  {
+                                                                               "mode":  "absolute",
+                                                                               "steps":  [
+                                                                                             {
+                                                                                                 "color":  "green",
+                                                                                                 "value":  null
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "yellow",
+                                                                                                 "value":  1
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "red",
+                                                                                                 "value":  5
+                                                                                             }
+                                                                                         ]
+                                                                           }
+                                                        }
+                                       },
+                       "gridPos":  {
+                                       "h":  4,
+                                       "w":  4,
+                                       "x":  20,
+                                       "y":  4
+                                   }
+                   },
+                   {
+                       "id":  11,
+                       "title":  "Replication Bandwidth",
+                       "type":  "stat",
+                       "targets":  [
+                                       {
+                                           "expr":  "darkages_replication_bandwidth_bps",
+                                           "legendFormat":  "Zone {{zone_id}}",
+                                           "refId":  "A"
+                                       }
+                                   ],
+                       "fieldConfig":  {
+                                           "defaults":  {
+                                                            "unit":  "Bps",
+                                                            "min":  0,
+                                                            "thresholds":  {
+                                                                               "mode":  "absolute",
+                                                                               "steps":  [
+                                                                                             {
+                                                                                                 "color":  "green",
+                                                                                                 "value":  null
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "yellow",
+                                                                                                 "value":  131072
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "red",
+                                                                                                 "value":  524288
+                                                                                             }
+                                                                                         ]
+                                                                           }
+                                                        }
+                                       },
+                       "gridPos":  {
+                                       "h":  4,
+                                       "w":  4,
+                                       "x":  16,
+                                       "y":  8
+                                   }
+                   },
+                   {
+                       "id":  12,
+                       "title":  "Anti-Cheat Violations",
+                       "type":  "graph",
+                       "targets":  [
+                                       {
+                                           "expr":  "rate(darkages_anticheat_violations_total[5m])",
+                                           "legendFormat":  "{{cheat_type}} ({{severity}})",
+                                           "refId":  "A"
+                                       }
+                                   ],
+                       "fieldConfig":  {
+                                           "defaults":  {
+                                                            "unit":  "ops",
+                                                            "min":  0,
+                                                            "thresholds":  {
+                                                                               "mode":  "absolute",
+                                                                               "steps":  [
+                                                                                             {
+                                                                                                 "color":  "green",
+                                                                                                 "value":  null
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "yellow",
+                                                                                                 "value":  0.1
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "red",
+                                                                                                 "value":  1
+                                                                                             }
+                                                                                         ]
+                                                                           }
+                                                        }
+                                       },
+                       "gridPos":  {
+                                       "h":  8,
+                                       "w":  12,
+                                       "x":  0,
+                                       "y":  24
+                                   }
+                   },
+                   {
+                       "id":  5,
+                       "title":  "Players per Zone",
+                       "type":  "graph",
+                       "targets":  [
+                                       {
+                                           "expr":  "darkages_player_count",
+                                           "legendFormat":  "Zone {{zone_id}}",
+                                           "refId":  "A"
+                                       }
+                                   ],
+                       "fieldConfig":  {
+                                           "defaults":  {
+                                                            "unit":  "short",
+                                                            "min":  0
+                                                        }
+                                       },
+                       "gridPos":  {
+                                       "h":  8,
+                                       "w":  12,
+                                       "x":  0,
+                                       "y":  4
+                                   }
+                   },
+                   {
+                       "id":  6,
+                       "title":  "Packet Loss Rate",
+                       "type":  "graph",
+                       "targets":  [
+                                       {
+                                           "expr":  "rate(darkages_packets_lost_total[1m]) / rate(darkages_packets_sent_total[1m]) * 100",
+                                           "legendFormat":  "Zone {{zone_id}}",
+                                           "refId":  "A"
+                                       }
+                                   ],
+                       "fieldConfig":  {
+                                           "defaults":  {
+                                                            "unit":  "percent",
+                                                            "min":  0,
+                                                            "max":  10,
+                                                            "thresholds":  {
+                                                                               "mode":  "absolute",
+                                                                               "steps":  [
+                                                                                             {
+                                                                                                 "color":  "green",
+                                                                                                 "value":  null
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "yellow",
+                                                                                                 "value":  1
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "red",
+                                                                                                 "value":  5
+                                                                                             }
+                                                                                         ]
+                                                                           }
+                                                        }
+                                       },
+                       "gridPos":  {
+                                       "h":  8,
+                                       "w":  12,
+                                       "x":  12,
+                                       "y":  8
+                                   }
+                   },
+                   {
+                       "id":  7,
+                       "title":  "Replication Bandwidth",
+                       "type":  "graph",
+                       "targets":  [
+                                       {
+                                           "expr":  "rate(darkages_replication_bytes_total[1m])",
+                                           "legendFormat":  "Zone {{zone_id}}",
+                                           "refId":  "A"
+                                       }
+                                   ],
+                       "fieldConfig":  {
+                                           "defaults":  {
+                                                            "unit":  "Bps",
+                                                            "min":  0
+                                                        }
+                                       },
+                       "gridPos":  {
+                                       "h":  8,
+                                       "w":  12,
+                                       "x":  0,
+                                       "y":  16
+                                   }
+                   },
+                   {
+                       "id":  8,
+                       "title":  "Error Rate",
+                       "type":  "graph",
+                       "targets":  [
+                                       {
+                                           "expr":  "rate(darkages_errors_total[1m])",
+                                           "legendFormat":  "Zone {{zone_id}}",
+                                           "refId":  "A"
+                                       }
+                                   ],
+                       "fieldConfig":  {
+                                           "defaults":  {
+                                                            "unit":  "ops",
+                                                            "min":  0,
+                                                            "thresholds":  {
+                                                                               "mode":  "absolute",
+                                                                               "steps":  [
+                                                                                             {
+                                                                                                 "color":  "green",
+                                                                                                 "value":  null
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "yellow",
+                                                                                                 "value":  5
+                                                                                             },
+                                                                                             {
+                                                                                                 "color":  "red",
+                                                                                                 "value":  10
+                                                                                             }
+                                                                                         ]
+                                                                           }
+                                                        }
+                                       },
+                       "gridPos":  {
+                                       "h":  8,
+                                       "w":  12,
+                                       "x":  12,
+                                       "y":  16
+                                   }
+                   }
+               ]
 }

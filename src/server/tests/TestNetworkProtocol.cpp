@@ -4,7 +4,7 @@
 #include <catch2/benchmark/catch_benchmark.hpp>
 #include <catch2/catch_approx.hpp>
 #include "netcode/NetworkManager.hpp"
-#include "shared/proto/game_protocol_generated.h"
+#include "game_protocol_generated.h"
 #include <vector>
 #include <cstring>
 

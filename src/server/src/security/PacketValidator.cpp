@@ -4,6 +4,7 @@
 #include "security/PacketValidator.hpp"
 #include "ecs/CoreTypes.hpp"
 #include "ecs/Components.hpp"
+#include "netcode/NetworkManager.hpp"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -38,9 +39,12 @@ bool PacketValidator::IsPositionInBounds(const Position& pos) {
 }
 
 void PacketValidator::ClampPosition(Position& pos) {
-    pos.x = std::max(WORLD_MIN_X, std::min(WORLD_MAX_X, pos.x));
-    pos.y = std::max(WORLD_MIN_Y, std::min(WORLD_MAX_Y, pos.y));
-    pos.z = std::max(WORLD_MIN_Z, std::min(WORLD_MAX_Z, pos.z));
+    pos.x = std::max(static_cast<Constants::Fixed>(WORLD_MIN_X * Constants::FLOAT_TO_FIXED), 
+                     std::min(static_cast<Constants::Fixed>(WORLD_MAX_X * Constants::FLOAT_TO_FIXED), pos.x));
+    pos.y = std::max(static_cast<Constants::Fixed>(WORLD_MIN_Y * Constants::FLOAT_TO_FIXED), 
+                     std::min(static_cast<Constants::Fixed>(WORLD_MAX_Y * Constants::FLOAT_TO_FIXED), pos.y));
+    pos.z = std::max(static_cast<Constants::Fixed>(WORLD_MIN_Z * Constants::FLOAT_TO_FIXED), 
+                     std::min(static_cast<Constants::Fixed>(WORLD_MAX_Z * Constants::FLOAT_TO_FIXED), pos.z));
 }
 
 // ============================================================================
@@ -159,7 +163,7 @@ bool PacketValidator::ValidateRotationDelta(
 
 bool PacketValidator::ValidateEntityId(EntityID entityId, const Registry& registry) {
     // Check if entity ID is valid
-    if (entityId == 0 || entityId == EntityID(-1)) {
+    if (entityId == entt::null || entityId == entt::tombstone) {
         return false;
     }
     
@@ -210,8 +214,8 @@ bool PacketValidator::ValidateAttackTarget(
     }
     
     // Check if target is alive
-    const Health* targetHealth = registry.try_get<Health>(target);
-    if (targetHealth && targetHealth->current <= 0) {
+    const CombatState* targetCombat = registry.try_get<CombatState>(target);
+    if (targetCombat && targetCombat->health <= 0) {
         std::cerr << "[SECURITY] Attack on dead entity\n";
         return false;
     }
@@ -444,9 +448,9 @@ bool PacketValidator::ValidatePacketData(const void* data, size_t size) {
     return true;
 }
 
-// Stub for ClientInputPacket - would be implemented with actual packet structure
+// Validate client input packet
 ValidationResult PacketValidator::ValidateClientInput(
-    const void* input,
+    const ClientInputPacket& input,
     EntityID entity,
     const Registry& registry,
     uint32_t serverTick) {
@@ -457,6 +461,8 @@ ValidationResult PacketValidator::ValidateClientInput(
     // - Position delta is valid
     // - Speed is valid
     // - etc.
+    
+    (void)input;  // Unused for now
     
     if (!ValidateEntityId(entity, registry)) {
         return ValidationResult::Invalid_EntityId;

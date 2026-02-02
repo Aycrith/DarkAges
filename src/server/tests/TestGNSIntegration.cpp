@@ -272,7 +272,7 @@ TEST_CASE("GNS Delta Compression", "[network][gns]") {
     SECTION("Delta snapshot creation") {
         std::vector<Protocol::EntityStateData> entities;
         Protocol::EntityStateData entity;
-        entity.entity = entt::entity{1};
+        entity.entity = static_cast<entt::entity>(1);
         entity.position = {1000, 2000, 3000};
         entity.velocity = {100, 0, 100};
         entity.rotation = {1.57f, 0.0f};
@@ -294,7 +294,7 @@ TEST_CASE("GNS Delta Compression", "[network][gns]") {
     SECTION("Delta snapshot apply roundtrip") {
         std::vector<Protocol::EntityStateData> entities;
         Protocol::EntityStateData entity;
-        entity.entity = entt::entity{42};
+        entity.entity = static_cast<entt::entity>(42);
         entity.position = {1000, 2000, 3000};
         entity.velocity = {100, 200, 300};
         entity.rotation = {3.14f, 0.5f};

@@ -31,7 +31,7 @@ TEST_CASE("Aura Projection entity tracking", "[aura]") {
     std::vector<ZoneDefinition> adjacentZones;
     auraManager.initialize(adjacentZones);
     
-    EntityID entity = entt::entity{42};
+    EntityID entity = static_cast<entt::entity>(42);
     Position pos = Position::fromVec3(glm::vec3(100.0f, 0.0f, 100.0f));
     
     SECTION("Entity entering aura is tracked") {
@@ -77,7 +77,7 @@ TEST_CASE("Aura Projection ghost entities", "[aura]") {
     std::vector<ZoneDefinition> adjacentZones;
     auraManager.initialize(adjacentZones);
     
-    EntityID entity = entt::entity{42};
+    EntityID entity = static_cast<entt::entity>(42);
     Position pos = Position::fromVec3(glm::vec3(100.0f, 0.0f, 100.0f));
     
     SECTION("Entity from adjacent zone is a ghost") {
@@ -115,7 +115,7 @@ TEST_CASE("Aura Projection ownership transfer", "[aura]") {
     std::vector<ZoneDefinition> adjacentZones;
     auraManager.initialize(adjacentZones);
     
-    EntityID entity = entt::entity{42};
+    EntityID entity = static_cast<entt::entity>(42);
     
     SECTION("Ownership transfer updates owner") {
         Position pos = Position::fromVec3(glm::vec3(100.0f, 0.0f, 100.0f));
@@ -129,7 +129,7 @@ TEST_CASE("Aura Projection ownership transfer", "[aura]") {
     }
     
     SECTION("Ownership transfer of non-existent entity is safe") {
-        EntityID nonExistent = entt::entity{999};
+        EntityID nonExistent = static_cast<entt::entity>(999);
         REQUIRE_NOTHROW(auraManager.onOwnershipTransferred(nonExistent, 2));
     }
 }
@@ -141,12 +141,12 @@ TEST_CASE("Aura Projection entity sync", "[aura]") {
     
     SECTION("Only owned entities are synced") {
         // Entity owned by us
-        EntityID owned = entt::entity{1};
+        EntityID owned = static_cast<entt::entity>(1);
         Position pos1 = Position::fromVec3(glm::vec3(100.0f, 0.0f, 100.0f));
         auraManager.onEntityEnteringAura(owned, pos1, 1);
         
         // Entity owned by adjacent zone (ghost)
-        EntityID ghost = entt::entity{2};
+        EntityID ghost = static_cast<entt::entity>(2);
         Position pos2 = Position::fromVec3(glm::vec3(105.0f, 0.0f, 100.0f));
         auraManager.onEntityEnteringAura(ghost, pos2, 2);
         
@@ -176,7 +176,7 @@ TEST_CASE("Aura Projection visibility queries", "[aura]") {
     Position playerPos = Position::fromVec3(glm::vec3(100.0f, 0.0f, 100.0f));
     
     SECTION("Entities within view radius are visible") {
-        EntityID nearEntity = entt::entity{1};
+        EntityID nearEntity = static_cast<entt::entity>(1);
         Position nearPos = Position::fromVec3(glm::vec3(120.0f, 0.0f, 100.0f));  // 20m away
         auraManager.onEntityEnteringAura(nearEntity, nearPos, 2);
         
@@ -187,7 +187,7 @@ TEST_CASE("Aura Projection visibility queries", "[aura]") {
     }
     
     SECTION("Entities outside view radius are not visible") {
-        EntityID farEntity = entt::entity{1};
+        EntityID farEntity = static_cast<entt::entity>(1);
         Position farPos = Position::fromVec3(glm::vec3(200.0f, 0.0f, 100.0f));  // 100m away
         auraManager.onEntityEnteringAura(farEntity, farPos, 2);
         
@@ -197,15 +197,15 @@ TEST_CASE("Aura Projection visibility queries", "[aura]") {
     }
     
     SECTION("Multiple entities at various distances") {
-        EntityID near = entt::entity{1};
+        EntityID near = static_cast<entt::entity>(1);
         Position nearPos = Position::fromVec3(glm::vec3(110.0f, 0.0f, 100.0f));  // 10m
         auraManager.onEntityEnteringAura(near, nearPos, 2);
         
-        EntityID mid = entt::entity{2};
+        EntityID mid = static_cast<entt::entity>(2);
         Position midPos = Position::fromVec3(glm::vec3(140.0f, 0.0f, 100.0f));  // 40m
         auraManager.onEntityEnteringAura(mid, midPos, 2);
         
-        EntityID far = entt::entity{3};
+        EntityID far = static_cast<entt::entity>(3);
         Position farPos = Position::fromVec3(glm::vec3(200.0f, 0.0f, 100.0f));  // 100m
         auraManager.onEntityEnteringAura(far, farPos, 2);
         
@@ -221,13 +221,13 @@ TEST_CASE("Aura Projection edge cases", "[aura]") {
     auraManager.initialize(adjacentZones);
     
     SECTION("Query non-existent entity returns 0") {
-        EntityID nonExistent = entt::entity{999};
+        EntityID nonExistent = static_cast<entt::entity>(999);
         REQUIRE(auraManager.getEntityOwnerZone(nonExistent) == 0);
         REQUIRE(!auraManager.isEntityInAura(nonExistent));
     }
     
     SECTION("Update non-existent entity is safe") {
-        EntityID nonExistent = entt::entity{999};
+        EntityID nonExistent = static_cast<entt::entity>(999);
         Position pos = Position::fromVec3(glm::vec3(100.0f, 0.0f, 100.0f));
         Velocity vel;
         
@@ -235,12 +235,12 @@ TEST_CASE("Aura Projection edge cases", "[aura]") {
     }
     
     SECTION("Remove non-existent entity is safe") {
-        EntityID nonExistent = entt::entity{999};
+        EntityID nonExistent = static_cast<entt::entity>(999);
         REQUIRE_NOTHROW(auraManager.removeEntity(nonExistent));
     }
     
     SECTION("Entity entering aura twice updates state") {
-        EntityID entity = entt::entity{42};
+        EntityID entity = static_cast<entt::entity>(42);
         Position pos1 = Position::fromVec3(glm::vec3(100.0f, 0.0f, 100.0f));
         Position pos2 = Position::fromVec3(glm::vec3(105.0f, 0.0f, 100.0f));
         
@@ -260,7 +260,7 @@ TEST_CASE("Aura Projection performance", "[aura][performance]") {
     // Setup: Create 1000 entities in aura
     std::vector<EntityID> entities;
     for (int i = 0; i < 1000; ++i) {
-        EntityID entity = entt::entity{i + 1};
+        EntityID entity = static_cast<entt::entity>(i + 1);
         Position pos = Position::fromVec3(glm::vec3(
             50.0f + (i % 100),  // Spread across X
             0.0f,

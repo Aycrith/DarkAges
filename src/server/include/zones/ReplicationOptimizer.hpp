@@ -103,9 +103,10 @@ public:
     // Update configuration at runtime (for QoS degradation)
     void setConfig(const Config& config) { config_ = config; }
 
-private:
     // Calculate priority level (0, 1, or 2) based on distance
     [[nodiscard]] int calculatePriority(float distance) const;
+
+private:
     
     // Get tick interval between updates for a given priority level
     [[nodiscard]] uint32_t getUpdateInterval(int priority) const;

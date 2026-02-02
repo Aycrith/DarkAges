@@ -1,0 +1,234 @@
+// DarkAges MMO - Network Protocol Definitions
+// Protocol Version: 1.0
+syntax = "proto3";
+
+package DarkAges.Network;
+
+// ============================================================================
+// CLIENT -> SERVER MESSAGES
+// ============================================================================
+
+// Client input - sent every tick (60Hz)
+// Unreliable channel, sequence for reconciliation
+message ClientInput {
+    uint32 sequence = 1;           // Monotonic counter for reconciliation
+    uint32 timestamp = 2;          // Client send time (milliseconds)
+    uint32 input_flags = 3;        // Bitmask: WASD + actions
+    float yaw = 4;                 // Camera rotation (radians)
+    float pitch = 5;               // Camera pitch (radians)
+    uint32 target_entity = 6;      // For lock-on targeting
+}
+
+// Ability use request - reliable
+message AbilityRequest {
+    uint32 ability_id = 1;         // Ability to use
+    uint32 target_entity = 2;      // Optional target
+    float aim_x = 3;               // Aim direction X
+    float aim_y = 4;               // Aim direction Y
+    float aim_z = 5;               // Aim direction Z
+}
+
+// Attack input - reliable
+message AttackInput {
+    enum AttackType {
+        MELEE = 0;
+        RANGED = 1;
+        ABILITY = 2;
+    }
+    AttackType type = 1;
+    uint32 target_entity = 2;
+    float aim_x = 3;
+    float aim_y = 4;
+    float aim_z = 5;
+}
+
+// Connection handshake - reliable
+message Handshake {
+    uint32 protocol_version = 1;   // Protocol major.minor (packed)
+    uint32 client_version = 2;     // Client build version
+    string auth_token = 3;         // Authentication token
+    string username = 4;           // Player username
+}
+
+// Ping for latency measurement - unreliable
+message Ping {
+    uint32 client_timestamp = 1;   // Client send time
+}
+
+// ============================================================================
+// SERVER -> CLIENT MESSAGES
+// ============================================================================
+
+// Server snapshot - sent at variable rate based on priority
+// Unreliable channel, delta compressed
+message ServerSnapshot {
+    uint32 server_tick = 1;        // Server tick number
+    uint32 baseline_tick = 2;      // For delta compression reference
+    repeated EntityState entities = 3;  // Entity states
+    repeated uint32 removed_entities = 4;  // Entities despawned this tick
+}
+
+// Entity state within snapshot
+message EntityState {
+    uint32 entity_id = 1;          // Entity ID
+    uint32 type = 2;               // 0=player, 1=projectile, 2=loot, 3=NPC
+    
+    // Position - quantized to reduce bandwidth
+    sint32 pos_x = 3;              // actual = x / 64.0 (precision ~1.5cm)
+    sint32 pos_y = 4;
+    sint32 pos_z = 5;
+    
+    // Velocity - optional (only if changed significantly)
+    sint32 vel_x = 6;
+    sint32 vel_y = 7;
+    sint32 vel_z = 8;
+    
+    // Rotation - quantized
+    sint32 yaw = 9;                // actual = yaw * (PI / 32767)
+    sint32 pitch = 10;
+    
+    // State
+    uint32 health_percent = 11;    // 0-100
+    uint32 anim_state = 12;        // Animation state enum
+    uint32 team_id = 13;
+    
+    // Changed fields bitmask for delta compression
+    uint32 changed_fields = 14;
+}
+
+// Reliable event - combat, pickups, etc.
+// Reliable ordered channel
+message ReliableEvent {
+    enum EventType {
+        DAMAGE_DEALT = 0;
+        HEAL_RECEIVED = 1;
+        ENTITY_SPAWNED = 2;
+        ENTITY_DESTROYED = 3;
+        ABILITY_USED = 4;
+        ITEM_PICKED_UP = 5;
+        PLAYER_DIED = 6;
+        PLAYER_RESPAWNED = 7;
+        ZONE_TRANSITION = 8;
+    }
+    
+    EventType type = 1;
+    uint32 timestamp = 2;
+    uint32 source_entity = 3;
+    uint32 target_entity = 4;
+    int32 value = 5;               // Damage/heal amount, etc.
+    bytes extra_data = 6;          // Type-specific data
+}
+
+// Handshake response - reliable
+message HandshakeResponse {
+    bool accepted = 1;
+    uint32 server_tick = 2;
+    uint32 your_entity_id = 3;
+    float spawn_x = 4;
+    float spawn_y = 5;
+    float spawn_z = 6;
+    string reject_reason = 7;      // If not accepted
+}
+
+// Server correction for prediction errors
+// Reliable channel, sent when server detects significant error
+message ServerCorrection {
+    uint32 server_tick = 1;        // Tick this correction applies to
+    uint32 last_processed_input = 2;  // Last input sequence processed
+    
+    sint32 pos_x = 3;              // Corrected position
+    sint32 pos_y = 4;
+    sint32 pos_z = 5;
+    
+    sint32 vel_x = 6;              // Corrected velocity
+    sint32 vel_y = 7;
+    sint32 vel_z = 8;
+}
+
+// Pong response to ping
+message Pong {
+    uint32 client_timestamp = 1;   // Original client timestamp
+    uint32 server_timestamp = 2;   // Server receive time
+}
+
+// Server info/configuration
+message ServerConfig {
+    uint32 tick_rate = 1;          // Server tick rate (Hz)
+    float world_min_x = 2;         // World boundaries
+    float world_max_x = 3;
+    float world_min_z = 4;
+    float world_max_z = 5;
+    uint32 max_players = 6;
+    string motd = 7;               // Message of the day
+}
+
+// Disconnect notification
+message Disconnect {
+    enum Reason {
+        UNKNOWN = 0;
+        NORMAL = 1;
+        TIMEOUT = 2;
+        KICKED = 3;
+        BANNED = 4;
+        SERVER_SHUTDOWN = 5;
+        PROTOCOL_MISMATCH = 6;
+        AUTH_FAILED = 7;
+        SERVER_FULL = 8;
+    }
+    Reason reason = 1;
+    string message = 2;
+}
+
+// ============================================================================
+// TOP-LEVEL MESSAGE WRAPPER
+// ============================================================================
+
+// All messages are wrapped in this for multiplexing
+message NetworkMessage {
+    enum MessageType {
+        // Client -> Server
+        CLIENT_INPUT = 0;
+        ABILITY_REQUEST = 1;
+        ATTACK_INPUT = 2;
+        HANDSHAKE = 3;
+        PING = 4;
+        
+        // Server -> Client
+        SERVER_SNAPSHOT = 10;
+        RELIABLE_EVENT = 11;
+        HANDSHAKE_RESPONSE = 12;
+        SERVER_CORRECTION = 13;
+        PONG = 14;
+        SERVER_CONFIG = 15;
+        DISCONNECT = 16;
+    }
+    
+    MessageType type = 1;
+    uint32 sequence = 2;           // For reliable messages
+    
+    // One of these will be populated based on type
+    oneof payload {
+        ClientInput client_input = 10;
+        AbilityRequest ability_request = 11;
+        AttackInput attack_input = 12;
+        Handshake handshake = 13;
+        Ping ping = 14;
+        
+        ServerSnapshot server_snapshot = 20;
+        ReliableEvent reliable_event = 21;
+        HandshakeResponse handshake_response = 22;
+        ServerCorrection server_correction = 23;
+        Pong pong = 24;
+        ServerConfig server_config = 25;
+        Disconnect disconnect = 26;
+    }
+}
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+// Protocol version: 1.0 = 0x00010000
+// Major (16 bits) | Minor (16 bits)
+// 0x0001 | 0x0000 = 65536
+option optimize_for = LITE_RUNTIME;

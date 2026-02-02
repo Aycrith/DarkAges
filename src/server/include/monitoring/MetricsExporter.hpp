@@ -10,6 +10,8 @@
 #include <chrono>
 #include <cstdint>
 #include <unordered_map>
+#include <memory>
+#include <vector>
 
 namespace DarkAges {
 namespace Monitoring {
@@ -86,9 +88,19 @@ private:
     mutable std::mutex mutex_;
     
     struct BucketData {
-        std::vector<std::atomic<uint64_t>> counts;
+        // Use unique_ptr to atomic because atomic is not copyable/movable
+        std::vector<std::unique_ptr<std::atomic<uint64_t>>> counts;
         std::atomic<double> sum{0.0};
         std::atomic<uint64_t> total_count{0};
+        
+        // Custom constructor to initialize the atomic counters
+        BucketData() = default;
+        explicit BucketData(size_t num_buckets) {
+            counts.reserve(num_buckets);
+            for (size_t i = 0; i < num_buckets; ++i) {
+                counts.push_back(std::make_unique<std::atomic<uint64_t>>(0));
+            }
+        }
     };
     std::unordered_map<std::string, BucketData> data_;
     
@@ -124,12 +136,16 @@ public:
     Counter& PacketsSentTotal() { return *packetsSentTotal_; }
     Counter& PacketsLostTotal() { return *packetsLostTotal_; }
     Counter& ReplicationBytesTotal() { return *replicationBytesTotal_; }
+    Counter& AntiCheatViolationsTotal() { return *antiCheatViolationsTotal_; }
     
     Gauge& TickDurationMs() { return *tickDurationMs_; }
     Gauge& PlayerCount() { return *playerCount_; }
+    Gauge& PlayerCapacity() { return *playerCapacity_; }
     Gauge& MemoryUsedBytes() { return *memoryUsedBytes_; }
     Gauge& MemoryTotalBytes() { return *memoryTotalBytes_; }
     Gauge& DbConnected() { return *dbConnected_; }
+    Gauge& PacketLossPercent() { return *packetLossPercent_; }
+    Gauge& ReplicationBandwidthBps() { return *replicationBandwidthBps_; }
     
     Histogram& TickDurationHistogram() { return *tickDurationHistogram_; }
     
@@ -160,12 +176,16 @@ private:
     Counter* packetsSentTotal_ = nullptr;
     Counter* packetsLostTotal_ = nullptr;
     Counter* replicationBytesTotal_ = nullptr;
+    Counter* antiCheatViolationsTotal_ = nullptr;
     
     Gauge* tickDurationMs_ = nullptr;
     Gauge* playerCount_ = nullptr;
+    Gauge* playerCapacity_ = nullptr;
     Gauge* memoryUsedBytes_ = nullptr;
     Gauge* memoryTotalBytes_ = nullptr;
     Gauge* dbConnected_ = nullptr;
+    Gauge* packetLossPercent_ = nullptr;
+    Gauge* replicationBandwidthBps_ = nullptr;
     
     Histogram* tickDurationHistogram_ = nullptr;
 };

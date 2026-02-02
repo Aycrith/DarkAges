@@ -80,6 +80,7 @@ test-results/
 *.gcno
 validation_report*.json
 E2E_TEST_*.json
+tools/testing/reports/*.json
 
 # Build variants
 /build_test/
@@ -118,4 +119,15 @@ desktop.ini
 /tools/automated-qa/screenshots/
 !tools/automated-qa/screenshots/.gitkeep
 
+# Session files (temporary conversation logs)
+session-ses_*.md
+
+# Research artifacts
+Research/
+
+# Local monitoring configs
+infra/alerting/alertmanager.local.yml
+infra/docker-compose.monitoring.local.yml
+
 nul
+

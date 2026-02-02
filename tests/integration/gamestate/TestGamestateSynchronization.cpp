@@ -9,7 +9,8 @@
  * - Gamestate consistency across network conditions
  */
 
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include "ecs/CoreTypes.hpp"
 #include "zones/ZoneServer.hpp"
 #include "netcode/NetworkManager.hpp"

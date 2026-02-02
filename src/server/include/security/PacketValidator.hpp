@@ -26,7 +26,6 @@ enum class ValidationResult {
 
 // Forward declarations
 struct ClientInputPacket;
-struct Position;
 
 /**
  * Validates all incoming network data

@@ -1,60 +1,158 @@
-# Alertmanager Configuration
-# Routes alerts to appropriate notification channels
+# Alertmanager Configuration - Production
+# Routes alerts to Slack and Email notification channels
 
 global:
-  smtp_smarthost: 'localhost:587'
-  smtp_from: 'alerts@darkages-mmo.com'
+  # Resolve timeout - alerts auto-resolve after this time
+  resolve_timeout: 5m
+  
+  # Slack configuration
   slack_api_url: '${SLACK_WEBHOOK_URL}'
-  pagerduty_url: '${PAGERDUTY_URL}'
+  
+  # Email SMTP configuration
+  smtp_smarthost: '${SMTP_HOST}:${SMTP_PORT}'
+  smtp_from: '${SMTP_FROM}'
+  smtp_auth_username: '${SMTP_USERNAME}'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_auth_identity: '${SMTP_IDENTITY}'
+  smtp_require_tls: ${SMTP_TLS}
 
+# Templates for alert formatting
 templates:
   - '/etc/alertmanager/templates/*.tmpl'
 
+# Route tree - determines where alerts are sent
 route:
-  group_by: ['alertname', 'cluster', 'service']
+  # Group alerts by these labels
+  group_by: ['alertname', 'zone_id', 'severity']
+  
+  # Wait before sending initial notification
   group_wait: 10s
-  group_interval: 10s
-  repeat_interval: 12h
+  
+  # Minimum interval between notifications for same group
+  group_interval: 5m
+  
+  # Minimum interval before repeating a notification
+  repeat_interval: 4h
+  
+  # Default receiver
   receiver: 'default'
+  
+  # Routes (evaluated in order)
   routes:
-    # Critical alerts -> PagerDuty + Slack
+    # Critical alerts -> PagerDuty (if configured) + Slack + Email
     - match:
         severity: critical
-      receiver: 'pagerduty-critical'
+      receiver: 'critical-alerts'
       continue: true
+      group_wait: 5s
+      repeat_interval: 30m
     
     # Warning alerts -> Slack only
     - match:
         severity: warning
-      receiver: 'slack-warnings'
+      receiver: 'warning-alerts'
+      continue: false
+      group_wait: 30s
+    
+    # Database alerts -> Email to DB team
+    - match:
+        component: database
+      receiver: 'database-team'
+      continue: true
 
+# Receivers - define notification endpoints
 receivers:
+  # Default receiver (Slack general channel)
   - name: 'default'
     slack_configs:
-      - channel: '#alerts'
-        title: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
-        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+      - channel: '#darkages-alerts'
+        title: '{% raw %}{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}{% endraw %}'
+        text: |
+          {% raw %}{{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Severity:* {{ .Labels.severity }}
+          *Zone:* {{ .Labels.zone_id }}
+          *Started:* {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          {{ end }}{% endraw %}
+        send_resolved: true
 
-  - name: 'pagerduty-critical'
-    pagerduty_configs:
-      - service_key: '${PAGERDUTY_SERVICE_KEY}'
-        description: '{{ .GroupLabels.alertname }}: {{ .GroupLabels.service }}'
-        severity: critical
+  # Critical alerts (Slack critical channel + Email)
+  - name: 'critical-alerts'
     slack_configs:
-      - channel: '#critical-alerts'
-        title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
-        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+      - channel: '#darkages-critical'
+        title: '{% raw %}🚨 CRITICAL: {{ .GroupLabels.alertname }}{% endraw %}'
+        color: 'danger'
+        text: |
+          {% raw %}{{ range .Alerts }}
+          *CRITICAL ALERT*
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Severity:* {{ .Labels.severity }}
+          *Component:* {{ .Labels.component }}
+          *Zone:* {{ .Labels.zone_id }}
+          *Started:* {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          *Prometheus:* {{ .GeneratorURL }}
+          {{ end }}{% endraw %}
+        send_resolved: true
+    email_configs:
+      - to: '${ALERT_EMAIL_CRITICAL}'
+        subject: '{% raw %}[CRITICAL] DarkAges Alert: {{ .GroupLabels.alertname }}{% endraw %}'
+        body: |
+          {% raw %}{{ range .Alerts }}
+          CRITICAL ALERT - DarkAges MMO
+          
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Severity: {{ .Labels.severity }}
+          Component: {{ .Labels.component }}
+          Zone: {{ .Labels.zone_id }}
+          Started: {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          
+          Prometheus Query: {{ .GeneratorURL }}
+          {{ end }}{% endraw %}
+        send_resolved: true
 
-  - name: 'slack-warnings'
+  # Warning alerts (Slack warnings channel)
+  - name: 'warning-alerts'
     slack_configs:
-      - channel: '#warnings'
-        title: '⚠️ WARNING: {{ .GroupLabels.alertname }}'
-        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+      - channel: '#darkages-warnings'
+        title: '{% raw %}⚠️ WARNING: {{ .GroupLabels.alertname }}{% endraw %}'
+        color: 'warning'
+        text: |
+          {% raw %}{{ range .Alerts }}
+          *WARNING*
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Severity:* {{ .Labels.severity }}
+          *Zone:* {{ .Labels.zone_id }}
+          *Started:* {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          {{ end }}{% endraw %}
+        send_resolved: true
+    email_configs:
+      - to: '${ALERT_EMAIL_WARNINGS}'
+        subject: '{% raw %}[WARNING] DarkAges Alert: {{ .GroupLabels.alertname }}{% endraw %}'
+        send_resolved: false
 
+  # Database team alerts
+  - name: 'database-team'
+    email_configs:
+      - to: '${ALERT_EMAIL_DB_TEAM}'
+        subject: '{% raw %}[DarkAges DB Alert] {{ .GroupLabels.alertname }}{% endraw %}'
+        send_resolved: true
+
+# Inhibition rules - suppress notifications under certain conditions
 inhibit_rules:
-  # If a critical alert is firing, suppress warnings for the same service
+  # If a critical alert is firing, suppress warnings for the same zone
   - source_match:
       severity: 'critical'
     target_match:
       severity: 'warning'
-    equal: ['alertname', 'cluster', 'service']
+    equal: ['zone_id']
+  
+  # If ServerDown is firing, suppress other alerts for that zone
+  - source_match:
+      alertname: 'ServerDown'
+    target_match_re:
+      alertname: '.+'
+    equal: ['zone_id']

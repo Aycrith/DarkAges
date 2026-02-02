@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <algorithm>
 #include <cstring>
+#include <memory>
 
 #ifdef _WIN32
     #include <winsock2.h>
@@ -165,16 +166,17 @@ void Histogram::Observe(double value, const std::unordered_map<std::string, std:
     
     auto& data = data_[key];
     if (data.counts.empty()) {
-        data.counts.resize(buckets_.size());
-        for (auto& c : data.counts) {
-            c.store(0);
+        // Initialize counts with unique_ptr to atomic
+        data.counts.reserve(buckets_.size());
+        for (size_t i = 0; i < buckets_.size(); ++i) {
+            data.counts.push_back(std::make_unique<std::atomic<uint64_t>>(0));
         }
     }
     
     // Find bucket and increment
     for (size_t i = 0; i < buckets_.size(); ++i) {
         if (value <= buckets_[i]) {
-            data.counts[i].fetch_add(1);
+            data.counts[i]->fetch_add(1);
             break;
         }
     }
@@ -202,7 +204,7 @@ std::string Histogram::Serialize() const {
             } else {
                 oss << "le=\"" << std::fixed << std::setprecision(4) << buckets_[i] << "\"}";
             }
-            oss << " " << data.counts[i].load() << "\n";
+            oss << " " << data.counts[i]->load() << "\n";
         }
         
         // Sum and count
@@ -323,18 +325,25 @@ void MetricsExporter::InitDefaultMetrics() {
     packetsSentTotal_ = CreateCounter("darkages_packets_sent_total", "Total packets sent to clients");
     packetsLostTotal_ = CreateCounter("darkages_packets_lost_total", "Total packets lost");
     replicationBytesTotal_ = CreateCounter("darkages_replication_bytes_total", "Total replication bytes sent");
+    antiCheatViolationsTotal_ = CreateCounter("darkages_anticheat_violations_total", "Total anti-cheat violations detected");
     
     // Gauges
     tickDurationMs_ = CreateGauge("darkages_tick_duration_ms", "Last tick duration in milliseconds");
     playerCount_ = CreateGauge("darkages_player_count", "Current number of connected players");
+    playerCapacity_ = CreateGauge("darkages_player_capacity", "Maximum player capacity for zone");
     memoryUsedBytes_ = CreateGauge("darkages_memory_used_bytes", "Current memory usage in bytes");
     memoryTotalBytes_ = CreateGauge("darkages_memory_total_bytes", "Total memory available in bytes");
     dbConnected_ = CreateGauge("darkages_db_connected", "Database connection status (1=connected, 0=disconnected)");
+    packetLossPercent_ = CreateGauge("darkages_packet_loss_percent", "Current packet loss percentage");
+    replicationBandwidthBps_ = CreateGauge("darkages_replication_bandwidth_bps", "Current replication bandwidth in bytes/sec");
     
     // Histograms
     tickDurationHistogram_ = CreateHistogram("darkages_tick_duration_hist", 
         "Tick duration distribution", 
         {1.0, 5.0, 10.0, 16.0, 20.0, 50.0, 100.0});
+    
+    // Set default capacity (will be overridden by zone config)
+    playerCapacity_->Set(1000.0, {{"zone_id", "1"}});
 }
 
 Counter* MetricsExporter::CreateCounter(const std::string& name, const std::string& help) {

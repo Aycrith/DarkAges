@@ -8,6 +8,7 @@
 #include <chrono>
 #include <thread>
 #include <atomic>
+#include <iostream>
 
 using namespace DarkAges;
 

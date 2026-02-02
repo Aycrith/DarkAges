@@ -17,7 +17,7 @@ using namespace DarkAges;
 
 TEST_CASE("EntitySnapshot serialization and deserialization", "[migration]") {
     EntitySnapshot original;
-    original.entity = entt::entity{42};
+    original.entity = static_cast<entt::entity>(42);
     original.playerId = 12345;
     original.position = Position{1000, 2000, 3000, 1000};
     original.velocity = Velocity{100, 200, 300};
@@ -93,8 +93,8 @@ TEST_CASE("EntityMigrationManager basic operations", "[migration]") {
     
     SECTION("Initial state is empty") {
         REQUIRE(manager.getActiveMigrationCount() == 0);
-        REQUIRE(!manager.isMigrating(entt::entity{1}));
-        REQUIRE(manager.getMigrationState(entt::entity{1}) == MigrationState::NONE);
+        REQUIRE(!manager.isMigrating(static_cast<entt::entity>(1)));
+        REQUIRE(manager.getMigrationState(static_cast<entt::entity>(1)) == MigrationState::NONE);
     }
     
     SECTION("Can set migration timeout") {
@@ -104,7 +104,7 @@ TEST_CASE("EntityMigrationManager basic operations", "[migration]") {
     }
     
     SECTION("Cannot initiate migration for non-existent entity") {
-        bool result = manager.initiateMigration(entt::entity{999}, 2, registry);
+        bool result = manager.initiateMigration(static_cast<entt::entity>(999), 2, registry);
         REQUIRE(!result);
         REQUIRE(manager.getActiveMigrationCount() == 0);
     }
@@ -162,7 +162,7 @@ TEST_CASE("EntityMigrationManager migration lifecycle", "[migration]") {
     }
     
     SECTION("Cancel non-existent migration returns false") {
-        bool cancelled = manager.cancelMigration(entt::entity{999});
+        bool cancelled = manager.cancelMigration(static_cast<entt::entity>(999));
         REQUIRE(!cancelled);
     }
 }
@@ -270,7 +270,7 @@ TEST_CASE("EntityMigrationManager handles multiple entities", "[migration]") {
 
 TEST_CASE("EntitySnapshot preserves all component types", "[migration]") {
     EntitySnapshot snapshot;
-    snapshot.entity = entt::entity{1};
+    snapshot.entity = static_cast<entt::entity>(1);
     snapshot.playerId = 77777;
     
     // Set position with fixed-point values
@@ -297,7 +297,7 @@ TEST_CASE("EntitySnapshot preserves all component types", "[migration]") {
         10000,   // maxHealth
         2,       // teamId
         3,       // classType
-        entt::entity{99},  // lastAttacker
+        static_cast<entt::entity>(99),  // lastAttacker
         500,     // lastAttackTime
         false    // isDead
     };

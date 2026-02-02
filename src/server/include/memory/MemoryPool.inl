@@ -2,6 +2,7 @@
 #include "memory/MemoryPool.hpp"
 #include <cstring>
 #include <new>
+#include <iostream>
 
 namespace DarkAges {
 namespace Memory {

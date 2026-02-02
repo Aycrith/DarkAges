@@ -179,6 +179,9 @@ private:
     void checkPerformanceBudgets(uint64_t tickTimeUs);
     void activateQoSDegradation();
     
+    // [DEVOPS_AGENT] Metrics collection
+    void updateNetworkMetrics(Monitoring::MetricsExporter& metrics, const std::string& zoneIdStr);
+    
     // Save player state to database
     void savePlayerState(EntityID entity);
 

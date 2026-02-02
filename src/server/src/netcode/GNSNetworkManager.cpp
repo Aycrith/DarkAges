@@ -2,6 +2,11 @@
 // Production-ready networking with encryption, reliable channels, and NAT traversal
 
 #include "netcode/GNSNetworkManager.hpp"
+#include "netcode/NetworkManager.hpp"
+
+// Only compile if ENABLE_GNS is defined
+#ifdef ENABLE_GNS
+
 #include <iostream>
 #include <cstring>
 #include <steam/steamnetworkingsockets.h>
@@ -158,12 +163,10 @@ void GNSNetworkManager::shutdown() {
 void GNSNetworkManager::update(uint32_t currentTimeMs) {
     if (!running_) return;
     
-    // Poll for connection state changes and messages
-    if (sockets_) {
-        sockets_->RunCallbacks();
-    }
+    // Poll for connection state changes
+    processConnectionStateChanges();
     
-    // Process messages
+    // Process incoming messages
     processMessages();
     
     // Update connection stats
@@ -171,136 +174,81 @@ void GNSNetworkManager::update(uint32_t currentTimeMs) {
         std::lock_guard<std::mutex> lock(connectionsMutex_);
         for (auto& [id, info] : connections_) {
             if (info.state == ConnectionState::Connected) {
-                SteamNetworkingQuickConnectionStatus status;
-                if (sockets_->GetConnectionRealTimeStatus(info.handle, &status, 0, nullptr)) {
+                // Update stats from GNS
+                SteamNetConnectionRealTimeStatus_t status;
+                if (sockets_->GetConnectionRealTimeStatus(info.handle, &status, 0, nullptr) == k_EResultOK) {
                     info.stats.ping_ms = status.m_nPing;
-                    info.stats.packet_loss_percent = status.m_flOutPacketsLostPerSec * 100.0f;
-                    info.stats.send_rate_kbps = status.m_nSendRateBytesPerSec / 1024.0f;
-                    info.stats.recv_rate_kbps = status.m_nRecvRateBytesPerSec / 1024.0f;
+                    info.stats.packet_loss_percent = status.m_flPacketsLostPercent;
+                    info.stats.bytes_sent = status.m_nBytesQueuedForSend;
                 }
             }
         }
     }
 }
 
-void GNSNetworkManager::processMessages() {
-    if (!sockets_ || pollGroup_ == 0) return;
-    
-    // Poll for messages
-    ISteamNetworkingMessage* messages[256];
-    int msgCount = sockets_->ReceiveMessagesOnPollGroup(pollGroup_, messages, 256);
-    
-    for (int i = 0; i < msgCount; ++i) {
-        auto* msg = messages[i];
-        
-        // Get connection ID from user data
-        ConnectionID connId = static_cast<ConnectionID>(msg->m_nConnUserData);
-        
-        // Store input
-        ClientInputPacket packet;
-        packet.connectionId = connId;
-        packet.data.assign(static_cast<uint8_t*>(msg->m_pData),
-                          static_cast<uint8_t*>(msg->m_pData) + msg->m_cbSize);
-        packet.receiveTimeMs = utils_->GetLocalTimestamp();
-        
-        // Extract sequence if available (first 4 bytes)
-        if (msg->m_cbSize >= 4) {
-            packet.sequence = *static_cast<uint32_t*>(msg->m_pData);
-        }
-        
-        {
-            std::lock_guard<std::mutex> lock(inputMutex_);
-            pendingInputs_.push_back(std::move(packet));
-        }
-        
-        // Call callback
-        if (onClientInput_) {
-            onClientInput_(connId, msg->m_pData, msg->m_cbSize);
-        }
-        
-        // Release message
-        msg->Release();
-    }
-}
-
-void GNSNetworkManager::sendToClient(ConnectionID connectionId, const void* data, size_t size, bool reliable) {
-    if (!initialized_) return;
-    
-    uint32_t handle = getConnectionHandle(connectionId);
+void GNSNetworkManager::sendToClient(ConnectionID connectionId, const void* data, 
+                                     size_t size, bool reliable) {
+    auto handle = getConnectionHandle(connectionId);
     if (handle == 0) return;
     
     int flags = reliable ? k_nSteamNetworkingSend_Reliable : k_nSteamNetworkingSend_Unreliable;
-    sendPacket(connectionId, data, size, flags);
+    sockets_->SendMessageToConnection(handle, data, static_cast<uint32_t>(size), flags, nullptr);
+    
+    // Update stats
+    std::lock_guard<std::mutex> lock(connectionsMutex_);
+    auto it = connections_.find(connectionId);
+    if (it != connections_.end()) {
+        it->second.stats.bytes_sent += size;
+        it->second.stats.packets_sent++;
+    }
 }
 
 void GNSNetworkManager::broadcast(const void* data, size_t size, bool reliable) {
-    if (!initialized_) return;
-    
-    int flags = reliable ? k_nSteamNetworkingSend_Reliable : k_nSteamNetworkingSend_Unreliable;
-    
     std::lock_guard<std::mutex> lock(connectionsMutex_);
     for (const auto& [id, info] : connections_) {
         if (info.state == ConnectionState::Connected) {
-            sendPacket(id, data, size, flags);
+            sendPacket(id, data, size, reliable ? k_nSteamNetworkingSend_Reliable : k_nSteamNetworkingSend_Unreliable);
         }
     }
 }
 
-void GNSNetworkManager::broadcastExcept(ConnectionID excludeId, const void* data, size_t size, bool reliable) {
-    if (!initialized_) return;
-    
-    int flags = reliable ? k_nSteamNetworkingSend_Reliable : k_nSteamNetworkingSend_Unreliable;
-    
+void GNSNetworkManager::broadcastExcept(ConnectionID excludeId, const void* data, 
+                                        size_t size, bool reliable) {
     std::lock_guard<std::mutex> lock(connectionsMutex_);
     for (const auto& [id, info] : connections_) {
         if (id != excludeId && info.state == ConnectionState::Connected) {
-            sendPacket(id, data, size, flags);
+            sendPacket(id, data, size, reliable ? k_nSteamNetworkingSend_Reliable : k_nSteamNetworkingSend_Unreliable);
         }
-    }
-}
-
-void GNSNetworkManager::sendPacket(ConnectionID connectionId, const void* data, size_t size, int sendFlags) {
-    uint32_t handle = getConnectionHandle(connectionId);
-    if (handle == 0) return;
-    
-    EResult result = sockets_->SendMessageToConnection(handle, data, static_cast<uint32_t>(size), 
-                                                        sendFlags, nullptr);
-    if (result != k_EResultOK) {
-        // Track failed sends
     }
 }
 
 std::vector<ClientInputPacket> GNSNetworkManager::getPendingInputs() {
     std::lock_guard<std::mutex> lock(inputMutex_);
-    std::vector<ClientInputPacket> result = std::move(pendingInputs_);
+    auto result = std::move(pendingInputs_);
     pendingInputs_.clear();
     return result;
 }
 
 void GNSNetworkManager::disconnectClient(ConnectionID connectionId, const char* reason) {
-    if (!initialized_) return;
+    auto handle = getConnectionHandle(connectionId);
+    if (handle != 0 && sockets_) {
+        sockets_->CloseConnection(handle, 0, reason, true);
+    }
     
-    uint32_t handle = getConnectionHandle(connectionId);
-    if (handle == 0) return;
-    
-    std::string reasonStr = reason ? reason : "Disconnected by server";
-    sockets_->CloseConnection(handle, 0, reasonStr.c_str(), true);
-    
-    removeConnection(connectionId);
+    {
+        std::lock_guard<std::mutex> lock(connectionsMutex_);
+        connections_.erase(connectionId);
+    }
 }
 
 void GNSNetworkManager::disconnectAll(const char* reason) {
-    std::vector<ConnectionID> ids;
-    {
-        std::lock_guard<std::mutex> lock(connectionsMutex_);
-        for (const auto& [id, _] : connections_) {
-            ids.push_back(id);
+    std::lock_guard<std::mutex> lock(connectionsMutex_);
+    for (const auto& [id, info] : connections_) {
+        if (sockets_) {
+            sockets_->CloseConnection(info.handle, 0, reason, true);
         }
     }
-    
-    for (auto id : ids) {
-        disconnectClient(id, reason);
-    }
+    connections_.clear();
 }
 
 bool GNSNetworkManager::isClientConnected(ConnectionID connectionId) const {
@@ -312,15 +260,18 @@ bool GNSNetworkManager::isClientConnected(ConnectionID connectionId) const {
 ConnectionStats GNSNetworkManager::getConnectionStats(ConnectionID connectionId) const {
     std::lock_guard<std::mutex> lock(connectionsMutex_);
     auto it = connections_.find(connectionId);
-    return (it != connections_.end()) ? it->second.stats : ConnectionStats{};
+    if (it != connections_.end()) {
+        return it->second.stats;
+    }
+    return {};
 }
 
 size_t GNSNetworkManager::getConnectionCount() const {
     std::lock_guard<std::mutex> lock(connectionsMutex_);
     size_t count = 0;
-    for (const auto& [_, info] : connections_) {
+    for (const auto& [id, info] : connections_) {
         if (info.state == ConnectionState::Connected) {
-            ++count;
+            count++;
         }
     }
     return count;
@@ -349,41 +300,6 @@ void GNSNetworkManager::setOnClientInput(std::function<void(ConnectionID, const 
     onClientInput_ = std::move(callback);
 }
 
-bool GNSNetworkManager::setEncryptionKey(ConnectionID connectionId, const uint8_t* key, size_t keySize) {
-    if (!initialized_) return false;
-    
-    uint32_t handle = getConnectionHandle(connectionId);
-    if (handle == 0) return false;
-    
-    // Set encryption key via GNS API
-    // This is used for SRV (Steam Datagram) encryption
-    return sockets_->SetConnectionUserData(handle, reinterpret_cast<int64>(key)) == k_EResultOK;
-}
-
-void GNSNetworkManager::enableEncryptionGlobally(bool enable) {
-    config_.enableEncryption = enable;
-}
-
-void GNSNetworkManager::beginNATPunchthrough(const char* targetAddress) {
-    // Implementation for NAT punchthrough
-    // Requires Steam relay network or custom STUN/TURN servers
-    std::cout << "[GNS] NAT punchthrough requested for: " << targetAddress << "\n";
-}
-
-void GNSNetworkManager::dumpStats() const {
-    std::cout << "[GNS] Connection count: " << getConnectionCount() << "\n";
-    
-    std::lock_guard<std::mutex> lock(connectionsMutex_);
-    for (const auto& [id, info] : connections_) {
-        std::cout << "  [Conn " << id << "] " << info.address
-                  << " ping=" << info.stats.ping_ms << "ms"
-                  << " loss=" << info.stats.packet_loss_percent << "%"
-                  << " sent=" << info.stats.bytes_sent
-                  << " recv=" << info.stats.bytes_received << "\n";
-    }
-}
-
-// Callback handling
 void GNSNetworkManager::onConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info) {
     if (instance_) {
         instance_->handleConnectionStatusChanged(info);
@@ -391,90 +307,132 @@ void GNSNetworkManager::onConnectionStatusChanged(SteamNetConnectionStatusChange
 }
 
 void GNSNetworkManager::handleConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info) {
-    auto* infoPtr = info; // Handle both struct layouts
-    
-    uint32_t connHandle = infoPtr->m_hConn;
-    int oldState = infoPtr->m_info.m_eState;
-    int newState = infoPtr->m_info.m_eState;
-    
-    // Check if this is an incoming connection on our listen socket
-    if (infoPtr->m_eOldState == 0 && infoPtr->m_info.m_hListenSocket == listenSocket_) {
-        // New connection attempt
-        if (getConnectionCount() >= config_.maxConnections) {
-            sockets_->CloseConnection(connHandle, 0, "Server full", false);
-            std::cout << "[GNS] Rejected connection: server full\n";
-            return;
-        }
-        
-        // Accept connection
-        if (sockets_->AcceptConnection(connHandle) != k_EResultOK) {
-            sockets_->CloseConnection(connHandle, 0, "Failed to accept", false);
-            return;
-        }
-        
-        // Add to poll group
-        sockets_->SetConnectionPollGroup(connHandle, pollGroup_);
-        
-        // Assign connection ID
-        ConnectionID connId = nextConnectionId_++;
-        
-        // Store user data for message routing
-        sockets_->SetConnectionUserData(connHandle, static_cast<int64>(connId));
-        
-        // Get remote address
-        char addrBuf[128];
-        infoPtr->m_info.m_addrRemote.ToString(addrBuf, sizeof(addrBuf), true);
-        
-        // Add to our map
-        ConnectionInfo connInfo;
-        connInfo.handle = connHandle;
-        connInfo.state = ConnectionState::Connecting;
-        connInfo.connectTimeMs = utils_->GetLocalTimestamp();
-        connInfo.address = addrBuf;
-        
-        {
-            std::lock_guard<std::mutex> lock(connectionsMutex_);
-            connections_[connId] = connInfo;
-        }
-        
-        std::cout << "[GNS] New connection [" << connId << "] from " << addrBuf << "\n";
-        return;
-    }
+    ConnectionID connId = 0;
     
     // Find connection ID from handle
-    ConnectionID connId = 0;
     {
         std::lock_guard<std::mutex> lock(connectionsMutex_);
-        for (const auto& [id, info] : connections_) {
-            if (info.handle == connHandle) {
+        for (const auto& [id, connInfo] : connections_) {
+            if (connInfo.handle == info->m_hConn) {
                 connId = id;
                 break;
             }
         }
     }
     
-    if (connId == 0) return; // Unknown connection
+    switch (info->m_info.m_eState) {
+        case k_ESteamNetworkingConnectionState_Connecting: {
+            // New incoming connection
+            if (info->m_eOldState == k_ESteamNetworkingConnectionState_None) {
+                // Accept the connection
+                if (sockets_->AcceptConnection(info->m_hConn) == k_EResultOK) {
+                    // Add to poll group
+                    sockets_->SetConnectionPollGroup(info->m_hConn, pollGroup_);
+                    
+                    // Create our connection record
+                    connId = nextConnectionId_++;
+                    addConnection(connId, info->m_hConn);
+                    
+                    std::cout << "[GNS] Client connecting, assigned ID: " << connId << "\n";
+                }
+            }
+            break;
+        }
+        
+        case k_ESteamNetworkingConnectionState_Connected: {
+            if (connId != 0) {
+                {
+                    std::lock_guard<std::mutex> lock(connectionsMutex_);
+                    auto it = connections_.find(connId);
+                    if (it != connections_.end()) {
+                        it->second.state = ConnectionState::Connected;
+                        it->second.connectTimeMs = GetTickCount64();
+                    }
+                }
+                
+                std::cout << "[GNS] Client connected: " << connId << "\n";
+                
+                if (onClientConnected_) {
+                    onClientConnected_(connId);
+                }
+            }
+            break;
+        }
+        
+        case k_ESteamNetworkingConnectionState_ClosedByPeer:
+        case k_ESteamNetworkingConnectionState_ProblemDetectedLocally: {
+            if (connId != 0) {
+                const char* reason = info->m_info.m_szEndDebug;
+                if (!reason || !*reason) {
+                    reason = "Connection closed";
+                }
+                
+                std::cout << "[GNS] Client disconnected: " << connId << " (" << reason << ")\n";
+                
+                if (onClientDisconnected_) {
+                    onClientDisconnected_(connId, reason);
+                }
+                
+                removeConnection(connId);
+            }
+            break;
+        }
+        
+        default:
+            break;
+    }
+}
+
+void GNSNetworkManager::processMessages() {
+    if (!sockets_) return;
     
-    // Handle state changes
-    if (newState == 3) { // k_ESteamNetworkingConnectionState_Connected
+    // Receive messages from all connections in poll group
+    SteamNetworkingMessage_t* msgs[32];
+    int numMsgs = sockets_->ReceiveMessagesOnPollGroup(pollGroup_, msgs, 32);
+    
+    for (int i = 0; i < numMsgs; i++) {
+        auto* msg = msgs[i];
+        
+        // Find connection ID from handle
+        ConnectionID connId = 0;
         {
             std::lock_guard<std::mutex> lock(connectionsMutex_);
-            connections_[connId].state = ConnectionState::Connected;
+            for (const auto& [id, info] : connections_) {
+                if (info.handle == msg->m_conn) {
+                    connId = id;
+                    break;
+                }
+            }
         }
-        std::cout << "[GNS] Connection [" << connId << "] connected\n";
-        if (onClientConnected_) {
-            onClientConnected_(connId);
+        
+        if (connId != 0 && onClientInput_) {
+            onClientInput_(connId, msg->m_pData, msg->m_cbSize);
+            
+            // Queue for getPendingInputs
+            ClientInputPacket packet;
+            packet.connectionId = connId;
+            packet.data.assign(static_cast<uint8_t*>(msg->m_pData),
+                               static_cast<uint8_t*>(msg->m_pData) + msg->m_cbSize);
+            packet.receiveTimeMs = static_cast<uint32_t>(GetTickCount64());
+            
+            std::lock_guard<std::mutex> lock(inputMutex_);
+            pendingInputs_.push_back(std::move(packet));
         }
+        
+        msg->Release();
     }
-    else if (newState == 4 || newState == 5 || newState == 6) { // Disconnected states
-        const char* reason = infoPtr->m_info.m_szEndDebug;
-        std::cout << "[GNS] Connection [" << connId << "] disconnected: " << reason << "\n";
-        
-        if (onClientDisconnected_) {
-            onClientDisconnected_(connId, reason);
-        }
-        
-        removeConnection(connId);
+}
+
+void GNSNetworkManager::processConnectionStateChanges() {
+    // Connection state changes are handled via callbacks
+    // This method is for any additional periodic processing
+}
+
+void GNSNetworkManager::sendPacket(ConnectionID connectionId, const void* data, 
+                                   size_t size, int sendFlags) {
+    auto handle = getConnectionHandle(connectionId);
+    if (handle != 0 && sockets_) {
+        sockets_->SendMessageToConnection(handle, data, static_cast<uint32_t>(size), sendFlags, nullptr);
     }
 }
 
@@ -483,7 +441,9 @@ void GNSNetworkManager::addConnection(ConnectionID id, uint32_t handle) {
     ConnectionInfo info;
     info.handle = handle;
     info.state = ConnectionState::Connecting;
-    connections_[id] = info;
+    info.connectTimeMs = 0;
+    info.lastActivityMs = GetTickCount64();
+    connections_[id] = std::move(info);
 }
 
 void GNSNetworkManager::removeConnection(ConnectionID id) {
@@ -494,8 +454,25 @@ void GNSNetworkManager::removeConnection(ConnectionID id) {
 uint32_t GNSNetworkManager::getConnectionHandle(ConnectionID id) const {
     std::lock_guard<std::mutex> lock(connectionsMutex_);
     auto it = connections_.find(id);
-    return (it != connections_.end()) ? it->second.handle : 0;
+    if (it != connections_.end()) {
+        return it->second.handle;
+    }
+    return 0;
+}
+
+void GNSNetworkManager::dumpStats() const {
+    std::lock_guard<std::mutex> lock(connectionsMutex_);
+    std::cout << "[GNS] Connection Stats:\n";
+    std::cout << "  Total connections: " << connections_.size() << "\n";
+    
+    size_t connected = 0;
+    for (const auto& [id, info] : connections_) {
+        if (info.state == ConnectionState::Connected) connected++;
+    }
+    std::cout << "  Connected: " << connected << "\n";
 }
 
 } // namespace Netcode
 } // namespace DarkAges
+
+#endif // ENABLE_GNS

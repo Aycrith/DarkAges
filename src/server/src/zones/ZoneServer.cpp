@@ -388,24 +388,29 @@ bool ZoneServer::tick() {
     // [DEVOPS_AGENT] Update Prometheus metrics
     auto& metrics = Monitoring::MetricsExporter::Instance();
     double tickTimeMs = tickTimeUs / 1000.0;
+    std::string zoneIdStr = std::to_string(config_.zoneId);
+    std::unordered_map<std::string, std::string> zoneLabel = {{"zone_id", zoneIdStr}};
     
-    metrics.TicksTotal().Increment({{"zone_id", std::to_string(config_.zoneId)}});
-    metrics.TickDurationMs().Set(tickTimeMs, {{"zone_id", std::to_string(config_.zoneId)}});
+    metrics.TicksTotal().Increment(zoneLabel);
+    metrics.TickDurationMs().Set(tickTimeMs, zoneLabel);
     metrics.TickDurationHistogram().Observe(tickTimeMs);
-    metrics.PlayerCount().Set(static_cast<double>(connectionToEntity_.size()), 
-                              {{"zone_id", std::to_string(config_.zoneId)}});
     
-    // Memory metrics (convert bytes to MB for readability)
+    // Player population metrics
+    double playerCount = static_cast<double>(connectionToEntity_.size());
+    metrics.PlayerCount().Set(playerCount, zoneLabel);
+    metrics.PlayerCapacity().Set(1000.0, zoneLabel);  // Default capacity
+    
+    // Memory metrics
     size_t memoryUsed = tempAllocator_->getUsed();
-    metrics.MemoryUsedBytes().Set(static_cast<double>(memoryUsed),
-                                   {{"zone_id", std::to_string(config_.zoneId)}});
-    metrics.MemoryTotalBytes().Set(1024.0 * 1024.0 * 1024.0,  // 1GB assumption
-                                   {{"zone_id", std::to_string(config_.zoneId)}});
+    metrics.MemoryUsedBytes().Set(static_cast<double>(memoryUsed), zoneLabel);
+    metrics.MemoryTotalBytes().Set(1024.0 * 1024.0 * 1024.0, zoneLabel);  // 1GB assumption
     
     // Database connection status
     bool dbConnected = redis_ && redis_->isConnected();
-    metrics.DbConnected().Set(dbConnected ? 1.0 : 0.0,
-                              {{"zone_id", std::to_string(config_.zoneId)}});
+    metrics.DbConnected().Set(dbConnected ? 1.0 : 0.0, zoneLabel);
+    
+    // Network metrics - aggregate from all connections
+    updateNetworkMetrics(metrics, zoneIdStr);
     
     // Trace counters
     ZONE_TRACE_COUNTER("tick_time_us", static_cast<int64_t>(tickTimeUs));
@@ -1065,6 +1070,19 @@ void ZoneServer::initializeAntiCheat() {
 
 // [SECURITY_AGENT] Handle cheat detection event
 void ZoneServer::onCheatDetected(uint64_t playerId, const Security::CheatDetectionResult& result) {
+    // [DEVOPS_AGENT] Track anti-cheat violations in Prometheus
+    auto& metrics = Monitoring::MetricsExporter::Instance();
+    std::string zoneIdStr = std::to_string(config_.zoneId);
+    const char* cheatTypeStr = Security::cheatTypeToString(result.type);
+    const char* severityStr = result.severity == Security::ViolationSeverity::CRITICAL ? "critical" : 
+                              result.severity == Security::ViolationSeverity::SUSPICIOUS ? "suspicious" : "minor";
+    std::unordered_map<std::string, std::string> violationLabels = {
+        {"zone_id", zoneIdStr},
+        {"cheat_type", cheatTypeStr},
+        {"severity", severityStr}
+    };
+    metrics.AntiCheatViolationsTotal().Increment(1.0, violationLabels);
+    
     // Log to ScyllaDB for analytics and review
     if (scylla_ && scylla_->isConnected()) {
         // TODO: Implement anti-cheat event logging to database
@@ -1272,6 +1290,66 @@ void ZoneServer::checkPerformanceBudgets(uint64_t tickTimeUs) {
         if (tickTimeUs > 20000 && !qosDegraded_) {  // > 20ms
             activateQoSDegradation();
         }
+    }
+}
+
+// [DEVOPS_AGENT] Update network-related Prometheus metrics
+void ZoneServer::updateNetworkMetrics(Monitoring::MetricsExporter& metrics, const std::string& zoneIdStr) {
+    if (!network_) return;
+    
+    std::unordered_map<std::string, std::string> zoneLabel = {{"zone_id", zoneIdStr}};
+    
+    // Aggregate packet stats from all connections
+    float totalPacketLoss = 0.0f;
+    uint32_t connectionCount = 0;
+    uint64_t totalBytesSent = 0;
+    uint64_t totalBytesReceived = 0;
+    uint32_t totalPacketsSent = 0;
+    uint32_t totalPacketsReceived = 0;
+    
+    // Iterate through all connections to aggregate stats
+    for (const auto& [connId, entity] : connectionToEntity_) {
+        auto quality = network_->getConnectionQuality(connId);
+        
+        totalPacketLoss += quality.packetLoss;
+        totalBytesSent += quality.bytesSent;
+        totalBytesReceived += quality.bytesReceived;
+        totalPacketsSent += quality.packetsSent;
+        totalPacketsReceived += quality.packetsReceived;
+        connectionCount++;
+    }
+    
+    // Calculate average packet loss percentage
+    float avgPacketLoss = connectionCount > 0 ? (totalPacketLoss / connectionCount) * 100.0f : 0.0f;
+    metrics.PacketLossPercent().Set(static_cast<double>(avgPacketLoss), zoneLabel);
+    
+    // Update packet counters (cumulative)
+    static uint64_t lastPacketsSent = 0;
+    static uint64_t lastPacketsLost = 0;
+    static uint64_t lastBytesSent = 0;
+    static auto lastUpdateTime = std::chrono::steady_clock::now();
+    
+    auto now = std::chrono::steady_clock::now();
+    double elapsedSec = std::chrono::duration<double>(now - lastUpdateTime).count();
+    
+    if (elapsedSec >= 1.0) {  // Update bandwidth calculation once per second
+        // Calculate bandwidth (bytes per second)
+        uint64_t bytesSentDelta = totalBytesSent > lastBytesSent ? totalBytesSent - lastBytesSent : 0;
+        double bandwidthBps = bytesSentDelta / elapsedSec;
+        metrics.ReplicationBandwidthBps().Set(bandwidthBps, zoneLabel);
+        
+        lastBytesSent = totalBytesSent;
+        lastUpdateTime = now;
+    }
+    
+    // Update counter metrics
+    metrics.PacketsSentTotal().Increment(static_cast<double>(totalPacketsSent), zoneLabel);
+    
+    // Estimate packets lost from packet loss percentage
+    uint64_t packetsLost = static_cast<uint64_t>(totalPacketsSent * (avgPacketLoss / 100.0f));
+    if (packetsLost > lastPacketsLost) {
+        metrics.PacketsLostTotal().Increment(static_cast<double>(packetsLost - lastPacketsLost), zoneLabel);
+        lastPacketsLost = packetsLost;
     }
 }
 
