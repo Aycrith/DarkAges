@@ -449,6 +449,223 @@ TEST_CASE("Redis Pub/Sub Cross-Zone", "[redis][database]") {
     redisSub.shutdown();
 }
 
+TEST_CASE("Redis Streams Cross-Zone", "[redis][database][streams]") {
+    if (!isRedisAvailable()) {
+        SKIP("Redis not available - skipping tests");
+    }
+
+    RedisManager redis;
+    REQUIRE(redis.initialize("localhost", 6379));
+    
+    SECTION("Basic stream add and read") {
+        std::atomic<bool> addComplete{false};
+        std::string generatedId;
+        
+        // Add entry to stream using auto-generated ID
+        std::unordered_map<std::string, std::string> fields{
+            {"type", "player_moved"},
+            {"zone_id", "5"},
+            {"player_id", "1001"},
+            {"x", "100"},
+            {"y", "200"}
+        };
+        
+        redis.xadd("zone:5:events", "*", fields, 
+            [&addComplete, &generatedId](const AsyncResult<std::string>& result) {
+                addComplete = true;
+                if (result.success) {
+                    generatedId = result.value;
+                }
+            });
+        
+        // Wait for add to complete
+        for (int i = 0; i < 20 && !addComplete; ++i) {
+            redis.update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        
+        REQUIRE(addComplete);
+        REQUIRE(!generatedId.empty());
+        REQUIRE(generatedId.find("-") != std::string::npos); // Should have format "ms-seq"
+        
+        // Read the entry back
+        std::atomic<bool> readComplete{false};
+        std::vector<RedisManager::StreamEntry> entries;
+        
+        redis.xread("zone:5:events", "0", 
+            [&readComplete, &entries](const AsyncResult<std::vector<RedisManager::StreamEntry>>& result) {
+                readComplete = true;
+                if (result.success) {
+                    entries = result.value;
+                }
+            }, 100, 0);
+        
+        // Wait for read to complete
+        for (int i = 0; i < 20 && !readComplete; ++i) {
+            redis.update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        
+        REQUIRE(readComplete);
+        REQUIRE(entries.size() >= 1);
+        
+        // Find our entry
+        bool foundEntry = false;
+        for (const auto& entry : entries) {
+            if (entry.id == generatedId) {
+                REQUIRE(entry.fields.at("type") == "player_moved");
+                REQUIRE(entry.fields.at("zone_id") == "5");
+                REQUIRE(entry.fields.at("player_id") == "1001");
+                REQUIRE(entry.fields.at("x") == "100");
+                REQUIRE(entry.fields.at("y") == "200");
+                foundEntry = true;
+                break;
+            }
+        }
+        REQUIRE(foundEntry);
+    }
+    
+    SECTION("Multiple entries and incremental read") {
+        // Add multiple entries
+        std::string lastId;
+        std::atomic<int> addCount{0};
+        
+        for (int i = 0; i < 5; ++i) {
+            std::unordered_map<std::string, std::string> fields{
+                {"type", "entity_sync"},
+                {"entity_id", std::to_string(2000 + i)},
+                {"sequence", std::to_string(i)}
+            };
+            
+            redis.xadd("zone:test:stream", "*", fields,
+                [&addCount, &lastId, i](const AsyncResult<std::string>& result) {
+                    addCount++;
+                    if (result.success && i == 4) {
+                        lastId = result.value;
+                    }
+                });
+        }
+        
+        // Wait for all adds
+        for (int i = 0; i < 50 && addCount < 5; ++i) {
+            redis.update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        
+        REQUIRE(addCount == 5);
+        
+        // Read all entries
+        std::atomic<bool> readAll{false};
+        std::vector<RedisManager::StreamEntry> allEntries;
+        
+        redis.xread("zone:test:stream", "0",
+            [&readAll, &allEntries](const AsyncResult<std::vector<RedisManager::StreamEntry>>& result) {
+                readAll = true;
+                if (result.success) {
+                    allEntries = result.value;
+                }
+            }, 100, 0);
+        
+        for (int i = 0; i < 20 && !readAll; ++i) {
+            redis.update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        
+        REQUIRE(readAll);
+        REQUIRE(allEntries.size() >= 5);
+        
+        // Verify sequence
+        int foundSequence = 0;
+        for (const auto& entry : allEntries) {
+            if (entry.fields.count("type") && entry.fields.at("type") == "entity_sync") {
+                if (entry.fields.count("sequence")) {
+                    int seq = std::stoi(entry.fields.at("sequence"));
+                    foundSequence++;
+                }
+            }
+        }
+        REQUIRE(foundSequence >= 5);
+        
+        // Read only new entries (should be empty)
+        std::atomic<bool> readNew{false};
+        std::vector<RedisManager::StreamEntry> newEntries;
+        
+        redis.xread("zone:test:stream", lastId,
+            [&readNew, &newEntries](const AsyncResult<std::vector<RedisManager::StreamEntry>>& result) {
+                readNew = true;
+                if (result.success) {
+                    newEntries = result.value;
+                }
+            }, 100, 0);
+        
+        for (int i = 0; i < 20 && !readNew; ++i) {
+            redis.update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        
+        REQUIRE(readNew);
+        REQUIRE(newEntries.size() == 0); // No new entries after lastId
+    }
+    
+    SECTION("Cross-zone communication via streams") {
+        // Producer adds zone event
+        std::atomic<bool> publishDone{false};
+        std::string eventId;
+        
+        std::unordered_map<std::string, std::string> zoneEvent{
+            {"type", "zone_broadcast"},
+            {"source_zone", "10"},
+            {"target_zone", "11"},
+            {"message", "hello_zone_11"}
+        };
+        
+        redis.xadd("zone:events", "*", zoneEvent,
+            [&publishDone, &eventId](const AsyncResult<std::string>& result) {
+                publishDone = true;
+                if (result.success) {
+                    eventId = result.value;
+                }
+            });
+        
+        for (int i = 0; i < 20 && !publishDone; ++i) {
+            redis.update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        
+        REQUIRE(publishDone);
+        REQUIRE(!eventId.empty());
+        
+        // Consumer reads zone events
+        std::atomic<bool> consumeDone{false};
+        bool messageFound = false;
+        
+        redis.xread("zone:events", "0",
+            [&consumeDone, &messageFound, &eventId](const AsyncResult<std::vector<RedisManager::StreamEntry>>& result) {
+                consumeDone = true;
+                if (result.success) {
+                    for (const auto& entry : result.value) {
+                        if (entry.id == eventId) {
+                            if (entry.fields.at("type") == "zone_broadcast" &&
+                                entry.fields.at("message") == "hello_zone_11") {
+                                messageFound = true;
+                            }
+                        }
+                    }
+                }
+            }, 100, 0);
+        
+        for (int i = 0; i < 20 && !consumeDone; ++i) {
+            redis.update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        
+        REQUIRE(consumeDone);
+        REQUIRE(messageFound);
+    }
+    
+    redis.shutdown();
+}
+
 TEST_CASE("Redis Failover Recovery", "[redis][database]") {
     if (!isRedisAvailable()) {
         SKIP("Redis not available - skipping tests");

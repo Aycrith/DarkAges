@@ -6,6 +6,7 @@
 #include <functional>
 #include <optional>
 #include <vector>
+#include <unordered_map>
 #include <mutex>
 #include <atomic>
 #include <cstdint>
@@ -151,6 +152,32 @@ public:
     void broadcastToAllZones(const ZoneMessage& message);
     void subscribeToZoneChannel(uint32_t myZoneId, 
                                 std::function<void(const ZoneMessage&)> callback);
+    
+    // === Streams (Non-blocking alternative to Pub/Sub) ===
+    
+    // Stream entry (field-value pairs)
+    struct StreamEntry {
+        std::string id;  // Auto-generated or explicit ID
+        std::unordered_map<std::string, std::string> fields;
+    };
+    
+    using StreamAddCallback = std::function<void(const AsyncResult<std::string>& result)>;
+    using StreamReadCallback = std::function<void(const AsyncResult<std::vector<StreamEntry>>& result)>;
+    
+    // Add entry to stream (XADD)
+    // Use id="*" for auto-generated ID
+    void xadd(std::string_view streamKey, 
+              std::string_view id,
+              const std::unordered_map<std::string, std::string>& fields,
+              StreamAddCallback callback = nullptr);
+    
+    // Read entries from stream (XREAD)
+    // Use lastId="0" to read from beginning, or specific ID to read newer entries
+    void xread(std::string_view streamKey,
+               std::string_view lastId,
+               StreamReadCallback callback,
+               uint32_t count = 100,
+               uint32_t blockMs = 0);
     
     // === Pipeline Batching ===
     
