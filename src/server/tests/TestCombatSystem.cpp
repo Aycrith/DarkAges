@@ -265,7 +265,7 @@ TEST_CASE("CombatSystem team damage check", "[combat]") {
         targetCombat.teamId = 2;
         
         registry.emplace<Position>(attacker, Position::fromVec3(glm::vec3(0, 0, 0), 0));
-        registry.emplace<Rotation>(attacker);
+        registry.emplace<Rotation>(attacker, Rotation{1.5708f, 0.0f});  // PI/2 to face +X direction
         registry.emplace<Position>(target, Position::fromVec3(glm::vec3(1, 0, 0), 0));
         registry.emplace<Rotation>(target);
         
@@ -283,7 +283,7 @@ TEST_CASE("CombatSystem team damage check", "[combat]") {
         targetCombat.teamId = 1;
         
         registry.emplace<Position>(attacker, Position::fromVec3(glm::vec3(0, 0, 0), 0));
-        registry.emplace<Rotation>(attacker);
+        registry.emplace<Rotation>(attacker, Rotation{1.5708f, 0.0f});  // PI/2 to face +X direction
         registry.emplace<Position>(target, Position::fromVec3(glm::vec3(1, 0, 0), 0));
         registry.emplace<Rotation>(target);
         
