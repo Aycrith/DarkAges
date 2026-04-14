@@ -240,6 +240,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [redis-tests-linux, redis-tests-windows, redis-performance]
     if: always()
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
     
     steps:
     - name: Generate overall summary

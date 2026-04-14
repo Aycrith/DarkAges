@@ -195,6 +195,10 @@ jobs:
     runs-on: windows-latest
     needs: [unit-tests, simulation-tests, real-tests]
     if: always()
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
     
     steps:
     - name: Checkout
