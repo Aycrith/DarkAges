@@ -97,16 +97,9 @@ jobs:
     name: Redis Tests (Windows - Exclude Pub/Sub)
     runs-on: windows-latest
     
-    services:
-      redis:
-        image: redis:7
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    # NOTE: Service containers not supported on Windows runners.
+    # Redis tests run on Linux only. Windows build validation done by build-windows job.
+    if: false  # Disabled: no Redis available on Windows runners
     
     steps:
     - name: Checkout repository
