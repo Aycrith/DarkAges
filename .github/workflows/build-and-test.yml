@@ -22,7 +22,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake g++-11
+        sudo apt-get install -y cmake g++-11 libprotobuf-dev protobuf-compiler
         sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 110
         sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 110
 
@@ -94,7 +94,11 @@ jobs:
         submodules: recursive
 
     - name: Install clang-tidy
-      run: sudo apt-get install -y clang-tidy
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang-tidy cmake g++-11 libprotobuf-dev protobuf-compiler
+        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 110
+        sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 110
 
     - name: Configure CMake with clang-tidy
       run: |
