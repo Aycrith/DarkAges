@@ -43,7 +43,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake g++-11 libhiredis-dev
+        sudo apt-get install -y cmake g++-11 libhiredis-dev redis-tools
         sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 110
         sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 110
     
@@ -189,7 +189,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake g++-11 libhiredis-dev
+        sudo apt-get install -y cmake g++-11 libhiredis-dev redis-tools
         sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 110
         sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 110
     
