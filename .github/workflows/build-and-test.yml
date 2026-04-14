@@ -82,7 +82,13 @@ jobs:
 
     - name: Test
       working-directory: ${{github.workspace}}/build
-      run: ctest -C ${{env.BUILD_TYPE}} --output-on-failure
+      run: |
+        if ("${{ runner.os }}" -eq "Windows") {
+          # Exclude tests requiring Redis/GNS services (no service containers on Windows)
+          ctest -C ${{env.BUILD_TYPE}} --output-on-failure -E "test_database|test_network|hiredis-test"
+        } else {
+          ctest -C ${{env.BUILD_TYPE}} --output-on-failure
+        }
 
   static-analysis:
     runs-on: ubuntu-latest

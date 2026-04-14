@@ -10,18 +10,18 @@ using namespace DarkAges::Security;
 TEST_CASE("PacketValidator Position Validation", "[security][packet]") {
     
     SECTION("Valid position in bounds") {
-        Position pos{100.0f, 0.0f, 200.0f, 0};
+        Position pos{100, 0, 200, 0};
         REQUIRE(PacketValidator::IsPositionInBounds(pos));
         REQUIRE(PacketValidator::ValidatePosition(pos));
     }
-    
+
     SECTION("Position at world boundary is valid") {
-        Position pos{PacketValidator::WORLD_MAX_X, 0.0f, PacketValidator::WORLD_MAX_Z, 0};
+        Position pos{PacketValidator::WORLD_MAX_X, 0, PacketValidator::WORLD_MAX_Z, 0};
         REQUIRE(PacketValidator::IsPositionInBounds(pos));
     }
-    
+
     SECTION("Position beyond world bounds is clamped") {
-        Position pos{20000.0f, 500.0f, -30000.0f, 0};
+        Position pos{20000, 500, -30000, 0};
         REQUIRE_FALSE(PacketValidator::IsPositionInBounds(pos));
         PacketValidator::ClampPosition(pos);
         REQUIRE(pos.x <= PacketValidator::WORLD_MAX_X);
@@ -29,16 +29,16 @@ TEST_CASE("PacketValidator Position Validation", "[security][packet]") {
         REQUIRE(pos.z >= PacketValidator::WORLD_MIN_Z);
         REQUIRE(pos.z <= PacketValidator::WORLD_MAX_Z);
     }
-    
+
     SECTION("Position with extreme Y is clamped") {
-        Position pos{0.0f, 5000.0f, 0.0f, 0};
+        Position pos{0, 5000, 0, 0};
         PacketValidator::ClampPosition(pos);
         REQUIRE(pos.y <= PacketValidator::WORLD_MAX_Y);
         REQUIRE(pos.y >= PacketValidator::WORLD_MIN_Y);
     }
-    
+
     SECTION("Negative coordinates clamped correctly") {
-        Position pos{-50000.0f, -5000.0f, -50000.0f, 0};
+        Position pos{-50000, -5000, -50000, 0};
         PacketValidator::ClampPosition(pos);
         REQUIRE(pos.x >= PacketValidator::WORLD_MIN_X);
         REQUIRE(pos.y >= PacketValidator::WORLD_MIN_Y);
@@ -78,26 +78,26 @@ TEST_CASE("PacketValidator Speed Validation", "[security][packet]") {
 TEST_CASE("PacketValidator Position Delta Validation", "[security][packet]") {
     
     SECTION("Normal movement is valid") {
-        Position oldPos{0.0f, 0.0f, 0.0f, 0};
-        Position newPos{5.0f, 0.0f, 5.0f, 0};
+        Position oldPos{0, 0, 0, 0};
+        Position newPos{5, 0, 5, 0};
         REQUIRE(PacketValidator::ValidatePositionDelta(oldPos, newPos, 1000, 10.0f));
     }
     
     SECTION("Standing still is valid") {
-        Position oldPos{100.0f, 0.0f, 100.0f, 0};
-        Position newPos{100.0f, 0.0f, 100.0f, 0};
+        Position oldPos{100, 0, 100, 0};
+        Position newPos{100, 0, 100, 0};
         REQUIRE(PacketValidator::ValidatePositionDelta(oldPos, newPos, 16, 10.0f));
     }
     
     SECTION("Teleportation is detected") {
-        Position oldPos{0.0f, 0.0f, 0.0f, 0};
-        Position newPos{5000.0f, 0.0f, 5000.0f, 0};
+        Position oldPos{0, 0, 0, 0};
+        Position newPos{5000, 0, 5000, 0};
         REQUIRE_FALSE(PacketValidator::ValidatePositionDelta(oldPos, newPos, 16, 10.0f));
     }
     
     SECTION("Speed hack is detected") {
-        Position oldPos{0.0f, 0.0f, 0.0f, 0};
-        Position newPos{50.0f, 0.0f, 0.0f, 0};
+        Position oldPos{0, 0, 0, 0};
+        Position newPos{50, 0, 0, 0};
         // Moved 50m in 16ms = 3125 m/s — way over 10 m/s limit
         REQUIRE_FALSE(PacketValidator::ValidatePositionDelta(oldPos, newPos, 16, 10.0f));
     }
