@@ -12,6 +12,8 @@
 #include <unordered_map>
 #include <memory>
 #include <vector>
+#include <thread>
+#include <cmath>
 
 namespace DarkAges {
 namespace Monitoring {

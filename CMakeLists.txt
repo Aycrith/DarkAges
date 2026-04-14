@@ -680,12 +680,26 @@ if(BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
         src/server/tests/TestZoneOrchestrator.cpp
         src/server/tests/TestDDoSProtection.cpp
         src/server/tests/TestProfiling.cpp
-        src/server/tests/TestGNSIntegration.cpp
-        src/server/tests/TestRedisIntegration.cpp
-        # src/server/tests/TestScyllaManager.cpp  # Temporarily disabled - ScyllaDB stub
-        # tests/integration/gamestate/TestGamestateSynchronization.cpp  # Temporarily disabled - needs refactoring
     )
-    
+
+    # Conditionally include tests for optional features
+    if(ENABLE_GNS AND GNS_FOUND)
+        list(APPEND TEST_SOURCES src/server/tests/TestGNSIntegration.cpp)
+        message(STATUS "Including GNS integration tests")
+    else()
+        message(STATUS "Skipping GNS integration tests (GNS not available)")
+    endif()
+
+    if(ENABLE_REDIS AND HIREDIS_FOUND)
+        list(APPEND TEST_SOURCES src/server/tests/TestRedisIntegration.cpp)
+        message(STATUS "Including Redis integration tests")
+    else()
+        message(STATUS "Skipping Redis integration tests (Redis not available)")
+    endif()
+
+    # src/server/tests/TestScyllaManager.cpp  # Temporarily disabled - ScyllaDB stub
+    # tests/integration/gamestate/TestGamestateSynchronization.cpp  # Temporarily disabled - needs refactoring
+
     # Filter out tests that don't exist yet
     set(FINAL_TEST_SOURCES)
     foreach(test_file ${TEST_SOURCES})

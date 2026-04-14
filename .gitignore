@@ -131,3 +131,6 @@ infra/docker-compose.monitoring.local.yml
 
 nul
 
+
+# Build artifacts (autonomous iteration)
+build_autonomous/
