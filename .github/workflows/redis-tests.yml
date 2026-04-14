@@ -97,6 +97,17 @@ jobs:
     name: Redis Tests (Windows - Exclude Pub/Sub)
     runs-on: windows-latest
     
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -106,15 +117,23 @@ jobs:
     - name: Setup MSVC
       uses: microsoft/setup-msbuild@v2
     
-    - name: Start Redis container
-      run: |
-        docker compose -f infra/docker-compose.redis.yml up -d
-        Start-Sleep -Seconds 10
-    
     - name: Verify Redis connectivity
+      shell: pwsh
       run: |
-        docker exec darkages-redis redis-cli ping
-        docker exec darkages-redis redis-cli info server
+        # Wait for Redis service to be ready
+        $retries = 0
+        do {
+          try {
+            $result = Test-NetConnection -ComputerName localhost -Port 6379 -WarningAction SilentlyContinue
+            if ($result.TcpTestSucceeded) {
+              Write-Host "Redis is ready on port 6379"
+              break
+            }
+          } catch {}
+          $retries++
+          Write-Host "Waiting for Redis... (attempt $retries)"
+          Start-Sleep -Seconds 2
+        } while ($retries -lt 15)
     
     - name: Configure CMake
       run: |
@@ -156,10 +175,6 @@ jobs:
       with:
         name: redis-test-results-windows
         path: build/redis_tests.xml
-    
-    - name: Stop Redis container
-      if: always()
-      run: docker compose -f infra/docker-compose.redis.yml down
 
   # ==========================================================================
   # Redis Performance Baseline

@@ -44,7 +44,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake g++-11 ninja-build
+        sudo apt-get install -y cmake g++-11 ninja-build libprotobuf-dev protobuf-compiler libuv1-dev
         sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 110
         sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 110
 
