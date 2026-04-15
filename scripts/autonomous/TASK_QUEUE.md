@@ -13,8 +13,8 @@ Prioritized list of autonomous improvements for DarkAges.
 - [ ] ZoneServer:328 — Implement player state persistence stub
 - [ ] ZoneServer:553 — Implement event packet broadcast
 - [x] ZoneServer:639 — Implement respawn timer ✅ 2026-04-14 (PR #2)
-- [ ] ZoneServer:1088 — Implement anti-cheat event logging to database
-- [ ] AntiCheat:357 — Implement collision detection stub
+
+## P1 — Combat System (core gameplay)
 - [ ] CombatSystem — Implement ability system stub
 - [ ] CombatSystem — Implement projectile/raycast stub
 
@@ -26,5 +26,11 @@ Prioritized list of autonomous improvements for DarkAges.
 - [ ] Add inline documentation to key ECS components
 - [ ] Document network protocol message format
 
+## P3 — Anti-Cheat (ABSOLUTE LAST PRIORITY)
+> Anti-cheat is deferred until all gameplay, networking, and infrastructure tasks are complete.
+> Server authority is enforced by design — anti-cheat logging/detection is a polish pass, not a core requirement.
+- [ ] ZoneServer:1088 — Implement anti-cheat event logging to database
+- [ ] AntiCheat:357 — Implement collision detection stub
+
 ## Completed
-_(none yet)_
+- [x] ZoneServer:639 — Implement respawn timer ✅ 2026-04-14 (PR #2)

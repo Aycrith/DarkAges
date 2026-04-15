@@ -36,12 +36,16 @@
 | Category | Priority | Description |
 |----------|----------|-------------|
 | Build Fixes | P0 | Fix compilation errors, missing deps |
+| Gameplay Features | P1 | Combat, abilities, persistence — core game functionality |
 | Test Coverage | P1 | Add missing tests, fix broken tests |
 | Code Quality | P1 | Refactoring, const correctness, RAII |
+| Security (Input Validation) | P1 | Packet validation, DDoS hardening |
 | Performance | P2 | Hot path optimization, memory pooling |
 | Documentation | P2 | Inline docs, API docs |
-| Security | P1 | Input validation, DDoS hardening |
 | Infrastructure | P2 | Docker, CI/CD, monitoring |
+| Anti-Cheat Detection/Logging | **P3** | **ABSOLUTE LAST** — Server authority is enforced by design; anti-cheat logging is a polish pass only after all gameplay and infrastructure is complete |
+
+> **NOTE:** Anti-cheat is explicitly deprioritized. The server is authoritative by design — it validates all inputs server-side. Anti-cheat *detection* and *logging* is deferred until every gameplay, networking, and infrastructure task is done.
 
 ## Agent Roles
 
