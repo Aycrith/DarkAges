@@ -39,12 +39,13 @@ bool PacketValidator::IsPositionInBounds(const Position& pos) {
 }
 
 void PacketValidator::ClampPosition(Position& pos) {
-    pos.x = std::max(static_cast<Constants::Fixed>(WORLD_MIN_X * Constants::FLOAT_TO_FIXED), 
-                     std::min(static_cast<Constants::Fixed>(WORLD_MAX_X * Constants::FLOAT_TO_FIXED), pos.x));
-    pos.y = std::max(static_cast<Constants::Fixed>(WORLD_MIN_Y * Constants::FLOAT_TO_FIXED), 
-                     std::min(static_cast<Constants::Fixed>(WORLD_MAX_Y * Constants::FLOAT_TO_FIXED), pos.y));
-    pos.z = std::max(static_cast<Constants::Fixed>(WORLD_MIN_Z * Constants::FLOAT_TO_FIXED), 
-                     std::min(static_cast<Constants::Fixed>(WORLD_MAX_Z * Constants::FLOAT_TO_FIXED), pos.z));
+    // Position values are in world units (meters), clamp against float world bounds directly
+    pos.x = static_cast<Constants::Fixed>(
+        std::max(WORLD_MIN_X, std::min(WORLD_MAX_X, static_cast<float>(pos.x))));
+    pos.y = static_cast<Constants::Fixed>(
+        std::max(WORLD_MIN_Y, std::min(WORLD_MAX_Y, static_cast<float>(pos.y))));
+    pos.z = static_cast<Constants::Fixed>(
+        std::max(WORLD_MIN_Z, std::min(WORLD_MAX_Z, static_cast<float>(pos.z))));
 }
 
 // ============================================================================
@@ -54,6 +55,12 @@ void PacketValidator::ClampPosition(Position& pos) {
 bool PacketValidator::ValidateSpeed(float speed) {
     // Check for NaN/Inf
     if (std::isnan(speed) || std::isinf(speed)) {
+        return false;
+    }
+    
+    // Reject negative speed
+    if (speed < 0.0f) {
+        std::cerr << "[SECURITY] Negative speed: " << speed << "\n";
         return false;
     }
     
@@ -228,7 +235,8 @@ bool PacketValidator::ValidateAttackTarget(
 // ============================================================================
 
 bool PacketValidator::ValidateAbilityId(uint32_t abilityId) {
-    if (abilityId == 0 || abilityId > MAX_ABILITY_ID) {
+    // 0 is valid (basic attack), otherwise must be within max range
+    if (abilityId > MAX_ABILITY_ID) {
         std::cerr << "[SECURITY] Invalid ability ID: " << abilityId << "\n";
         return false;
     }
@@ -300,8 +308,8 @@ static bool IsValidNameChar(char c) {
 bool PacketValidator::ValidatePlayerName(std::string& name) {
     // Check length
     if (name.empty()) {
-        name = "Player";
-        return true; // Auto-fix
+        std::cerr << "[SECURITY] Empty player name\n";
+        return false; // Reject empty names
     }
     
     if (name.length() > MAX_PLAYER_NAME_LENGTH) {
