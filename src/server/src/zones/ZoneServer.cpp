@@ -68,9 +68,46 @@ bool ZoneServer::initialize(const ZoneConfig& config) {
     // [PHASE 4B] Initialize aura projection manager
     auraManager_ = AuraProjectionManager(config_.zoneId);
     
-    // Load adjacent zone definitions from config/Redis
+    // Build adjacent zone definitions from grid layout
+    // Current zone is at grid position (myX, myZ) in a 2x2 grid
     std::vector<ZoneDefinition> adjacentZones;
-    // TODO: Populate from configuration or service discovery
+    uint32_t myZoneId = config_.zoneId;
+    uint32_t myX = (myZoneId - 1) % 2;
+    uint32_t myZ = (myZoneId - 1) / 2;
+
+    float zoneWidth = (Constants::WORLD_MAX_X - Constants::WORLD_MIN_X) / 2.0f;
+    float zoneDepth = (Constants::WORLD_MAX_Z - Constants::WORLD_MIN_Z) / 2.0f;
+
+    // Check all 8 neighbors (including diagonals)
+    for (int dx = -1; dx <= 1; ++dx) {
+        for (int dz = -1; dz <= 1; ++dz) {
+            if (dx == 0 && dz == 0) continue; // Skip self
+
+            int nx = static_cast<int>(myX) + dx;
+            int nz = static_cast<int>(myZ) + dz;
+
+            // Bounds check for 2x2 grid
+            if (nx < 0 || nx > 1 || nz < 0 || nz > 1) continue;
+
+            uint32_t adjId = static_cast<uint32_t>(nz) * 2 + static_cast<uint32_t>(nx) + 1;
+
+            ZoneDefinition adjDef;
+            adjDef.zoneId = adjId;
+            adjDef.zoneName = "Zone_" + std::to_string(adjId);
+            adjDef.shape = ZoneShape::RECTANGLE;
+            adjDef.minX = Constants::WORLD_MIN_X + static_cast<float>(nx) * zoneWidth;
+            adjDef.maxX = adjDef.minX + zoneWidth;
+            adjDef.minZ = Constants::WORLD_MIN_Z + static_cast<float>(nz) * zoneDepth;
+            adjDef.maxZ = adjDef.minZ + zoneDepth;
+            adjDef.centerX = (adjDef.minX + adjDef.maxX) / 2.0f;
+            adjDef.centerZ = (adjDef.minZ + adjDef.maxZ) / 2.0f;
+            adjDef.host = "127.0.0.1";
+            adjDef.port = Constants::DEFAULT_SERVER_PORT + static_cast<uint16_t>(adjId) - 1;
+
+            adjacentZones.push_back(adjDef);
+        }
+    }
+
     auraManager_.initialize(adjacentZones);
     
     std::cout << "[ZONE " << config_.zoneId << "] Aura projection initialized" << std::endl;
