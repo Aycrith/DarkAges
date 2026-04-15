@@ -11,6 +11,7 @@
 #include <cstring>
 #include <thread>
 #include <algorithm>
+#include <memory>
 
 namespace DarkAges {
 
@@ -530,12 +531,12 @@ void ScyllaManager::logCombatEvent(const CombatEvent& event, WriteCallback callb
     CassFuture* future = cass_session_execute(internal_->session, statement);
     
     // Set up callback
-    auto* cbData = new WriteCallbackData(callback, this);
+    auto cbData = std::make_unique<WriteCallbackData>(callback, this);
     cass_future_set_callback(future, [](CassFuture* f, void* data) {
-        auto* cbData = static_cast<WriteCallbackData*>(data);
+        std::unique_ptr<WriteCallbackData> cbData(static_cast<WriteCallbackData*>(data));
         CassError rc = cass_future_error_code(f);
         bool success = (rc == CASS_OK);
-        
+
         if (cbData->manager) {
             cbData->manager->internal_->pendingOperations--;
             if (success) {
@@ -544,13 +545,12 @@ void ScyllaManager::logCombatEvent(const CombatEvent& event, WriteCallback callb
                 cbData->manager->writesFailed_++;
             }
         }
-        
+
         if (cbData->callback) {
             cbData->callback(success);
         }
-        delete cbData;
-    }, cbData);
-    
+    }, cbData.release());
+
     cass_future_free(future);
     cass_statement_free(statement);
 }
@@ -597,12 +597,12 @@ void ScyllaManager::logCombatEventsBatch(const std::vector<CombatEvent>& events,
     // Execute batch
     CassFuture* future = cass_session_execute_batch(internal_->session, batch);
     
-    auto* cbData = new WriteCallbackData(callback, this);
+    auto cbData = std::make_unique<WriteCallbackData>(callback, this);
     cass_future_set_callback(future, [](CassFuture* f, void* data) {
-        auto* cbData = static_cast<WriteCallbackData*>(data);
+        std::unique_ptr<WriteCallbackData> cbData(static_cast<WriteCallbackData*>(data));
         CassError rc = cass_future_error_code(f);
         bool success = (rc == CASS_OK);
-        
+
         if (cbData->manager) {
             cbData->manager->internal_->pendingOperations--;
             if (success) {
@@ -611,13 +611,12 @@ void ScyllaManager::logCombatEventsBatch(const std::vector<CombatEvent>& events,
                 cbData->manager->writesFailed_++;
             }
         }
-        
+
         if (cbData->callback) {
             cbData->callback(success);
         }
-        delete cbData;
-    }, cbData);
-    
+    }, cbData.release());
+
     cass_future_free(future);
     cass_batch_free(batch);
 }
@@ -655,12 +654,12 @@ void ScyllaManager::updatePlayerStats(const PlayerCombatStats& stats, WriteCallb
     
     CassFuture* future = cass_session_execute(internal_->session, statement);
     
-    auto* cbData = new WriteCallbackData(callback, this);
+    auto cbData = std::make_unique<WriteCallbackData>(callback, this);
     cass_future_set_callback(future, [](CassFuture* f, void* data) {
-        auto* cbData = static_cast<WriteCallbackData*>(data);
+        std::unique_ptr<WriteCallbackData> cbData(static_cast<WriteCallbackData*>(data));
         CassError rc = cass_future_error_code(f);
         bool success = (rc == CASS_OK);
-        
+
         if (cbData->manager) {
             cbData->manager->internal_->pendingOperations--;
             if (success) {
@@ -669,13 +668,12 @@ void ScyllaManager::updatePlayerStats(const PlayerCombatStats& stats, WriteCallb
                 cbData->manager->writesFailed_++;
             }
         }
-        
+
         if (cbData->callback) {
             cbData->callback(success);
         }
-        delete cbData;
-    }, cbData);
-    
+    }, cbData.release());
+
     cass_future_free(future);
     cass_statement_free(statement);
 }
@@ -953,12 +951,12 @@ void ScyllaManager::executeQuery(const std::string& query, WriteCallback callbac
     CassStatement* statement = cass_statement_new(query.c_str(), 0);
     CassFuture* future = cass_session_execute(internal_->session, statement);
     
-    auto* cbData = new WriteCallbackData(callback, this);
+    auto cbData = std::make_unique<WriteCallbackData>(callback, this);
     cass_future_set_callback(future, [](CassFuture* f, void* data) {
-        auto* cbData = static_cast<WriteCallbackData*>(data);
+        std::unique_ptr<WriteCallbackData> cbData(static_cast<WriteCallbackData*>(data));
         CassError rc = cass_future_error_code(f);
         bool success = (rc == CASS_OK);
-        
+
         if (cbData->manager) {
             cbData->manager->internal_->pendingOperations--;
             if (success) {
@@ -967,13 +965,12 @@ void ScyllaManager::executeQuery(const std::string& query, WriteCallback callbac
                 cbData->manager->writesFailed_++;
             }
         }
-        
+
         if (cbData->callback) {
             cbData->callback(success);
         }
-        delete cbData;
-    }, cbData);
-    
+    }, cbData.release());
+
     cass_future_free(future);
     cass_statement_free(statement);
 }
