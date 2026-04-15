@@ -255,3 +255,30 @@ All autonomous improvements tracked here. Most recent first.
 - **Validation:** Build PASS, Tests PASS — **200 test cases, 190 passed, 10 skipped, 1475 assertions all passing**
 - **Cleanup:** Deleted stale branches (autonomous/ability-system-stub, autonomous/projectile-raycast) + all merged feature branches (local+remote)
 - **Test growth:** 131 cases / 859 assertions → 200 cases / 1475 assertions (+69 cases, +616 assertions)
+
+---
+
+### ✅ 2026-04-16 — ZoneServer Refactoring (CombatEventHandler + AuraZoneHandler)
+- **Task:** Extract cohesive handler classes from ZoneServer.cpp (1833 lines)
+- **Status:** SUCCESS (OpenCode agent)
+- **Branch:** `autonomous/zoneserver-refactor`
+- **Changes:** 6 files, +974/-56 lines. Extracted CombatEventHandler (~280 lines: combat, death, respawns) and AuraZoneHandler (~330 lines: aura sync, zone transitions, migration, handoffs)
+- **Validation:** Build PASS, Tests PASS (200 cases, 190 passed, 1475 assertions)
+
+---
+
+### ✅ 2026-04-16 — RedisManager Refactoring (PlayerSessionManager + PubSubManager)
+- **Task:** Extract cohesive manager classes from RedisManager.cpp (1455 lines)
+- **Status:** SUCCESS (OpenCode agent, manual fix for duplicate type definitions)
+- **Branch:** `autonomous/redismanager-refactor`
+- **Changes:** 7 files, +765/-53 lines. Extracted PlayerSessionManager (session CRUD), PubSubManager (pub/sub, zone messaging), RedisInternal (shared state header). Removed duplicate PlayerSession/AsyncResult/ZoneMessage definitions from RedisManager.hpp.
+- **Validation:** Build PASS, Tests PASS (200 cases, 190 passed, 1475 assertions)
+
+---
+
+### ✅ 2026-04-16 — ScyllaManager Refactoring (AntiCheatLogger + CombatEventLogger)
+- **Task:** Extract cohesive logging classes from ScyllaManager.cpp (1105 lines)
+- **Status:** SUCCESS (OpenCode agent)
+- **Branch:** `autonomous/scyllamanager-refactor`
+- **Changes:** 8 files, reduced ScyllaManager from 1105 → 791 lines (28% reduction). Extracted AntiCheatLogger (167 lines + stub), CombatEventLogger (654 lines + stub). All stub files created.
+- **Validation:** Build PASS, Tests PASS (200 cases, 190 passed, 1475 assertions)
