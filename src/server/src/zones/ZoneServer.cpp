@@ -555,12 +555,12 @@ void ZoneServer::onEntityDied(EntityID victim, EntityID killer) {
     
     // Send death event to clients
     if (network_) {
-        auto deathEvent = ProtobufProtocol::createPlayerDeathEvent(
+        auto deathEvent = Netcode::ProtobufProtocol::createPlayerDeathEvent(
             static_cast<uint32_t>(victim),
             static_cast<uint32_t>(killer)
         );
         deathEvent.set_timestamp(getCurrentTimeMs());
-        auto eventData = ProtobufProtocol::serializeEvent(deathEvent);
+        auto eventData = Netcode::ProtobufProtocol::serializeEvent(deathEvent);
         network_->broadcastEvent(eventData);
     }
     
