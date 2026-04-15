@@ -439,6 +439,8 @@ set(SERVER_SOURCES
     src/server/src/zones/PlayerManager.cpp
     src/server/src/zones/ZoneServer.cpp
     src/server/src/zones/CrossZoneMessenger.cpp
+    src/server/src/zones/CombatEventHandler.cpp
+    src/server/src/zones/AuraZoneHandler.cpp
     src/server/src/security/AntiCheat.cpp
     src/server/src/security/DDoSProtection.cpp
     src/server/src/security/PacketValidator.cpp

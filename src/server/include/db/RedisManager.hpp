@@ -1,6 +1,8 @@
 #pragma once
 
 #include "ecs/CoreTypes.hpp"
+#include "db/PlayerSessionManager.hpp"  // Provides PlayerSession, AsyncResult
+#include "db/PubSubManager.hpp"          // Provides ZoneMessageType, ZoneMessage
 #include <string>
 #include <string_view>
 #include <functional>
@@ -20,62 +22,12 @@ namespace DarkAges {
 // Forward declaration
 struct RedisInternal;
 
-// Player session data stored in Redis
-struct PlayerSession {
-    uint64_t playerId{0};
-    uint32_t zoneId{0};
-    uint32_t connectionId{0};
-    Position position;
-    int32_t health{0};
-    uint64_t lastActivity{0};
-    char username[32]{0};
-};
-
-// Async operation result
-template<typename T>
-struct AsyncResult {
-    bool success{false};
-    T value{};
-    std::string error;
-};
-
-// ============================================================================
-// Pub/Sub Message Types for Cross-Zone Communication
-// ============================================================================
-
-// Message types for cross-zone communication
-enum class ZoneMessageType : uint8_t {
-    ENTITY_SYNC = 1,        // Entity state update for aura
-    MIGRATION_REQUEST = 2,  // Initiate entity migration
-    MIGRATION_STATE = 3,    // Migration state update
-    MIGRATION_COMPLETE = 4, // Migration finished
-    BROADCAST = 5,          // Zone-wide broadcast
-    CHAT = 6,               // Cross-zone chat
-    ZONE_STATUS = 7         // Zone status update
-};
-
-// Cross-zone message header
-struct ZoneMessage {
-    ZoneMessageType type;
-    uint32_t sourceZoneId;
-    uint32_t targetZoneId;  // 0 = broadcast to all
-    uint32_t timestamp;
-    uint32_t sequence;
-    std::vector<uint8_t> payload;
-    
-    std::vector<uint8_t> serialize() const;
-    static std::optional<ZoneMessage> deserialize(const std::vector<uint8_t>& data);
-};
-
-// [DATABASE_AGENT] Redis connection manager
 class RedisManager {
 public:
-    using ConnectCallback = std::function<void(bool success, const std::string& error)>;
     using GetCallback = std::function<void(const AsyncResult<std::string>& result)>;
     using SetCallback = std::function<void(bool success)>;
     using SessionCallback = std::function<void(const AsyncResult<PlayerSession>& result)>;
 
-public:
     RedisManager();
     ~RedisManager();
     
@@ -165,14 +117,12 @@ public:
     using StreamReadCallback = std::function<void(const AsyncResult<std::vector<StreamEntry>>& result)>;
     
     // Add entry to stream (XADD)
-    // Use id="*" for auto-generated ID
     void xadd(std::string_view streamKey, 
               std::string_view id,
               const std::unordered_map<std::string, std::string>& fields,
               StreamAddCallback callback = nullptr);
     
     // Read entries from stream (XREAD)
-    // Use lastId="0" to read from beginning, or specific ID to read newer entries
     void xread(std::string_view streamKey,
                std::string_view lastId,
                StreamReadCallback callback,
@@ -181,7 +131,6 @@ public:
     
     // === Pipeline Batching ===
     
-    // Batch SET operations for high throughput (10k+ ops/sec)
     void pipelineSet(const std::vector<std::pair<std::string, std::string>>& kvs,
                      uint32_t ttlSeconds = Constants::REDIS_KEY_TTL_SECONDS,
                      SetCallback callback = nullptr);
