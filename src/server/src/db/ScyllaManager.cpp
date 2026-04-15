@@ -1030,4 +1030,76 @@ void ScyllaManager::executeQuery(const std::string& query, WriteCallback callbac
     cass_statement_free(statement);
 }
 
+// ============================================================================
+// Anti-Cheat Event Logging
+// ============================================================================
+
+void ScyllaManager::logAntiCheatEvent(const AntiCheatEvent& event, WriteCallback callback) {
+    if (!isConnected()) {
+        writesFailed_++;
+        if (callback) {
+            callback(false);
+        }
+        return;
+    }
+
+    writesQueued_++;
+
+    std::string dayBucket = getDayBucket(event.timestamp);
+
+    std::string query =
+        "INSERT INTO darkages.anticheat_events "
+        "(day_bucket, timestamp, event_id, player_id, zone_id, cheat_type, "
+        " severity, description, confidence, position_x, position_y, position_z, server_tick) "
+        "VALUES ('" + dayBucket + "', " +
+        std::to_string(static_cast<cass_int64_t>(event.timestamp) * 1000) + ", uuid(), " +
+        std::to_string(event.playerId) + ", " +
+        std::to_string(event.zoneId) + ", '" +
+        event.cheatType + "', '" +
+        event.severity + "', '" +
+        event.description + "', " +
+        std::to_string(event.confidence) + ", " +
+        std::to_string(event.position.x * Constants::FIXED_TO_FLOAT) + ", " +
+        std::to_string(event.position.y * Constants::FIXED_TO_FLOAT) + ", " +
+        std::to_string(event.position.z * Constants::FIXED_TO_FLOAT) + ", " +
+        std::to_string(event.serverTick) + ")";
+
+    executeQuery(query, callback);
+}
+
+void ScyllaManager::logAntiCheatEventsBatch(const std::vector<AntiCheatEvent>& events, WriteCallback callback) {
+    if (!isConnected() || events.empty()) {
+        if (callback) {
+            callback(false);
+        }
+        return;
+    }
+
+    writesQueued_ += events.size();
+
+    std::string query = "BEGIN BATCH ";
+    for (const auto& event : events) {
+        std::string dayBucket = getDayBucket(event.timestamp);
+        query +=
+            "INSERT INTO darkages.anticheat_events "
+            "(day_bucket, timestamp, event_id, player_id, zone_id, cheat_type, "
+            " severity, description, confidence, position_x, position_y, position_z, server_tick) "
+            "VALUES ('" + dayBucket + "', " +
+            std::to_string(static_cast<cass_int64_t>(event.timestamp) * 1000) + ", uuid(), " +
+            std::to_string(event.playerId) + ", " +
+            std::to_string(event.zoneId) + ", '" +
+            event.cheatType + "', '" +
+            event.severity + "', '" +
+            event.description + "', " +
+            std::to_string(event.confidence) + ", " +
+            std::to_string(event.position.x * Constants::FIXED_TO_FLOAT) + ", " +
+            std::to_string(event.position.y * Constants::FIXED_TO_FLOAT) + ", " +
+            std::to_string(event.position.z * Constants::FIXED_TO_FLOAT) + ", " +
+            std::to_string(event.serverTick) + ") ";
+    }
+    query += "APPLY BATCH";
+
+    executeQuery(query, callback);
+}
+
 } // namespace DarkAges

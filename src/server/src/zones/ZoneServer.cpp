@@ -1135,8 +1135,32 @@ void ZoneServer::onCheatDetected(uint64_t playerId, const Security::CheatDetecti
     
     // Log to ScyllaDB for analytics and review
     if (scylla_ && scylla_->isConnected()) {
-        // TODO: Implement anti-cheat event logging to database
-        // This would log: timestamp, playerId, cheatType, confidence, description
+        AntiCheatEvent event;
+        event.eventId = static_cast<uint64_t>(playerId) * 100000 + currentTick_;
+        event.timestamp = currentTick_ * 16 / 1000;  // Convert ticks to seconds
+        event.zoneId = config_.zoneId;
+        event.playerId = playerId;
+        event.cheatType = cheatTypeStr;
+        event.severity = severityStr;
+        event.description = result.description;
+        event.confidence = result.confidence;
+        event.serverTick = currentTick_;
+        event.position = {0, 0, 0};
+
+        for (const auto& [connId, entityId] : connectionToEntity_) {
+            if (const PlayerInfo* info = registry_.try_get<PlayerInfo>(entityId)) {
+                if (info->playerId == playerId) {
+                    if (const Position* pos = registry_.try_get<Position>(entityId)) {
+                        event.position = *pos;
+                    }
+                    break;
+                }
+            }
+        }
+
+        scylla_->logAntiCheatEvent(event, nullptr);
+    } else if (scylla_) {
+        std::cerr << "[ANTICHEAT] ScyllaDB not connected, cannot log violation for player " << playerId << std::endl;
     }
     
     // Could also notify monitoring systems, Discord webhooks, etc.
@@ -1149,10 +1173,11 @@ void ZoneServer::onCheatDetected(uint64_t playerId, const Security::CheatDetecti
 
 // [SECURITY_AGENT] Handle player ban event
 void ZoneServer::onPlayerBanned(uint64_t playerId, const char* reason, uint32_t durationMinutes) {
-    // Persist ban to database
-    if (redis_->isConnected()) {
-        // TODO: Implement ban persistence in Redis
-        // key: ban:{playerId}, value: {reason, expiry, timestamp}
+    // Persist ban to Redis if connected
+    if (redis_ && redis_->isConnected()) {
+        std::string key = "ban:" + std::to_string(playerId);
+        std::string value = std::string(reason) + "|" + std::to_string(durationMinutes);
+        redis_->set(key, value, durationMinutes * 60, nullptr);
     }
     
     // Kick any connected sessions for this player

@@ -12,6 +12,20 @@
 
 namespace DarkAges {
 
+// [DATABASE_AGENT] Anti-cheat violation event for logging
+struct AntiCheatEvent {
+    uint64_t eventId;           // Unique event ID
+    uint32_t timestamp;         // Server timestamp
+    uint32_t zoneId;            // Zone where violation occurred
+    uint64_t playerId;          // Persistent player ID
+    std::string cheatType;       // "speed_hack", "teleport", "hitbox", etc.
+    std::string severity;        // "critical", "suspicious", "minor"
+    std::string description;    // Human-readable description
+    float confidence;           // Detection confidence (0.0-1.0)
+    Position position;         // Where the violation occurred
+    uint32_t serverTick;        // Server tick number
+};
+
 // [DATABASE_AGENT] Combat event data for logging
 struct CombatEvent {
     uint64_t eventId;           // Unique event ID
@@ -81,8 +95,17 @@ public:
     // Save player session state to ScyllaDB (async, fire-and-forget)
     void savePlayerState(uint64_t playerId, uint32_t zoneId, uint64_t timestamp, WriteCallback callback = nullptr);
 
+    // === Anti-Cheat Logging ===
+
+    // Log an anti-cheat violation event (async)
+    void logAntiCheatEvent(const AntiCheatEvent& event, WriteCallback callback = nullptr);
+
+    // Batch log multiple anti-cheat events (more efficient)
+    void logAntiCheatEventsBatch(const std::vector<AntiCheatEvent>& events,
+                               WriteCallback callback = nullptr);
+
     // === Analytics Queries ===
-    
+
     // Get top killers for a zone/time period
     void getTopKillers(uint32_t zoneId, uint32_t startTime, uint32_t endTime, int limit,
                       std::function<void(bool success, const std::vector<std::pair<uint64_t, uint32_t>>&)> callback);
