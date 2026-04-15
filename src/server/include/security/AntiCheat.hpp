@@ -2,6 +2,7 @@
 
 #include "ecs/CoreTypes.hpp"
 #include "security/AntiCheatConfig.hpp"
+#include "physics/SpatialHash.hpp"
 #include <vector>
 #include <unordered_map>
 #include <functional>
@@ -229,6 +230,9 @@ public:
     void setOnPlayerBanned(BanCallback cb) { onPlayerBanned_ = std::move(cb); }
     void setOnPlayerKicked(KickCallback cb) { onPlayerKicked_ = std::move(cb); }
     
+    // Set spatial hash for collision detection
+    void setSpatialHash(const SpatialHash* hash) { spatialHash_ = hash; }
+    
     // Manual enforcement
     void banPlayer(uint64_t playerId, const char* reason, 
         uint32_t durationMinutes);
@@ -279,6 +283,9 @@ private:
         const Position& oldPos, const Position& newPos,
         Registry& registry);
     
+    // Friend class for unit tests
+
+    
     [[nodiscard]] CheatDetectionResult detectInputManipulation(EntityID entity,
         const InputState& input, Registry& registry);
     
@@ -315,6 +322,9 @@ private:
 private:
     // Configuration
     AntiCheatConfig config_;
+    
+    // Spatial hash for collision detection
+    const SpatialHash* spatialHash_{nullptr};
     
     // Behavior profiles
     mutable std::mutex profileMutex_;

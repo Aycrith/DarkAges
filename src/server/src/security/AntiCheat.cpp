@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <mutex>
 #include <vector>
+#include <unordered_set>
 
 namespace DarkAges {
 namespace Security {
@@ -349,12 +350,94 @@ CheatDetectionResult AntiCheatSystem::detectNoClip(EntityID entity,
     
     CheatDetectionResult result;
     
-    // Simplified no-clip detection: check if path intersects with world geometry
-    // In a full implementation, this would use the spatial hash to check
-    // for collision with static world geometry along the movement path
+    // Graceful degradation: if spatial hash not available, skip detection
+    if (!spatialHash_) {
+        return result;
+    }
     
-    // For now, placeholder implementation
-    // TODO: Implement proper collision detection with world geometry
+    // Get moving entity's bounding volume
+    const BoundingVolume* movingVolume = registry.try_get<BoundingVolume>(entity);
+    float entityRadius = movingVolume ? movingVolume->radius : 0.5f;
+    float entityHeight = movingVolume ? movingVolume->height : 1.8f;
+    
+    // Convert Fixed to float for spatial hash query
+    float newX = newPos.x * Constants::FIXED_TO_FLOAT;
+    float newZ = newPos.z * Constants::FIXED_TO_FLOAT;
+    float newY = newPos.y * Constants::FIXED_TO_FLOAT;
+    
+    // Query nearby entities from spatial hash
+    // Use entity radius + max world geometry size as query radius
+    float queryRadius = entityRadius + 2.0f;
+    auto nearby = spatialHash_->query(newX, newZ, queryRadius);
+    
+    // Build set of static entity IDs for quick lookup
+    auto staticView = registry.view<StaticTag>();
+    std::unordered_set<EntityID> staticEntities(staticView.begin(), staticView.end());
+    
+    // Check each nearby entity for collision
+    for (EntityID other : nearby) {
+        // Skip self
+        if (other == entity) continue;
+        
+        // Check if entity is static world geometry
+        if (staticEntities.find(other) == staticEntities.end()) continue;
+        
+        // Check bounding volume
+        const BoundingVolume* staticVolume = registry.try_get<BoundingVolume>(other);
+        if (!staticVolume) continue;
+        
+        // Get static entity position
+        const Position* staticPos = registry.try_get<Position>(other);
+        if (!staticPos) continue;
+        
+        // Check Y overlap (vertical intersection)
+        float staticY = staticPos->y * Constants::FIXED_TO_FLOAT;
+        float staticHeight = staticVolume->height;
+        
+        // Check if vertical ranges overlap
+        float newBottom = newY;
+        float newTop = newY + entityHeight;
+        float staticBottom = staticY;
+        float staticTop = staticY + staticHeight;
+        
+        bool verticalOverlap = (newBottom < staticTop) && (newTop > staticBottom);
+        if (!verticalOverlap) continue;
+        
+        // Check XZ plane intersection
+        float dx = newX - (staticPos->x * Constants::FIXED_TO_FLOAT);
+        float dz = newZ - (staticPos->z * Constants::FIXED_TO_FLOAT);
+        float distSq = dx * dx + dz * dz;
+        float combinedRadius = entityRadius + staticVolume->radius;
+        
+        if (distSq < (combinedRadius * combinedRadius)) {
+            // No-clip detected: entity inside static geometry
+            result.detected = true;
+            result.type = CheatType::NO_CLIP;
+            result.severity = ViolationSeverity::CRITICAL;
+            result.description = "No-clip detected: walking through world geometry";
+            result.correctedPosition = oldPos;
+            result.confidence = 1.0f;
+            result.actualValue = std::sqrt(distSq);
+            result.expectedValue = combinedRadius;
+            result.timestamp = static_cast<uint32_t>(
+                std::chrono::steady_clock::now().time_since_epoch().count() / 1000000);
+            
+            // Update profile
+            if (PlayerInfo* info = registry.try_get<PlayerInfo>(entity)) {
+                updateBehaviorProfile(info->playerId, result);
+            }
+            
+            ++totalDetections_;
+            
+            {
+                std::lock_guard<std::mutex> lock(statsMutex_);
+                detectionCounts_[CheatType::NO_CLIP]++;
+            }
+            
+            reportViolation(registry.get<PlayerInfo>(entity).playerId, result);
+            return result;
+        }
+    }
     
     return result;
 }

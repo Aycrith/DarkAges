@@ -1110,6 +1110,9 @@ void ZoneServer::initializeAntiCheat() {
         return;
     }
     
+    // Set spatial hash for no-clip collision detection
+    antiCheat_.setSpatialHash(&spatialHash_);
+    
     // Set up cheat detection callback
     antiCheat_.setOnCheatDetected([this](uint64_t playerId, 
                                           const Security::CheatDetectionResult& result) {
