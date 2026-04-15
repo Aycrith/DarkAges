@@ -150,10 +150,26 @@ float SpatialHash::getAverageEntitiesPerCell() const {
 
 void BroadPhaseSystem::update(Registry& registry, SpatialHash& spatialHash) {
     spatialHash.clear();
-    
+
     auto view = registry.view<Position>();
     view.each([&](EntityID entity, const Position& pos) {
         spatialHash.insert(entity, pos);
+    });
+
+    auto tagView = registry.view<Position>();
+    tagView.each([&](EntityID entity, const Position& pos) {
+        (void)pos;
+        if (!registry.all_of<CollisionLayer>(entity)) {
+            if (registry.all_of<PlayerTag>(entity)) {
+                registry.emplace<CollisionLayer>(entity, CollisionLayer::makePlayer());
+            } else if (registry.all_of<NPCTag>(entity)) {
+                registry.emplace<CollisionLayer>(entity, CollisionLayer::makeNPC());
+            } else if (registry.all_of<ProjectileTag>(entity)) {
+                registry.emplace<CollisionLayer>(entity, CollisionLayer::makeProjectile());
+            } else if (registry.all_of<StaticTag>(entity)) {
+                registry.emplace<CollisionLayer>(entity, CollisionLayer::makeStatic());
+            }
+        }
     });
 }
 
@@ -192,11 +208,36 @@ void BroadPhaseSystem::findPotentialPairs(Registry& registry,
 }
 
 bool BroadPhaseSystem::canCollide(Registry& registry, EntityID a, EntityID b) const {
-    // TODO: Implement layer masks, team checks, etc.
-    // For now, all entities can collide
-    (void)registry;
-    (void)a;
-    (void)b;
+    const CollisionLayer* layerA = registry.try_get<CollisionLayer>(a);
+    const CollisionLayer* layerB = registry.try_get<CollisionLayer>(b);
+
+    if (!layerA || !layerB) {
+        return true;
+    }
+
+    if ((layerA->layer & layerB->collidesWith) == 0) {
+        return false;
+    }
+    if ((layerB->layer & layerA->collidesWith) == 0) {
+        return false;
+    }
+
+    if (layerA->ownerEntity != entt::null && layerA->ownerEntity == b) {
+        return false;
+    }
+    if (layerB->ownerEntity != entt::null && layerB->ownerEntity == a) {
+        return false;
+    }
+
+    const CombatState* combatA = registry.try_get<CombatState>(a);
+    const CombatState* combatB = registry.try_get<CombatState>(b);
+
+    if (combatA && combatB && combatA->teamId != 0 && combatB->teamId != 0) {
+        if (combatA->teamId == combatB->teamId) {
+            return false;
+        }
+    }
+
     return true;
 }
 

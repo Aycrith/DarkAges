@@ -184,3 +184,187 @@ TEST_CASE("Spatial Hash cell calculations", "[spatial]") {
         REQUIRE_FALSE(foundFar);
     }
 }
+
+TEST_CASE("BroadPhaseSystem canCollide", "[broadphase]") {
+    Registry registry;
+    SpatialHash hash;
+    BroadPhaseSystem broadPhase;
+
+    SECTION("Layer mask filtering - same type blocked") {
+        EntityID player = registry.create();
+        registry.emplace<Position>(player, Position::fromVec3(glm::vec3(0, 0, 0)));
+        registry.emplace<BoundingVolume>(player);
+        registry.emplace<CollisionLayer>(player, CollisionLayer::makePlayer());
+
+        EntityID player2 = registry.create();
+        registry.emplace<Position>(player2, Position::fromVec3(glm::vec3(1, 0, 0)));
+        registry.emplace<BoundingVolume>(player2);
+        registry.emplace<CollisionLayer>(player2, CollisionLayer::makePlayer());
+
+        // Projectiles shouldn't collide with each other (default projectile collidesWith excludes projectile)
+        EntityID proj = registry.create();
+        registry.emplace<Position>(proj, Position::fromVec3(glm::vec3(0, 0, 0)));
+        registry.emplace<BoundingVolume>(proj);
+        registry.emplace<CollisionLayer>(proj, CollisionLayer::makeProjectile());
+
+        EntityID proj2 = registry.create();
+        registry.emplace<Position>(proj2, Position::fromVec3(glm::vec3(0.5, 0, 0)));
+        registry.emplace<BoundingVolume>(proj2);
+        registry.emplace<CollisionLayer>(proj2, CollisionLayer::makeProjectile());
+
+        // Player vs Player - allowed (Player collidesWith includes Player)
+        REQUIRE(broadPhase.canCollide(registry, player, player2) == true);
+
+        // Projectile vs Projectile - NOT allowed (Projectile collidesWith excludes Projectile)
+        REQUIRE(broadPhase.canCollide(registry, proj, proj2) == false);
+    }
+
+    SECTION("Team check - same team blocked") {
+        EntityID player1 = registry.create();
+        registry.emplace<Position>(player1, Position::fromVec3(glm::vec3(0, 0, 0)));
+        registry.emplace<BoundingVolume>(player1);
+        auto cl1 = CollisionLayer::makePlayer();
+        registry.emplace<CollisionLayer>(player1, cl1);
+        registry.emplace<CombatState>(player1).teamId = 1;
+
+        EntityID player2 = registry.create();
+        registry.emplace<Position>(player2, Position::fromVec3(glm::vec3(1, 0, 0)));
+        registry.emplace<BoundingVolume>(player2);
+        auto cl2 = CollisionLayer::makePlayer();
+        registry.emplace<CollisionLayer>(player2, cl2);
+        registry.emplace<CombatState>(player2).teamId = 1;
+
+        EntityID player3 = registry.create();
+        registry.emplace<Position>(player3, Position::fromVec3(glm::vec3(2, 0, 0)));
+        registry.emplace<BoundingVolume>(player3);
+        auto cl3 = CollisionLayer::makePlayer();
+        registry.emplace<CollisionLayer>(player3, cl3);
+        registry.emplace<CombatState>(player3).teamId = 2;
+
+        // Same team - blocked
+        REQUIRE(broadPhase.canCollide(registry, player1, player2) == false);
+
+        // Different team - allowed
+        REQUIRE(broadPhase.canCollide(registry, player1, player3) == true);
+    }
+
+    SECTION("Team check - teamId 0 means no team restriction") {
+        EntityID player1 = registry.create();
+        registry.emplace<Position>(player1, Position::fromVec3(glm::vec3(0, 0, 0)));
+        registry.emplace<BoundingVolume>(player1);
+        auto cl1 = CollisionLayer::makePlayer();
+        registry.emplace<CollisionLayer>(player1, cl1);
+        registry.emplace<CombatState>(player1).teamId = 0;
+
+        EntityID player2 = registry.create();
+        registry.emplace<Position>(player2, Position::fromVec3(glm::vec3(1, 0, 0)));
+        registry.emplace<BoundingVolume>(player2);
+        auto cl2 = CollisionLayer::makePlayer();
+        registry.emplace<CollisionLayer>(player2, cl2);
+        registry.emplace<CombatState>(player2).teamId = 0;
+
+        // Both teamId 0 - should collide (no team restriction)
+        REQUIRE(broadPhase.canCollide(registry, player1, player2) == true);
+
+        // One with team, one without - should collide
+        registry.get<CombatState>(player2).teamId = 1;
+        REQUIRE(broadPhase.canCollide(registry, player1, player2) == true);
+    }
+
+    SECTION("Backwards compat - no CollisionLayer allows collision") {
+        EntityID entityA = registry.create();
+        registry.emplace<Position>(entityA, Position::fromVec3(glm::vec3(0, 0, 0)));
+        registry.emplace<BoundingVolume>(entityA);
+        // No CollisionLayer added
+
+        EntityID entityB = registry.create();
+        registry.emplace<Position>(entityB, Position::fromVec3(glm::vec3(1, 0, 0)));
+        registry.emplace<BoundingVolume>(entityB);
+        // No CollisionLayer added
+
+        REQUIRE(broadPhase.canCollide(registry, entityA, entityB) == true);
+    }
+
+    SECTION("Backwards compat - partial CollisionLayer allows collision") {
+        EntityID entityA = registry.create();
+        registry.emplace<Position>(entityA, Position::fromVec3(glm::vec3(0, 0, 0)));
+        registry.emplace<BoundingVolume>(entityA);
+        registry.emplace<CollisionLayer>(entityA, CollisionLayer::makePlayer());
+
+        EntityID entityB = registry.create();
+        registry.emplace<Position>(entityB, Position::fromVec3(glm::vec3(1, 0, 0)));
+        registry.emplace<BoundingVolume>(entityB);
+        // No CollisionLayer - should allow
+
+        REQUIRE(broadPhase.canCollide(registry, entityA, entityB) == true);
+    }
+
+    SECTION("Projectile owner exclusion") {
+        EntityID owner = registry.create();
+        registry.emplace<Position>(owner, Position::fromVec3(glm::vec3(0, 0, 0)));
+        registry.emplace<BoundingVolume>(owner);
+        auto cl = CollisionLayer::makePlayer();
+        registry.emplace<CollisionLayer>(owner, cl);
+
+        EntityID projectile = registry.create();
+        registry.emplace<Position>(projectile, Position::fromVec3(glm::vec3(0.5, 0, 0)));
+        registry.emplace<BoundingVolume>(projectile);
+        registry.emplace<CollisionLayer>(projectile, CollisionLayer::makeProjectile(owner));
+
+        // Projectile should NOT collide with its owner
+        REQUIRE(broadPhase.canCollide(registry, owner, projectile) == false);
+
+        // But projectile should collide with different entity
+        EntityID victim = registry.create();
+        registry.emplace<Position>(victim, Position::fromVec3(glm::vec3(1, 0, 0)));
+        registry.emplace<BoundingVolume>(victim);
+        registry.emplace<CollisionLayer>(victim, CollisionLayer::makeNPC());
+
+        REQUIRE(broadPhase.canCollide(registry, projectile, victim) == true);
+    }
+
+    SECTION("Auto-assign CollisionLayer from tags") {
+        broadPhase.update(registry, hash);
+
+        EntityID player = registry.create();
+        registry.emplace<Position>(player, Position::fromVec3(glm::vec3(0, 0, 0)));
+        registry.emplace<PlayerTag>(player);
+        registry.emplace<BoundingVolume>(player);
+
+        EntityID npc = registry.create();
+        registry.emplace<Position>(npc, Position::fromVec3(glm::vec3(10, 0, 0)));
+        registry.emplace<NPCTag>(npc);
+        registry.emplace<BoundingVolume>(npc);
+
+        EntityID proj = registry.create();
+        registry.emplace<Position>(proj, Position::fromVec3(glm::vec3(20, 0, 0)));
+        registry.emplace<ProjectileTag>(proj);
+        registry.emplace<BoundingVolume>(proj);
+
+        EntityID stat = registry.create();
+        registry.emplace<Position>(stat, Position::fromVec3(glm::vec3(30, 0, 0)));
+        registry.emplace<StaticTag>(stat);
+        registry.emplace<BoundingVolume>(stat);
+
+        // Run update to auto-assign layers
+        broadPhase.update(registry, hash);
+
+        // Check layers were assigned
+        REQUIRE(registry.all_of<CollisionLayer>(player));
+        REQUIRE(registry.all_of<CollisionLayer>(npc));
+        REQUIRE(registry.all_of<CollisionLayer>(proj));
+        REQUIRE(registry.all_of<CollisionLayer>(stat));
+
+        const auto& playerLayer = registry.get<CollisionLayer>(player);
+        REQUIRE((playerLayer.layer & CollisionLayerMask::PLAYER) != 0);
+
+        const auto& npcLayer = registry.get<CollisionLayer>(npc);
+        REQUIRE((npcLayer.layer & CollisionLayerMask::NPC) != 0);
+
+        const auto& projLayer = registry.get<CollisionLayer>(proj);
+        REQUIRE((projLayer.layer & CollisionLayerMask::PROJECTILE) != 0);
+
+        const auto& statLayer = registry.get<CollisionLayer>(stat);
+        REQUIRE((statLayer.layer & CollisionLayerMask::STATIC) != 0);
+    }
+}

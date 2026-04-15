@@ -264,12 +264,52 @@ struct Mana {
 };
 
 // ============================================================================
-// ENTITY TAGS (empty types for tagging)
-// ============================================================================
+ // ENTITY TAGS (empty types for tagging)
+ // ============================================================================
 
-struct PlayerTag {};      // Entity is a player
-struct NPCTag {};         // Entity is an NPC
-struct ProjectileTag {};  // Entity is a projectile
-struct StaticTag {};      // Entity is static world geometry
+ struct PlayerTag {};      // Entity is a player
+ struct NPCTag {};         // Entity is an NPC
+ struct ProjectileTag {};  // Entity is a projectile
+ struct StaticTag {};      // Entity is static world geometry
 
-} // namespace DarkAges
+ // ============================================================================
+ // COLLISION LAYERS
+ // ============================================================================
+
+ // [PHYSICS_AGENT] Collision layer bitmasks
+ namespace CollisionLayerMask {
+     constexpr uint32_t NONE     = 0;
+     constexpr uint32_t PLAYER   = 1 << 0;   // 1
+     constexpr uint32_t NPC      = 1 << 1;   // 2
+     constexpr uint32_t PROJECTILE = 1 << 2; // 4
+     constexpr uint32_t STATIC   = 1 << 3;   // 8
+     constexpr uint32_t TRIGGER  = 1 << 4;   // 16
+
+     // Default collidesWith masks
+     constexpr uint32_t PLAYER_DEFAULT   = PLAYER | NPC | STATIC;
+     constexpr uint32_t NPC_DEFAULT      = PLAYER | NPC | PROJECTILE | STATIC;
+     constexpr uint32_t PROJECTILE_DEFAULT = PLAYER | NPC | STATIC;
+     constexpr uint32_t STATIC_DEFAULT   = PLAYER | NPC;
+ }
+
+ // [PHYSICS_AGENT] Collision layer for entities
+ struct CollisionLayer {
+     uint32_t layer{0};         // Which layer this entity is on
+     uint32_t collidesWith{0}; // Which layers this entity can collide with
+     EntityID ownerEntity{entt::null}; // For projectiles: the entity that fired them
+
+     static CollisionLayer makePlayer() {
+         return CollisionLayer{CollisionLayerMask::PLAYER, CollisionLayerMask::PLAYER_DEFAULT, entt::null};
+     }
+     static CollisionLayer makeNPC() {
+         return CollisionLayer{CollisionLayerMask::NPC, CollisionLayerMask::NPC_DEFAULT, entt::null};
+     }
+     static CollisionLayer makeProjectile(EntityID owner = entt::null) {
+         return CollisionLayer{CollisionLayerMask::PROJECTILE, CollisionLayerMask::PROJECTILE_DEFAULT, owner};
+     }
+     static CollisionLayer makeStatic() {
+         return CollisionLayer{CollisionLayerMask::STATIC, CollisionLayerMask::STATIC_DEFAULT, entt::null};
+     }
+ };
+
+ } // namespace DarkAges
