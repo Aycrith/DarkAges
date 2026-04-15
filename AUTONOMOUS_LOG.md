@@ -244,3 +244,14 @@ All autonomous improvements tracked here. Most recent first.
 - **Branch:** `feature/gns-network-manager-tests`
 - **Changes:** 1 file, +410 lines. 31 test cases — type tests always available, implementation tests behind ENABLE_GNS
 - **Validation:** Build PASS, Tests PASS (9 suites)
+
+---
+
+### ✅ 2026-04-16 — Batch Merge: 8 Feature Branches
+- **Task:** Merge all 8 pending feature branches into main, resolve conflicts, verify build+tests
+- **Status:** SUCCESS
+- **Branches merged:** feature/network-manager-unique-ptr, feature/adjacent-zone-loading, feature/metrics-exporter-tests, feature/player-manager-tests, feature/zone-handoff-tests, feature/crosszone-messenger-tests, feature/protobuf-protocol-tests, feature/gns-network-manager-tests
+- **Conflicts resolved:** AUTONOMOUS_LOG.md (metrics-exporter), CMakeLists.txt (metrics-exporter, protobuf-protocol)
+- **Validation:** Build PASS, Tests PASS — **200 test cases, 190 passed, 10 skipped, 1475 assertions all passing**
+- **Cleanup:** Deleted stale branches (autonomous/ability-system-stub, autonomous/projectile-raycast) + all merged feature branches (local+remote)
+- **Test growth:** 131 cases / 859 assertions → 200 cases / 1475 assertions (+69 cases, +616 assertions)
