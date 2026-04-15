@@ -736,7 +736,7 @@ void ZoneServer::logCombatEvent(const HitResult& hit, EntityID attacker, EntityI
     event.eventType = hit.hitType ? hit.hitType : "damage";
     event.damageAmount = hit.damageDealt;
     event.isCritical = hit.isCritical;
-    event.weaponType = "melee";  // TODO: Track actual weapon from attacker equipment
+    event.weaponType = "melee";  // NOTE: CombatState has no weapon field - need to add Equipment component to track attacker weapon
     event.position = hit.hitLocation;
     event.serverTick = currentTick_;
     
@@ -1284,15 +1284,31 @@ void ZoneServer::processAttackInput(EntityID entity, const ClientInputPacket& in
             // [NETWORK_AGENT] Send damage event to target
             auto targetConnIt = entityToConnection_.find(hit.target);
             if (targetConnIt != entityToConnection_.end()) {
-                // TODO: Send damage packet to target
-                // network_->sendDamageEvent(targetConnIt->second, hit);
+                auto damageEvent = Netcode::ProtobufProtocol::createDamageEvent(
+                    static_cast<uint32_t>(entity),
+                    static_cast<uint32_t>(hit.target),
+                    static_cast<int32_t>(hit.damageDealt)
+                );
+                damageEvent.set_timestamp(getCurrentTimeMs());
+                auto eventData = Netcode::ProtobufProtocol::serializeEvent(damageEvent);
+                network_->sendEvent(targetConnIt->second, eventData);
+                std::cerr << "[NETWORK] Sent damage event: " << hit.damageDealt 
+                          << " to entity " << static_cast<uint32_t>(hit.target) << std::endl;
             }
             
             // [NETWORK_AGENT] Send hit confirmation to attacker
             auto attackerConnIt = entityToConnection_.find(entity);
             if (attackerConnIt != entityToConnection_.end()) {
-                // TODO: Send hit confirmation packet
-                // network_->sendHitConfirmation(attackerConnIt->second, hit);
+                auto hitConfirm = Netcode::ProtobufProtocol::createDamageEvent(
+                    static_cast<uint32_t>(entity),
+                    static_cast<uint32_t>(hit.target),
+                    static_cast<int32_t>(hit.damageDealt)
+                );
+                hitConfirm.set_timestamp(getCurrentTimeMs());
+                auto eventData = Netcode::ProtobufProtocol::serializeEvent(hitConfirm);
+                network_->sendEvent(attackerConnIt->second, eventData);
+                std::cerr << "[NETWORK] Sent hit confirmation: " << hit.damageDealt 
+                          << " to attacker entity " << static_cast<uint32_t>(entity) << std::endl;
             }
             
             // [DATABASE_AGENT] Log combat event for analytics
