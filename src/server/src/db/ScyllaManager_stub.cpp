@@ -13,6 +13,9 @@ bool ScyllaManager::initialize(const std::string&, uint16_t) { return true; }
 void ScyllaManager::update() {}
 bool ScyllaManager::isConnected() const { return true; }
 void ScyllaManager::logCombatEvent(const CombatEvent&, WriteCallback) {}
+void ScyllaManager::logCombatEventsBatch(const std::vector<CombatEvent>&, WriteCallback) {}
+void ScyllaManager::logAntiCheatEvent(const AntiCheatEvent&, WriteCallback) {}
+void ScyllaManager::logAntiCheatEventsBatch(const std::vector<AntiCheatEvent>&, WriteCallback) {}
 void ScyllaManager::updatePlayerStats(const PlayerCombatStats&, WriteCallback) {}
 void ScyllaManager::savePlayerState(uint64_t, uint32_t, uint64_t, WriteCallback callback) {
     if (callback) callback(false);
