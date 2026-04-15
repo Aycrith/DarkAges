@@ -14,5 +14,8 @@ void ScyllaManager::update() {}
 bool ScyllaManager::isConnected() const { return true; }
 void ScyllaManager::logCombatEvent(const CombatEvent&, WriteCallback) {}
 void ScyllaManager::updatePlayerStats(const PlayerCombatStats&, WriteCallback) {}
+void ScyllaManager::savePlayerState(uint64_t, uint32_t, uint64_t, WriteCallback callback) {
+    if (callback) callback(false);
+}
 
 } // namespace DarkAges

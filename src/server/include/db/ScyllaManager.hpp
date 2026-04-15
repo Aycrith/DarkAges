@@ -77,7 +77,10 @@ public:
     // Get player stats (async)
     void getPlayerStats(uint64_t playerId, uint32_t sessionDate,
                        std::function<void(bool success, const PlayerCombatStats& stats)> callback);
-    
+
+    // Save player session state to ScyllaDB (async, fire-and-forget)
+    void savePlayerState(uint64_t playerId, uint32_t zoneId, uint64_t timestamp, WriteCallback callback = nullptr);
+
     // === Analytics Queries ===
     
     // Get top killers for a zone/time period

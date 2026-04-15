@@ -326,9 +326,12 @@ void ZoneServer::savePlayerState(EntityID entity) {
     
     // [DATABASE_AGENT] Save to ScyllaDB for persistence (async, fire-and-forget)
     if (scylla_ && scylla_->isConnected()) {
-        // TODO: Implement player state persistence
-        // This would save: position, inventory, stats, etc. to player_sessions table
-        // For now, we rely on Redis hot state for session recovery
+        scylla_->savePlayerState(info->playerId, config_.zoneId, currentTimeMs,
+            [playerId = info->playerId](bool success) {
+                if (!success) {
+                    std::cerr << "[SCYLLA] Failed to persist state for player " << playerId << std::endl;
+                }
+            });
     }
 }
 

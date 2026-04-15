@@ -555,7 +555,62 @@ void ScyllaManager::logCombatEvent(const CombatEvent& event, WriteCallback callb
     cass_statement_free(statement);
 }
 
-void ScyllaManager::logCombatEventsBatch(const std::vector<CombatEvent>& events, 
+void ScyllaManager::savePlayerState(uint64_t playerId, uint32_t zoneId, uint64_t timestamp, WriteCallback callback) {
+    if (!isConnected() || !internal_->insertPlayerSession) {
+        if (callback) {
+            callback(false);
+        }
+        writesFailed_++;
+        return;
+    }
+
+    writesQueued_++;
+    internal_->pendingOperations++;
+
+    // Bind prepared statement
+    CassStatement* statement = cass_prepared_bind(internal_->insertPlayerSession);
+
+    // Bind parameters: player_id, session_start, session_end, zone_id, kills, deaths, damage_dealt, damage_taken, playtime_minutes
+    cass_statement_bind_int64(statement, 0, static_cast<cass_int64_t>(playerId));              // player_id
+    cass_statement_bind_int64(statement, 1, static_cast<cass_int64_t>(timestamp));             // session_start (ms)
+    cass_statement_bind_int64(statement, 2, 0);                                                // session_end (0 = active)
+    cass_statement_bind_int32(statement, 3, static_cast<cass_int32_t>(zoneId));                // zone_id
+    cass_statement_bind_int32(statement, 4, 0);                                                // kills
+    cass_statement_bind_int32(statement, 5, 0);                                                // deaths
+    cass_statement_bind_int64(statement, 6, 0);                                                // damage_dealt
+    cass_statement_bind_int64(statement, 7, 0);                                                // damage_taken
+    cass_statement_bind_int32(statement, 8, 0);                                                // playtime_minutes
+
+    // Execute async
+    CassFuture* future = cass_session_execute(internal_->session, statement);
+
+    // Set up callback
+    auto* cbData = new WriteCallbackData(callback, this);
+    cass_future_set_callback(future, [](CassFuture* f, void* data) {
+        auto* cbData = static_cast<WriteCallbackData*>(data);
+        CassError rc = cass_future_error_code(f);
+        bool success = (rc == CASS_OK);
+
+        if (cbData->manager) {
+            cbData->manager->internal_->pendingOperations--;
+            if (success) {
+                cbData->manager->writesCompleted_++;
+            } else {
+                cbData->manager->writesFailed_++;
+            }
+        }
+
+        if (cbData->callback) {
+            cbData->callback(success);
+        }
+        delete cbData;
+    }, cbData);
+
+    cass_future_free(future);
+    cass_statement_free(statement);
+}
+
+void ScyllaManager::logCombatEventsBatch(const std::vector<CombatEvent>& events,
                                          WriteCallback callback) {
     if (!isConnected() || events.empty()) {
         if (callback) {
