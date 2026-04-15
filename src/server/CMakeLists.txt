@@ -63,6 +63,7 @@ set(SERVER_SOURCES
     src/physics/MovementSystem.cpp
     src/netcode/NetworkManager.cpp
     src/db/RedisManager.cpp
+    src/db/ConnectionPool.cpp
     src/db/ScyllaManager.cpp
     src/zones/ZoneServer.cpp
     src/zones/ZoneOrchestrator.cpp
@@ -92,6 +93,7 @@ set(SERVER_HEADERS
     include/netcode/NetworkManager.hpp
     include/netcode/Protocol.hpp
     include/db/RedisManager.hpp
+    include/db/ConnectionPool.hpp
     include/db/ScyllaManager.hpp
     include/zones/ZoneServer.hpp
     include/zones/ZoneDefinition.hpp

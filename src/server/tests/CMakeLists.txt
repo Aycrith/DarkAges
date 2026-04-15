@@ -44,6 +44,7 @@ set(TEST_SERVER_SOURCES
     ${CMAKE_SOURCE_DIR}/src/physics/MovementSystem.cpp
     ${CMAKE_SOURCE_DIR}/src/netcode/NetworkManager.cpp
     ${CMAKE_SOURCE_DIR}/src/db/RedisManager.cpp
+    ${CMAKE_SOURCE_DIR}/src/db/ConnectionPool.cpp
     ${CMAKE_SOURCE_DIR}/src/db/ScyllaManager.cpp
     ${CMAKE_SOURCE_DIR}/src/zones/ZoneServer.cpp
     ${CMAKE_SOURCE_DIR}/src/zones/ZoneOrchestrator.cpp

@@ -2,6 +2,7 @@
 // WP-6-2: Implements <1ms latency, 10k ops/sec via connection pooling and pipelining
 
 #include "db/RedisManager.hpp"
+#include "db/ConnectionPool.hpp"
 #include "Constants.hpp"
 #include <iostream>
 #include <chrono>
@@ -23,212 +24,11 @@
 namespace DarkAges {
 
 // ============================================================================
-// Connection Pool Implementation
-// ============================================================================
-
-class RedisConnectionPool {
-public:
-    struct Connection {
-        #ifdef REDIS_AVAILABLE
-        redisContext* ctx{nullptr};
-        #endif
-        std::chrono::steady_clock::time_point lastUsed;
-        bool inUse{false};
-        uint64_t commandsExecuted{0};
-    };
-
-private:
-    std::vector<Connection> connections_;
-    std::mutex mutex_;
-    std::condition_variable cv_;
-    std::string host_;
-    uint16_t port_{6379};
-    size_t maxPoolSize_{10};
-    size_t minPoolSize_{2};
-    std::atomic<bool> shutdown_{false};
-    std::atomic<uint64_t> totalCommands_{0};
-    std::atomic<uint64_t> failedCommands_{0};
-
-    #ifdef REDIS_AVAILABLE
-    redisContext* createConnection() {
-        struct timeval timeout;
-        timeout.tv_sec = Constants::REDIS_CONNECTION_TIMEOUT_MS / 1000;
-        timeout.tv_usec = (Constants::REDIS_CONNECTION_TIMEOUT_MS % 1000) * 1000;
-        
-        redisContext* ctx = redisConnectWithTimeout(host_.c_str(), port_, timeout);
-        if (!ctx || ctx->err) {
-            if (ctx) {
-                std::cerr << "[REDIS] Connection error: " << ctx->errstr << std::endl;
-                redisFree(ctx);
-            } else {
-                std::cerr << "[REDIS] Failed to allocate context" << std::endl;
-            }
-            return nullptr;
-        }
-        
-        // Enable TCP keepalive
-        redisEnableKeepAlive(ctx);
-        
-        return ctx;
-    }
-    #endif
-
-public:
-    RedisConnectionPool() = default;
-    ~RedisConnectionPool() { shutdown(); }
-
-    bool initialize(const std::string& host, uint16_t port, size_t minPoolSize = 2, size_t maxPoolSize = 10) {
-        host_ = host;
-        port_ = port;
-        minPoolSize_ = minPoolSize;
-        maxPoolSize_ = maxPoolSize;
-        shutdown_ = false;
-
-        std::cout << "[REDIS] Initializing connection pool (" << minPoolSize_ << "-" << maxPoolSize_ << ")..." << std::endl;
-
-        #ifdef REDIS_AVAILABLE
-        // Create minimum pool size
-        for (size_t i = 0; i < minPoolSize_; ++i) {
-            auto* ctx = createConnection();
-            if (!ctx) {
-                std::cerr << "[REDIS] Failed to create initial connection " << i << std::endl;
-                shutdown();
-                return false;
-            }
-            
-            Connection conn;
-            conn.ctx = ctx;
-            conn.lastUsed = std::chrono::steady_clock::now();
-            conn.inUse = false;
-            connections_.push_back(conn);
-        }
-        #endif
-
-        std::cout << "[REDIS] Connection pool initialized with " << connections_.size() << " connections" << std::endl;
-        return true;
-    }
-
-    #ifdef REDIS_AVAILABLE
-    redisContext* acquire(std::chrono::milliseconds timeout = std::chrono::milliseconds(100)) {
-        std::unique_lock<std::mutex> lock(mutex_);
-        
-        auto pred = [this]() {
-            if (shutdown_) return true;
-            // Check for available connection
-            for (auto& conn : connections_) {
-                if (!conn.inUse) return true;
-            }
-            // Can we create more?
-            return connections_.size() < maxPoolSize_;
-        };
-        
-        if (!cv_.wait_for(lock, timeout, pred)) {
-            return nullptr; // Timeout
-        }
-        
-        if (shutdown_) return nullptr;
-        
-        // Find existing available connection
-        for (auto& conn : connections_) {
-            if (!conn.inUse) {
-                // Check if connection is still valid
-                if (conn.ctx && conn.ctx->err) {
-                    // Connection is dead, free it
-                    redisFree(conn.ctx);
-                    conn.ctx = createConnection();
-                    if (!conn.ctx) continue;
-                }
-                
-                conn.inUse = true;
-                conn.lastUsed = std::chrono::steady_clock::now();
-                return conn.ctx;
-            }
-        }
-        
-        // Create new connection if under limit
-        if (connections_.size() < maxPoolSize_) {
-            auto* ctx = createConnection();
-            if (ctx) {
-                Connection conn;
-                conn.ctx = ctx;
-                conn.lastUsed = std::chrono::steady_clock::now();
-                conn.inUse = true;
-                connections_.push_back(conn);
-                return ctx;
-            }
-        }
-        
-        return nullptr;
-    }
-
-    void release(redisContext* ctx) {
-        if (!ctx) return;
-        
-        std::lock_guard<std::mutex> lock(mutex_);
-        
-        for (auto& conn : connections_) {
-            if (conn.ctx == ctx) {
-                if (ctx->err) {
-                    // Connection is dead, remove it
-                    redisFree(ctx);
-                    conn.ctx = nullptr;
-                    conn.inUse = false;
-                    
-                    // Create replacement if under min pool size
-                    if (connections_.size() <= minPoolSize_) {
-                        conn.ctx = createConnection();
-                    }
-                } else {
-                    conn.inUse = false;
-                    conn.lastUsed = std::chrono::steady_clock::now();
-                }
-                break;
-            }
-        }
-        
-        cv_.notify_one();
-    }
-    #endif
-
-    void shutdown() {
-        shutdown_ = true;
-        cv_.notify_all();
-        
-        std::lock_guard<std::mutex> lock(mutex_);
-        
-        #ifdef REDIS_AVAILABLE
-        for (auto& conn : connections_) {
-            if (conn.ctx) {
-                redisFree(conn.ctx);
-                conn.ctx = nullptr;
-            }
-        }
-        #endif
-        
-        connections_.clear();
-    }
-
-    [[nodiscard]] size_t getPoolSize() const { return connections_.size(); }
-    [[nodiscard]] size_t getAvailableCount() const {
-        size_t count = 0;
-        for (const auto& conn : connections_) {
-            if (!conn.inUse) count++;
-        }
-        return count;
-    }
-    
-    void incrementCommands() { totalCommands_++; }
-    void incrementFailed() { failedCommands_++; }
-    [[nodiscard]] uint64_t getTotalCommands() const { return totalCommands_.load(); }
-    [[nodiscard]] uint64_t getFailedCommands() const { return failedCommands_.load(); }
-};
-
-// ============================================================================
 // Internal Implementation Structure
 // ============================================================================
 
 struct RedisInternal {
-    std::unique_ptr<RedisConnectionPool> pool;
+    std::unique_ptr<ConnectionPool> pool;
     std::string host;
     uint16_t port{6379};
     bool connected{false};
@@ -485,7 +285,7 @@ bool RedisManager::initialize(const std::string& host, uint16_t port) {
     
     #ifdef REDIS_AVAILABLE
     // Initialize connection pool
-    internal_->pool = std::make_unique<RedisConnectionPool>();
+    internal_->pool = std::make_unique<ConnectionPool>();
     if (!internal_->pool->initialize(host, port, 2, 10)) {
         std::cerr << "[REDIS] Failed to initialize connection pool" << std::endl;
         return false;
