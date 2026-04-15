@@ -90,9 +90,9 @@ void ZoneHandoffController::checkPlayerPosition(uint64_t playerId, EntityID enti
 }
 
 void ZoneHandoffController::update(Registry& registry, uint32_t currentTimeMs) {
-    std::vector<uint64_t> toRemove;
-    
-    for (auto& [playerId, handoff] : activeHandoffs_) {
+    for (auto it = activeHandoffs_.begin(); it != activeHandoffs_.end(); ) {
+        uint64_t playerId = it->first;
+        ActiveHandoff& handoff = it->second;
         // Check timeouts
         uint32_t timeout = 0;
         switch (handoff.phase) {
@@ -105,7 +105,7 @@ void ZoneHandoffController::update(Registry& registry, uint32_t currentTimeMs) {
         if (timeout > 0 && (currentTimeMs - handoff.phaseStartTime) > timeout) {
             failHandoff(handoff, "Timeout");
             stats_.timeoutCount++;
-            toRemove.push_back(playerId);
+            it = activeHandoffs_.erase(it);
             continue;
         }
         
@@ -117,10 +117,9 @@ void ZoneHandoffController::update(Registry& registry, uint32_t currentTimeMs) {
                 }
                 // Player turned back
                 if (handoff.distanceToEdge > config_.preparationDistance) {
-                    if (cancelHandoff(playerId)) {
-                        stats_.cancelledHandoffs++;
-                    }
-                    toRemove.push_back(playerId);
+                    stats_.cancelledHandoffs++;
+                    it = activeHandoffs_.erase(it);
+                    continue;
                 }
                 break;
                 
@@ -130,10 +129,9 @@ void ZoneHandoffController::update(Registry& registry, uint32_t currentTimeMs) {
                 }
                 // Player turned back
                 if (handoff.distanceToEdge > config_.preparationDistance) {
-                    if (cancelHandoff(playerId)) {
-                        stats_.cancelledHandoffs++;
-                    }
-                    toRemove.push_back(playerId);
+                    stats_.cancelledHandoffs++;
+                    it = activeHandoffs_.erase(it);
+                    continue;
                 }
                 break;
                 
@@ -144,7 +142,8 @@ void ZoneHandoffController::update(Registry& registry, uint32_t currentTimeMs) {
                         enterSwitching(handoff, currentTimeMs);
                     } else if (state == MigrationState::FAILED) {
                         failHandoff(handoff, "Migration failed");
-                        toRemove.push_back(playerId);
+                        it = activeHandoffs_.erase(it);
+                        continue;
                     }
                 }
                 break;
@@ -155,17 +154,14 @@ void ZoneHandoffController::update(Registry& registry, uint32_t currentTimeMs) {
                 break;
                 
             case HandoffPhase::COMPLETED:
-                toRemove.push_back(playerId);
-                break;
+                it = activeHandoffs_.erase(it);
+                continue;
                 
             default:
                 break;
         }
-    }
-    
-    // Cleanup completed/failed handoffs
-    for (auto playerId : toRemove) {
-        activeHandoffs_.erase(playerId);
+        
+        ++it;
     }
 }
 
