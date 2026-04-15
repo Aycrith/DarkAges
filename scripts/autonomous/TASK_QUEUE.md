@@ -15,8 +15,8 @@ Prioritized list of autonomous improvements for DarkAges.
 - [x] ZoneServer:639 — Implement respawn timer ✅ 2026-04-14 (PR #2)
 
 ## P1 — Combat System (core gameplay)
-- [ ] CombatSystem — Implement ability system stub
-- [ ] CombatSystem — Implement projectile/raycast stub
+- [x] CombatSystem — Implement ability system stub ✅ 2026-04-15 (commit 107ad78)
+- [x] CombatSystem — Implement projectile/raycast stub ✅ 2026-04-15 (commit 107ad78)
 
 ## P2 — Refactoring Candidates (large files)
 - [ ] RedisManager.cpp (1655 lines) — extract connection pool to separate class
