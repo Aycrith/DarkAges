@@ -1502,18 +1502,39 @@ void ZoneServer::syncAuraState() {
     
     // Publish to Redis for adjacent zones
     if (redis_->isConnected() && !entitiesToSync.empty()) {
+        // Batch all entities into a single ZoneMessage payload
+        std::vector<uint8_t> payload;
+        auto packU32 = [&payload](uint32_t v) {
+            payload.push_back(static_cast<uint8_t>(v & 0xFF));
+            payload.push_back(static_cast<uint8_t>((v >> 8) & 0xFF));
+            payload.push_back(static_cast<uint8_t>((v >> 16) & 0xFF));
+            payload.push_back(static_cast<uint8_t>((v >> 24) & 0xFF));
+        };
+
+        // Pack entity count first, then each entity state
+        packU32(static_cast<uint32_t>(entitiesToSync.size()));
         for (const auto& entity : entitiesToSync) {
-            // Serialize entity state
-            // TODO: Implement proper serialization for aura sync
-            // redis_->publish("zone:" + std::to_string(config_.zoneId) + ":aura", serializedData);
-            
-            // For now, log the sync
-            static uint32_t syncCount = 0;
-            if (++syncCount % 20 == 1) {  // Log once per second
-                std::cout << "[AURA] Syncing " << entitiesToSync.size() 
-                          << " entities to adjacent zones" << std::endl;
-            }
+            packU32(static_cast<uint32_t>(entity.entity));
+            packU32(entity.ownerZoneId);
+            packU32(static_cast<uint32_t>(entity.lastKnownPosition.x));
+            packU32(static_cast<uint32_t>(entity.lastKnownPosition.y));
+            packU32(static_cast<uint32_t>(entity.lastKnownPosition.z));
+            packU32(static_cast<uint32_t>(entity.lastKnownVelocity.dx));
+            packU32(static_cast<uint32_t>(entity.lastKnownVelocity.dy));
+            packU32(static_cast<uint32_t>(entity.lastKnownVelocity.dz));
+            packU32(entity.lastUpdateTick);
+            payload.push_back(entity.isGhost ? 1 : 0);
         }
+
+        ZoneMessage msg;
+        msg.type = ZoneMessageType::ENTITY_SYNC;
+        msg.sourceZoneId = config_.zoneId;
+        msg.targetZoneId = 0; // broadcast to adjacent
+        msg.timestamp = currentTime;
+        msg.sequence = 0;
+        msg.payload = std::move(payload);
+
+        redis_->publishToZone(config_.zoneId, msg);
     }
 }
 
@@ -1534,9 +1555,32 @@ void ZoneServer::handleAuraEntityMigration() {
             if (auraManager_.shouldTakeOwnership(entity, pos)) {
                 uint32_t fromZoneId = auraManager_.getEntityOwnerZone(entity);
                 auraManager_.onOwnershipTransferred(entity, fromZoneId);
-                
-                // TODO: Notify the previous zone of ownership transfer
-                // TODO: Update entity's zone assignment in Redis
+
+                // Notify the previous zone of ownership transfer
+                ZoneMessage migrateMsg;
+                migrateMsg.type = ZoneMessageType::MIGRATION_COMPLETE;
+                migrateMsg.sourceZoneId = config_.zoneId;
+                migrateMsg.targetZoneId = fromZoneId;
+                migrateMsg.timestamp = getCurrentTimeMs();
+                migrateMsg.sequence = 0;
+                // Pack: entityID(4) + newOwnerZoneId(4)
+                std::vector<uint8_t> mPayload(8);
+                uint32_t eid = static_cast<uint32_t>(entity);
+                mPayload[0] = static_cast<uint8_t>(eid & 0xFF);
+                mPayload[1] = static_cast<uint8_t>((eid >> 8) & 0xFF);
+                mPayload[2] = static_cast<uint8_t>((eid >> 16) & 0xFF);
+                mPayload[3] = static_cast<uint8_t>((eid >> 24) & 0xFF);
+                uint32_t nid = config_.zoneId;
+                mPayload[4] = static_cast<uint8_t>(nid & 0xFF);
+                mPayload[5] = static_cast<uint8_t>((nid >> 8) & 0xFF);
+                mPayload[6] = static_cast<uint8_t>((nid >> 16) & 0xFF);
+                mPayload[7] = static_cast<uint8_t>((nid >> 24) & 0xFF);
+                migrateMsg.payload = std::move(mPayload);
+                redis_->publishToZone(fromZoneId, migrateMsg);
+
+                // Update entity's zone assignment in Redis
+                redis_->set("entity:" + std::to_string(eid) + ":zone",
+                           std::to_string(config_.zoneId));
             }
         }
     }
