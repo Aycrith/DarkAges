@@ -74,7 +74,12 @@ bool ZoneServer::initialize(const ZoneConfig& config) {
     auraManager_.initialize(adjacentZones);
     
     std::cout << "[ZONE " << config_.zoneId << "] Aura projection initialized" << std::endl;
-    
+
+    // [ZONE_AGENT] Initialize player manager
+    playerManager_.setDatabaseConnections(redis_.get(), scylla_.get());
+    playerManager_.setZoneId(config_.zoneId);
+    std::cout << "[ZONE " << config_.zoneId << "] Player manager initialized" << std::endl;
+
     // Initialize network
     network_ = std::make_unique<NetworkManager>();
     if (!network_->initialize(config_.port)) {
@@ -251,11 +256,9 @@ void ZoneServer::shutdown() {
         }
         Profiling::PerfettoProfiler::instance().shutdown();
     }
-    
-    // Save player states
-    for (const auto& [connId, entityId] : connectionToEntity_) {
-        savePlayerState(entityId);
-    }
+
+    // [ZONE_AGENT] Save all player states via PlayerManager
+    playerManager_.saveAllPlayerStates();
     
     // Flush database writes
     if (scylla_ && scylla_->isConnected()) {
@@ -907,47 +910,56 @@ void ZoneServer::updateDatabase() {
 
 void ZoneServer::onClientConnected(ConnectionID connectionId) {
     std::cout << "[ZONE " << config_.zoneId << "] Client connected: " << connectionId << std::endl;
-    
-    // Spawn player entity
+
+    // [ZONE_AGENT] Use PlayerManager to register player
     Position spawnPos = Position::fromVec3(glm::vec3(0.0f, 0.0f, 0.0f), getCurrentTimeMs());
-    EntityID entity = spawnPlayer(connectionId, connectionId, "Player" + std::to_string(connectionId), spawnPos);
-    
-    std::cout << "[ZONE " << config_.zoneId << "] Spawned entity " << static_cast<uint32_t>(entity) 
+    EntityID entity = playerManager_.registerPlayer(
+        connectionId,
+        static_cast<uint64_t>(connectionId),
+        "Player" + std::to_string(connectionId),
+        spawnPos
+    );
+
+    std::cout << "[ZONE " << config_.zoneId << "] Spawned entity " << static_cast<uint32_t>(entity)
               << " for connection " << connectionId << std::endl;
 }
 
 void ZoneServer::onClientDisconnected(ConnectionID connectionId) {
     std::cout << "[ZONE " << config_.zoneId << "] Client disconnected: " << connectionId << std::endl;
-    
-    // Find entity and clean up anti-cheat profile
-    auto it = connectionToEntity_.find(connectionId);
-    if (it != connectionToEntity_.end()) {
-        EntityID entity = it->second;
-        
+
+    // [ZONE_AGENT] Get entity via PlayerManager
+    EntityID entity = playerManager_.getEntityByConnection(connectionId);
+
+    if (entity != entt::null) {
         // [SECURITY_AGENT] Clean up anti-cheat behavior profile
         if (const PlayerInfo* info = registry_.try_get<PlayerInfo>(entity)) {
             antiCheat_.removeProfile(info->playerId);
         }
-        
+
+        // Save state via PlayerManager
+        playerManager_.savePlayerState(entity);
+
+        // [ZONE_AGENT] Full cleanup via despawnEntity (destroyedEntities_, replication, lagCompensator)
         despawnEntity(entity);
-        connectionToEntity_.erase(it);
+
+        // [ZONE_AGENT] Remove mappings via PlayerManager
+        playerManager_.removeConnectionMapping(entity);
     }
-    
+
     // Clean up client snapshot state
     clientSnapshotState_.erase(connectionId);
-    
+
     // [ZONE_AGENT] Clean up replication optimizer tracking for disconnected player
     replicationOptimizer_.removeClientTracking(connectionId);
 }
 
 void ZoneServer::onClientInput(const ClientInputPacket& input) {
-    // Find entity for this connection
-    auto it = connectionToEntity_.find(input.connectionId);
-    if (it == connectionToEntity_.end()) {
+    // [ZONE_AGENT] Use PlayerManager to find entity for connection
+    EntityID entity = playerManager_.getEntityByConnection(input.connectionId);
+    if (entity == entt::null) {
         return;  // Unknown connection
     }
-    
-    EntityID entity = it->second;
+
     validateAndApplyInput(entity, input);
 }
 

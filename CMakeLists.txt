@@ -436,6 +436,7 @@ set(SERVER_SOURCES
     src/server/src/zones/EntityMigration.cpp
     src/server/src/zones/ZoneHandoff.cpp
     src/server/src/zones/ZoneOrchestrator.cpp
+    src/server/src/zones/PlayerManager.cpp
     src/server/src/zones/ZoneServer.cpp
     src/server/src/zones/CrossZoneMessenger.cpp
     src/server/src/security/AntiCheat.cpp
