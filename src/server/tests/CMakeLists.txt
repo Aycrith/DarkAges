@@ -32,6 +32,7 @@ set(TEST_SOURCES
     TestEntityMigration.cpp
     TestMemoryPool.cpp
     TestProfiling.cpp
+    TestMetricsExporter.cpp
     TestDDoSProtection.cpp
     TestRedisIntegration.cpp
     BenchmarkRedis.cpp
@@ -60,6 +61,7 @@ set(TEST_SERVER_SOURCES
     ${CMAKE_SOURCE_DIR}/src/memory/LeakDetector.cpp
     ${CMAKE_SOURCE_DIR}/src/security/AntiCheat.cpp
     ${CMAKE_SOURCE_DIR}/src/security/DDoSProtection.cpp
+    ${CMAKE_SOURCE_DIR}/src/monitoring/MetricsExporter.cpp
 )
 
 add_executable(darkages-tests ${TEST_SOURCES} ${TEST_SERVER_SOURCES})

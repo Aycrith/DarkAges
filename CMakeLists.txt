@@ -686,6 +686,7 @@ if(BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
         src/server/tests/TestPacketValidator.cpp
         src/server/tests/TestProfiling.cpp
         src/server/tests/TestAntiCheat.cpp
+        src/server/tests/TestMetricsExporter.cpp
     )
 
     # Conditionally include tests for optional features
