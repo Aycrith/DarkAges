@@ -37,3 +37,32 @@ All autonomous improvements tracked here. Most recent first.
 
 ---
 
+
+---
+
+### ✅ 2026-04-15 — Anti-Cheat Event Logging + Ban Persistence
+- **Task:** Implement anti-cheat event logging to ScyllaDB and ban persistence to Redis
+- **Status:** SUCCESS
+- **Branch:** `feature/security-anticheat-logging`
+- **Changes:** 4 files, +130/-7 lines. Added AntiCheatEvent struct, logAntiCheatEvent/logAntiCheatEventsBatch methods in ScyllaManager, implemented in ZoneServer::onCheatDetected, Redis ban storage.
+- **Validation:** Build PASS, Tests PASS (124 cases, 817 assertions)
+
+---
+
+### ✅ 2026-04-15 — Damage/Hit Packet Sending
+- **Task:** Send damage events and hit confirmations to clients
+- **Status:** SUCCESS
+- **Branch:** `feature/network-damage-packet-sending`
+- **Changes:** 1 file, +21/-5 lines. Used ProtobufProtocol::createDamageEvent() to send to target and attacker.
+- **Validation:** Build PASS, Tests PASS (124 cases, 817 assertions)
+
+---
+
+### ✅ 2026-04-15 — RedisManager Connection Pool Extraction
+- **Task:** Extract connection pool from RedisManager.cpp (1655 lines)
+- **Status:** SUCCESS
+- **Branch:** `feature/refactor-connection-pool`
+- **Changes:** 7 files, +313/-204 lines. Created ConnectionPool.hpp/cpp (289 lines), reduced RedisManager by 206 lines.
+- **Pitfall:** Agent modified src/server/CMakeLists.txt instead of root CMakeLists.txt — fixed manually.
+- **Validation:** Build PASS, Tests PASS (124 cases, 817 assertions)
+
