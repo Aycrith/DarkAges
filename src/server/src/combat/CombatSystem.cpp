@@ -36,10 +36,28 @@ HitResult CombatSystem::processAttack(Registry& registry, EntityID attacker,
         case AttackInput::RANGED:
             result = performRangedAttack(registry, attacker, input.aimDirection, currentTimeMs);
             break;
-        case AttackInput::ABILITY:
-            // TODO: Ability system - not implemented in Phase 3B
-            result.hitType = "not_implemented";
+        case AttackInput::ABILITY: {
+            const AbilityDefinition* ability = abilitySystem_.getAbility(input.abilityId);
+            if (ability && input.targetEntity != 0) {
+                EntityID target = static_cast<EntityID>(input.targetEntity);
+                bool success = abilitySystem_.castAbility(registry, attacker, target, *ability, currentTimeMs);
+                if (success) {
+                    result.hit = true;
+                    result.target = target;
+                    result.damageDealt = static_cast<int16_t>(ability->manaCost * 10);
+                    result.hitType = "ability";
+                    
+                    if (const Position* pos = registry.try_get<Position>(target)) {
+                        result.hitLocation = *pos;
+                    }
+                } else {
+                    result.hitType = "ability_failed";
+                }
+            } else {
+                result.hitType = "ability_invalid";
+            }
             break;
+        }
     }
     
     // Update attack cooldown

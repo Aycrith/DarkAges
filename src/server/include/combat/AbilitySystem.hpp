@@ -29,16 +29,20 @@ enum class AbilityEffectType : uint8_t {
 
 // [COMBAT_AGENT] Ability definition (detailed spec for ability system)
 struct AbilityDefinition {
+    uint32_t abilityId{0};
     std::string name;
     uint32_t cooldownMs;
     uint16_t manaCost;
     float range;
     AbilityEffectType effectType;
 
-    AbilityDefinition() : name(""), cooldownMs(0), manaCost(0), range(0.0f), effectType(AbilityEffectType::Damage) {}
+    AbilityDefinition() : abilityId(0), name(""), cooldownMs(0), manaCost(0), range(0.0f), effectType(AbilityEffectType::Damage) {}
 
     AbilityDefinition(const std::string& n, uint32_t cd, uint16_t mana, float r, AbilityEffectType eff)
-        : name(n), cooldownMs(cd), manaCost(mana), range(r), effectType(eff) {}
+        : abilityId(0), name(n), cooldownMs(cd), manaCost(mana), range(r), effectType(eff) {}
+
+    AbilityDefinition(uint32_t id, const std::string& n, uint32_t cd, uint16_t mana, float r, AbilityEffectType eff)
+        : abilityId(id), name(n), cooldownMs(cd), manaCost(mana), range(r), effectType(eff) {}
 
     bool validate() const;
 };
@@ -62,6 +66,14 @@ public:
     void registerAbility(uint32_t abilityId, const AbilityDefinition& ability);
 
 private:
+    bool isInRange(Registry& registry, EntityID caster, EntityID target, float range) const;
+
+    bool checkCooldown(Registry& registry, EntityID caster, uint32_t abilityId,
+                      uint32_t currentTimeMs, uint32_t cooldownMs) const;
+
+    void applyAbilityEffect(Registry& registry, EntityID caster, EntityID target,
+                           const AbilityDefinition& ability, uint32_t currentTimeMs);
+
     std::vector<std::pair<uint32_t, AbilityDefinition>> abilities_;
 };
 

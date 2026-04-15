@@ -3,6 +3,7 @@
 #include "ecs/CoreTypes.hpp"
 #include "physics/SpatialHash.hpp"
 #include "combat/PositionHistory.hpp"
+#include "combat/AbilitySystem.hpp"
 #include <functional>
 #include <vector>
 #include <glm/glm.hpp>
@@ -144,6 +145,7 @@ private:
     CombatConfig config_;
     DeathCallback onDeath_;
     DamageCallback onDamage_;
+    AbilitySystem abilitySystem_;
 };
 
 // ============================================================================
