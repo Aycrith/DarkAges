@@ -7,10 +7,10 @@ Prioritized list of autonomous improvements for DarkAges.
 - [ ] Fix any failing tests after build
 
 ## P1 — Code Quality: Raw Memory Management
-- [ ] ScyllaManager: Replace raw `new WriteCallbackData` with `make_unique` (lines 533, 600, 658)
+- [x] ScyllaManager: Replace raw `new WriteCallbackData` with `make_unique` (lines 533, 600, 658) ✅ 2026-04-15 (PR #4)
 
 ## P1 — Unimplemented TODOs (smallest scope first)
-- [ ] ZoneServer:328 — Implement player state persistence stub
+- [x] ZoneServer:328 — Implement player state persistence stub ✅ 2026-04-15 (PR #3)
 - [x] ZoneServer:553 — Implement event packet broadcast ✅ 2026-04-15
 - [x] ZoneServer:639 — Implement respawn timer ✅ 2026-04-14 (PR #2)
 
