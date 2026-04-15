@@ -9,6 +9,7 @@
 #include "zones/AreaOfInterest.hpp"
 #include "zones/AuraProjection.hpp"
 #include "zones/EntityMigration.hpp"
+#include "zones/PlayerManager.hpp"
 #include "zones/ZoneHandoff.hpp"
 #include "zones/ReplicationOptimizer.hpp"
 #include "combat/PositionHistory.hpp"
@@ -279,7 +280,10 @@ private:
     
     // [PHASE 4C] Entity migration
     void onEntityMigrationComplete(EntityID entity, bool success);
-    
+
+    // [ZONE_AGENT] Player management
+    PlayerManager playerManager_;
+
     // Entity migration manager
     std::unique_ptr<EntityMigrationManager> migrationManager_;
     
