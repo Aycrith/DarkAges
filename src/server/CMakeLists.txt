@@ -82,6 +82,10 @@ set(SERVER_SOURCES
     src/memory/LeakDetector.cpp
     src/security/AntiCheat.cpp
     src/security/DDoSProtection.cpp
+    src/security/CircuitBreaker.cpp
+    src/security/InputValidator.cpp
+    src/security/ConnectionThrottler.cpp
+    src/security/TrafficAnalyzer.cpp
 )
 
 # Header files
@@ -118,6 +122,9 @@ set(SERVER_HEADERS
     include/security/AntiCheat.hpp
     include/security/AntiCheatConfig.hpp
     include/security/DDoSProtection.hpp
+    include/security/CircuitBreaker.hpp
+    include/security/InputValidator.hpp
+    include/security/TrafficAnalyzer.hpp
     include/security/RateLimiter.hpp
 )
 

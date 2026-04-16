@@ -61,6 +61,10 @@ set(TEST_SERVER_SOURCES
     ${CMAKE_SOURCE_DIR}/src/memory/LeakDetector.cpp
     ${CMAKE_SOURCE_DIR}/src/security/AntiCheat.cpp
     ${CMAKE_SOURCE_DIR}/src/security/DDoSProtection.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/CircuitBreaker.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/InputValidator.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/ConnectionThrottler.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/TrafficAnalyzer.cpp
     ${CMAKE_SOURCE_DIR}/src/monitoring/MetricsExporter.cpp
 )
 

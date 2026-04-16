@@ -445,6 +445,10 @@ set(SERVER_SOURCES
     src/server/src/security/MovementValidator.cpp
     src/server/src/security/ViolationTracker.cpp
     src/server/src/security/DDoSProtection.cpp
+    src/server/src/security/CircuitBreaker.cpp
+    src/server/src/security/InputValidator.cpp
+    src/server/src/security/ConnectionThrottler.cpp
+    src/server/src/security/TrafficAnalyzer.cpp
     src/server/src/security/PacketValidator.cpp
     src/server/src/profiling/PerformanceMonitor.cpp
 )

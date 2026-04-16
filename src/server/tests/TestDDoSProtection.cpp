@@ -3,6 +3,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include "security/DDoSProtection.hpp"
 #include "security/RateLimiter.hpp"
+#include "security/CircuitBreaker.hpp"
+#include "security/InputValidator.hpp"
 #include "ecs/CoreTypes.hpp"
 #include <chrono>
 #include <cstdint>

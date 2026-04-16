@@ -1,5 +1,4 @@
 #pragma once
-#include "security/DDoSProtection.hpp"
 #include <cstdint>
 #include <chrono>
 #include <deque>
@@ -9,6 +8,103 @@
 
 namespace DarkAges {
 namespace Security {
+
+// [SECURITY_AGENT] Token bucket rate limiter
+template<typename Key>
+class TokenBucketRateLimiter {
+public:
+    struct Config {
+        uint32_t maxTokens = 100;       // Maximum burst size
+        uint32_t tokensPerSecond = 60; // Refill rate
+    };
+    
+    struct Bucket {
+        uint32_t tokens;
+        uint64_t lastRefillTime;
+    };
+
+public:
+    explicit TokenBucketRateLimiter(const Config& config = Config{})
+        : config_(config) {}
+    
+    // Check if operation allowed, consume token if so
+    bool allow(const Key& key) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        
+        uint64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+        
+        auto& bucket = buckets_[key];
+        refill(bucket, now);
+        
+        if (bucket.tokens > 0) {
+            --bucket.tokens;
+            return true;
+        }
+        return false;
+    }
+    
+    // Peek without consuming
+    bool wouldAllow(const Key& key) const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        
+        auto it = buckets_.find(key);
+        if (it == buckets_.end()) {
+            return config_.maxTokens > 0;
+        }
+        
+        uint64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+        
+        Bucket bucket = it->second;
+        refill(bucket, now);
+        
+        return bucket.tokens > 0;
+    }
+    
+    // Get remaining tokens
+    uint32_t getRemainingTokens(const Key& key) const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        
+        auto it = buckets_.find(key);
+        if (it == buckets_.end()) {
+            return config_.maxTokens;
+        }
+        
+        uint64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+        
+        Bucket bucket = it->second;
+        refill(bucket, now);
+        
+        return bucket.tokens;
+    }
+    
+    // Reset bucket for key
+    void reset(const Key& key) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        buckets_.erase(key);
+    }
+
+private:
+    void refill(Bucket& bucket, uint64_t now) const {
+        uint64_t elapsedMs = now - bucket.lastRefillTime;
+        if (elapsedMs > 0) {
+            uint32_t tokensToAdd = static_cast<uint32_t>(
+                (elapsedMs * config_.tokensPerSecond) / 1000);
+            bucket.tokens = std::min(config_.maxTokens, bucket.tokens + tokensToAdd);
+            bucket.lastRefillTime = now;
+        }
+    }
+    
+    Config config_;
+    mutable std::unordered_map<Key, Bucket> buckets_;
+    mutable std::mutex mutex_;
+};
+
+// Convenience typedefs
+using IPRateLimiter = TokenBucketRateLimiter<std::string>;
+using ConnectionRateLimiter = TokenBucketRateLimiter<uint32_t>;
 
 // [SECURITY_AGENT] Sliding window rate limiter
 template<typename Key>
@@ -149,6 +245,43 @@ private:
     float currentLoad_{0.0f};
     
     TokenBucketRateLimiter<std::string> limiter_;
+    mutable std::mutex mutex_;
+};
+
+// [SECURITY_AGENT] Per-IP connection throttling
+class ConnectionThrottler {
+public:
+    struct Config {
+        uint32_t maxAttempts = 10;          // Max attempts per window
+        uint32_t windowSeconds = 60;        // Time window
+        uint32_t blockDurationSeconds = 300; // Block duration
+        
+        Config() = default;
+    };
+
+public:
+    explicit ConnectionThrottler(const Config& config);
+    ConnectionThrottler();  // Default config
+    
+    // Check if connection attempt is allowed
+    bool allowConnection(const std::string& ipAddress);
+    
+    // Record connection attempt
+    void recordAttempt(const std::string& ipAddress, bool success);
+    
+    // Cleanup old entries
+    void cleanup(uint32_t currentTimeMs);
+
+private:
+    struct AttemptHistory {
+        std::deque<uint64_t> timestamps;  // Attempt timestamps (seconds)
+        uint32_t successCount{0};
+        uint32_t failureCount{0};
+        uint64_t blockedUntil{0};
+    };
+    
+    Config config_;
+    std::unordered_map<std::string, AttemptHistory> histories_;
     mutable std::mutex mutex_;
 };
 
