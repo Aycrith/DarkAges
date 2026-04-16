@@ -700,6 +700,8 @@ if(BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
         src/server/tests/TestLagCompensator.cpp
         src/server/tests/TestLagCompensatedCombat.cpp
         src/server/tests/TestAuraProjection.cpp
+        src/server/tests/TestCombatEventHandler.cpp
+        src/server/tests/TestAuraZoneHandler.cpp
         src/server/tests/TestEntityMigration.cpp
         src/server/tests/TestZoneOrchestrator.cpp
         src/server/tests/TestDDoSProtection.cpp
