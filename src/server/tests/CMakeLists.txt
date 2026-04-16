@@ -15,7 +15,6 @@ FetchContent_MakeAvailable(Catch2)
 
 # Test sources - base tests
 set(TEST_SOURCES
-    TestMain.cpp
     TestSpatialHash.cpp
     TestMovementSystem.cpp
     TestDeltaCompression.cpp
@@ -77,6 +76,10 @@ set(TEST_SERVER_SOURCES
     ${CMAKE_SOURCE_DIR}/src/security/PacketValidator.cpp
     ${CMAKE_SOURCE_DIR}/src/security/StatisticalDetector.cpp
     ${CMAKE_SOURCE_DIR}/src/security/PacketIntegrity.cpp
+    ${CMAKE_SOURCE_DIR}/src/monitoring/MetricsExporter.cpp
+    ${CMAKE_SOURCE_DIR}/src/profiling/PerformanceMonitor.cpp
+    ${CMAKE_SOURCE_DIR}/src/profiling/PerfettoProfiler_stub.cpp
+    ${CMAKE_SOURCE_DIR}/src/zones/ZoneHandoff.cpp
 )
 
 # Network manager: use stub if GNS not available

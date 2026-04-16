@@ -1,34 +1,18 @@
-// Combat event handling implementation
-// Extracted from ZoneServer.cpp to improve code organization
+// [ZONE_AGENT] Combat event handler implementation
+// Extracted from ZoneServer for separation of concerns
 
 #include "zones/CombatEventHandler.hpp"
 #include "zones/ZoneServer.hpp"
-#include "netcode/NetworkManager.hpp"
+#ifdef DARKAGES_HAS_PROTOBUF
 #include "netcode/ProtobufProtocol.hpp"
+#endif
 #include "db/ScyllaManager.hpp"
-#include "security/AntiCheat.hpp"
 #include <iostream>
-#include <cstring>
 #include <ctime>
-#include <cmath>
-#include <glm/glm.hpp>
 
 namespace DarkAges {
 
-CombatEventHandler::CombatEventHandler(ZoneServer& server)
-    : server_(server) {
-}
-
-void CombatEventHandler::setConnectionMappings(
-    std::unordered_map<ConnectionID, EntityID>* connToEntity,
-    std::unordered_map<EntityID, ConnectionID>* entityToConn) {
-    connectionToEntity_ = connToEntity;
-    entityToConnection_ = entityToConn;
-}
-
-uint32_t CombatEventHandler::getCurrentTimeMs() const {
-    return server_.getCurrentTimeMs();
-}
+CombatEventHandler::CombatEventHandler(ZoneServer& zone) : zone_(zone) {}
 
 void CombatEventHandler::processCombat() {
     // Combat is triggered by client inputs (attack action)
@@ -37,10 +21,13 @@ void CombatEventHandler::processCombat() {
 }
 
 void CombatEventHandler::onEntityDied(EntityID victim, EntityID killer) {
-    auto& registry = server_.getRegistry();
-    uint32_t currentTick = server_.getCurrentTick();
+    auto& registry = zone_.getRegistry();
+    auto& config = zone_.getConfig();
+    auto& network = zone_.getNetwork();
+    auto* scylla = zone_.getScylla();
+    uint32_t currentTick = zone_.getCurrentTick();
 
-    std::cout << "[ZONE " << server_.getConfig().zoneId << "] Entity " << static_cast<uint32_t>(victim)
+    std::cout << "[ZONE " << config.zoneId << "] Entity " << static_cast<uint32_t>(victim)
               << " killed by " << static_cast<uint32_t>(killer) << std::endl;
 
     // Get victim and killer info
@@ -63,42 +50,41 @@ void CombatEventHandler::onEntityDied(EntityID victim, EntityID killer) {
     }
 
     // Send death event to clients
-    if (network_) {
+    if (killer != entt::null) {
+#ifdef DARKAGES_HAS_PROTOBUF
         auto deathEvent = Netcode::ProtobufProtocol::createPlayerDeathEvent(
-            static_cast<uint32_t>(victim),
-            static_cast<uint32_t>(killer)
-        );
-        deathEvent.set_timestamp(getCurrentTimeMs());
-        auto eventData = Netcode::ProtobufProtocol::serializeEvent(deathEvent);
-        network_->broadcastEvent(eventData);
+            static_cast<uint32_t>(victim));
+        auto data = Netcode::ProtobufProtocol::serializeEvent(deathEvent);
+        network.broadcastEvent(std::span<const uint8_t>(data.data(), data.size()));
+#endif
     }
 
     // [DATABASE_AGENT] Log kill event to ScyllaDB
-    if (scylla_ && scylla_->isConnected()) {
+    if (scylla && scylla->isConnected()) {
         // Log the kill for the killer
         if (killerPlayerId > 0) {
             CombatEvent killEvent;
             killEvent.eventId = 0;
-            killEvent.timestamp = getCurrentTimeMs();
-            killEvent.zoneId = server_.getConfig().zoneId;
+            killEvent.timestamp = zone_.getCurrentTimeMs();
+            killEvent.zoneId = config.zoneId;
             killEvent.attackerId = killerPlayerId;
             killEvent.targetId = victimPlayerId;
             killEvent.eventType = "kill";
-            killEvent.damageAmount = 0;  // Final blow already logged as damage
+            killEvent.damageAmount = 0;
             killEvent.isCritical = false;
             killEvent.weaponType = "melee";
             killEvent.position = killLocation;
             killEvent.serverTick = currentTick;
 
-            scylla_->logCombatEvent(killEvent, nullptr);  // No callback needed
+            scylla->logCombatEvent(killEvent, nullptr);
         }
 
         // Log the death for the victim
         if (victimPlayerId > 0) {
             CombatEvent deathEvent;
             deathEvent.eventId = 0;
-            deathEvent.timestamp = getCurrentTimeMs();
-            deathEvent.zoneId = server_.getConfig().zoneId;
+            deathEvent.timestamp = zone_.getCurrentTimeMs();
+            deathEvent.zoneId = config.zoneId;
             deathEvent.attackerId = killerPlayerId;
             deathEvent.targetId = victimPlayerId;
             deathEvent.eventType = "death";
@@ -108,7 +94,7 @@ void CombatEventHandler::onEntityDied(EntityID victim, EntityID killer) {
             deathEvent.position = killLocation;
             deathEvent.serverTick = currentTick;
 
-            scylla_->logCombatEvent(deathEvent, nullptr);
+            scylla->logCombatEvent(deathEvent, nullptr);
         }
 
         // Update player stats if both are players
@@ -126,12 +112,12 @@ void CombatEventHandler::onEntityDied(EntityID victim, EntityID killer) {
             killerStats.sessionDate = sessionDate;
             killerStats.kills = 1;
             killerStats.deaths = 0;
-            killerStats.damageDealt = 0;  // Tracked separately
+            killerStats.damageDealt = 0;
             killerStats.damageTaken = 0;
             killerStats.longestKillStreak = 0;
             killerStats.currentKillStreak = 0;
 
-            scylla_->updatePlayerStats(killerStats, [killerName](bool success) {
+            scylla->updatePlayerStats(killerStats, [killerName](bool success) {
                 if (!success) {
                     std::cerr << "[SCYLLA] Failed to update stats for killer: " << killerName << std::endl;
                 }
@@ -148,7 +134,7 @@ void CombatEventHandler::onEntityDied(EntityID victim, EntityID killer) {
             victimStats.longestKillStreak = 0;
             victimStats.currentKillStreak = 0;
 
-            scylla_->updatePlayerStats(victimStats, [victimName](bool success) {
+            scylla->updatePlayerStats(victimStats, [victimName](bool success) {
                 if (!success) {
                     std::cerr << "[SCYLLA] Failed to update stats for victim: " << victimName << std::endl;
                 }
@@ -157,66 +143,38 @@ void CombatEventHandler::onEntityDied(EntityID victim, EntityID killer) {
     }
 
     // Schedule respawn
-    pendingRespawns_.push_back({victim, getCurrentTimeMs() + RESPAWN_DELAY_MS});
-}
-
-void CombatEventHandler::processRespawns() {
-    if (pendingRespawns_.empty()) return;
-
-    auto& registry = server_.getRegistry();
-    uint32_t currentTimeMs = getCurrentTimeMs();
-
-    // Process from back to front for safe removal during iteration
-    for (auto it = pendingRespawns_.begin(); it != pendingRespawns_.end(); ) {
-        if (currentTimeMs >= it->respawnTimeMs) {
-            EntityID entity = it->entity;
-
-            // Verify entity still exists
-            if (registry.valid(entity)) {
-                // Restore health
-                if (auto* stats = registry.try_get<CombatState>(entity)) {
-                    stats->health = stats->maxHealth;
-                }
-
-                // Teleport to spawn point (origin for now)
-                if (auto* pos = registry.try_get<Position>(entity)) {
-                    pos->x = 0.0f;
-                    pos->y = 0.0f;
-                    pos->z = 0.0f;
-                }
-
-                std::cout << "[ZONE " << server_.getConfig().zoneId << "] Entity "
-                          << static_cast<uint32_t>(entity) << " respawned" << std::endl;
-            }
-
-            it = pendingRespawns_.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    Position spawnPos = killLocation;
+    zone_.addPendingRespawn(victim, zone_.getCurrentTimeMs() + 5000, spawnPos);
 }
 
 void CombatEventHandler::sendCombatEvent(EntityID attacker, EntityID target, int16_t damage, const Position& location) {
-    if (!network_ || !entityToConnection_) return;
+    auto& network = zone_.getNetwork();
+    auto& entityToConnection = zone_.getEntityToConnection();
 
-    auto attackerConnIt = entityToConnection_->find(attacker);
-    auto targetConnIt = entityToConnection_->find(target);
-
+    // Send damage event to relevant clients
+#ifdef DARKAGES_HAS_PROTOBUF
     auto damageEvent = Netcode::ProtobufProtocol::createDamageEvent(
-        static_cast<uint32_t>(attacker),
-        static_cast<uint32_t>(target),
-        static_cast<int32_t>(damage)
-    );
-    damageEvent.set_timestamp(getCurrentTimeMs());
-    auto eventData = Netcode::ProtobufProtocol::serializeEvent(damageEvent);
+        static_cast<uint32_t>(attacker), static_cast<uint32_t>(target), damage);
+    auto data = Netcode::ProtobufProtocol::serializeEvent(damageEvent);
 
-    if (attackerConnIt != entityToConnection_->end()) {
-        network_->sendEvent(attackerConnIt->second, eventData);
+    // Send to target
+    auto targetConnIt = entityToConnection.find(target);
+    if (targetConnIt != entityToConnection.end()) {
+        network.sendEvent(targetConnIt->second, std::span<const uint8_t>(data.data(), data.size()));
     }
-    if (targetConnIt != entityToConnection_->end()) {
-        network_->sendEvent(targetConnIt->second, eventData);
+    // Send to attacker
+    auto attackerConnIt = entityToConnection.find(attacker);
+    if (attackerConnIt != entityToConnection.end()) {
+        network.sendEvent(attackerConnIt->second, std::span<const uint8_t>(data.data(), data.size()));
     }
+#else
+    (void)network;
+    (void)entityToConnection;
+#endif
 
+    (void)location;
+
+    // [DATABASE_AGENT] Log combat event to ScyllaDB for analytics
     HitResult hit;
     hit.hit = true;
     hit.target = target;
@@ -228,9 +186,11 @@ void CombatEventHandler::sendCombatEvent(EntityID attacker, EntityID target, int
 }
 
 void CombatEventHandler::logCombatEvent(const HitResult& hit, EntityID attacker, EntityID target) {
-    if (!scylla_ || !scylla_->isConnected()) return;
+    auto* scylla = zone_.getScylla();
+    if (!scylla || !scylla->isConnected()) return;
 
-    auto& registry = server_.getRegistry();
+    auto& registry = zone_.getRegistry();
+    auto& config = zone_.getConfig();
 
     // Get player IDs from PlayerInfo - use persistent IDs, not entity IDs
     uint64_t attackerPlayerId = 0;
@@ -253,130 +213,25 @@ void CombatEventHandler::logCombatEvent(const HitResult& hit, EntityID attacker,
     }
 
     CombatEvent event;
-    event.eventId = 0;  // Will be generated by UUID
-    event.timestamp = getCurrentTimeMs();
-    event.zoneId = server_.getConfig().zoneId;
+    event.eventId = 0;
+    event.timestamp = zone_.getCurrentTimeMs();
+    event.zoneId = config.zoneId;
     event.attackerId = attackerPlayerId;
     event.targetId = targetPlayerId;
     event.eventType = hit.hitType ? hit.hitType : "damage";
     event.damageAmount = hit.damageDealt;
     event.isCritical = hit.isCritical;
-    event.weaponType = "melee";  // NOTE: CombatState has no weapon field
+    event.weaponType = "melee";
     event.position = hit.hitLocation;
-    event.serverTick = server_.getCurrentTick();
+    event.serverTick = zone_.getCurrentTick();
 
-    scylla_->logCombatEvent(event, [attackerPlayerId, targetPlayerId, attackerName, targetName](bool success) {
+    scylla->logCombatEvent(event, [attackerPlayerId, targetPlayerId, attackerName, targetName](bool success) {
         if (!success) {
             std::cerr << "[SCYLLA] Failed to log combat event: "
                       << attackerName << "(" << attackerPlayerId << ") -> "
                       << targetName << "(" << targetPlayerId << ")" << std::endl;
         }
     });
-}
-
-void CombatEventHandler::processAttackInput(EntityID entity, const ClientInputPacket& input) {
-    auto& registry = server_.getRegistry();
-
-    // Build attack input from client data
-    AttackInput attackInput;
-    attackInput.type = AttackInput::MELEE;  // Default to melee
-    attackInput.sequence = input.input.sequence;
-    attackInput.timestamp = input.input.timestamp_ms;
-    attackInput.aimDirection = glm::vec3(
-        std::sin(input.input.yaw),
-        0.0f,  // Ignore pitch for horizontal aim
-        std::cos(input.input.yaw)
-    );
-
-    // Get RTT for lag compensation
-    uint32_t rttMs = 100;  // Default fallback
-    if (const NetworkState* netState = registry.try_get<NetworkState>(entity)) {
-        rttMs = netState->rttMs;
-        if (rttMs == 0) {
-            rttMs = 100;  // Assume 100ms if not measured yet
-        }
-    }
-
-    // Create lag-compensated attack
-    uint32_t oneWayLatency = rttMs / 2;
-    uint32_t clientTimestamp = (input.receiveTimeMs > oneWayLatency)
-        ? input.receiveTimeMs - oneWayLatency
-        : 0;
-
-    LagCompensatedAttack lagAttack;
-    lagAttack.attacker = entity;
-    lagAttack.input = attackInput;
-    lagAttack.clientTimestamp = clientTimestamp;
-    lagAttack.serverTimestamp = getCurrentTimeMs();
-    lagAttack.rttMs = rttMs;
-
-    // Process attack with lag compensation
-    if (!combatSystem_ || !lagCompensator_) return;
-
-    LagCompensatedCombat lagCombat(*combatSystem_, *lagCompensator_);
-    auto hits = lagCombat.processAttackWithRewind(registry, lagAttack);
-
-    // Send hit results to relevant clients
-    for (const auto& hit : hits) {
-        if (hit.hit) {
-            // [SECURITY_AGENT] Validate combat action for anti-cheat
-            if (antiCheat_) {
-                Position attackerPos{0, 0, 0, 0};
-                if (const Position* pos = registry.try_get<Position>(entity)) {
-                    attackerPos = *pos;
-                }
-
-                auto combatValidation = antiCheat_->validateCombat(entity, hit.target,
-                                                                   hit.damageDealt, hit.hitLocation,
-                                                                   attackerPos, registry);
-
-                if (combatValidation.detected) {
-                    std::cerr << "[ANTICHEAT] Combat validation failed: "
-                              << combatValidation.description << std::endl;
-
-                    if (combatValidation.severity == Security::ViolationSeverity::CRITICAL ||
-                        combatValidation.severity == Security::ViolationSeverity::BAN) {
-                        auto connIt = entityToConnection_->find(entity);
-                        if (connIt != entityToConnection_->end()) {
-                            network_->disconnect(connIt->second, combatValidation.description);
-                        }
-                        return;
-                    }
-                    continue;  // Skip applying this hit
-                }
-            }
-
-            // Send damage event to target
-            auto targetConnIt = entityToConnection_->find(hit.target);
-            if (targetConnIt != entityToConnection_->end()) {
-                auto damageEvent = Netcode::ProtobufProtocol::createDamageEvent(
-                    static_cast<uint32_t>(entity),
-                    static_cast<uint32_t>(hit.target),
-                    static_cast<int32_t>(hit.damageDealt)
-                );
-                damageEvent.set_timestamp(getCurrentTimeMs());
-                auto eventData = Netcode::ProtobufProtocol::serializeEvent(damageEvent);
-                network_->sendEvent(targetConnIt->second, eventData);
-                std::cerr << "[NETWORK] Sent damage event: " << hit.damageDealt
-                          << " to entity " << static_cast<uint32_t>(hit.target) << std::endl;
-            }
-
-            // Send hit confirmation to attacker
-            auto attackerConnIt = entityToConnection_->find(entity);
-            if (attackerConnIt != entityToConnection_->end()) {
-                auto hitConfirm = Netcode::ProtobufProtocol::createDamageEvent(
-                    static_cast<uint32_t>(entity),
-                    static_cast<uint32_t>(hit.target),
-                    static_cast<int32_t>(hit.damageDealt)
-                );
-                hitConfirm.set_timestamp(getCurrentTimeMs());
-                auto eventData = Netcode::ProtobufProtocol::serializeEvent(hitConfirm);
-                network_->sendEvent(attackerConnIt->second, eventData);
-                std::cerr << "[NETWORK] Sent hit confirmation: " << hit.damageDealt
-                          << " to attacker entity " << static_cast<uint32_t>(entity) << std::endl;
-            }
-        }
-    }
 }
 
 } // namespace DarkAges

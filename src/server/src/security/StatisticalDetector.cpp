@@ -426,7 +426,7 @@ float StatisticalDetector::calculateConfidence(uint32_t sampleCount) const {
     uint32_t samplesForFull = config_.samplesForFullConfidence - config_.minSamplesForConfidence;
     
     float additionalConfidence = std::min(1.0f, 
-        static_cast<float>(excessSamples) / static_cast<float>(samplesForFullConfidence));
+        static_cast<float>(excessSamples) / static_cast<float>(samplesForFull));
     
     return 0.25f + additionalConfidence * 0.75f;
 }

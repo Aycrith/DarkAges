@@ -2,6 +2,7 @@
 // Statistical anomaly detection system tests
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include "security/StatisticalDetector.hpp"
 #include "ecs/CoreTypes.hpp"
 #include "Constants.hpp"
@@ -257,7 +258,7 @@ TEST_CASE("StatisticalDetector teleport detection", "[security][statistics]") {
         Position pos2 = makePosition(3, 4, 0, 16); // 3-4-5 triangle = 5 units
         float delta = detector.calculatePositionDelta(playerId, pos2);
         
-        REQUIRE(delta == Approx(5.0f).margin(0.1f));
+        REQUIRE(delta == Catch::Approx(5.0f).margin(0.1f));
     }
     
     SECTION("Consecutive teleports increase anomaly score") {
@@ -273,7 +274,7 @@ TEST_CASE("StatisticalDetector teleport detection", "[security][statistics]") {
         
         AnomalyScore score = detector.getAnomalyScore(playerId);
         REQUIRE(score.positionAnomaly);
-        REQUIRE(score.positionAnomalyCount >= 3);
+        REQUIRE(score.totalAnomalyCount >= 3);
     }
 }
 
@@ -445,7 +446,7 @@ TEST_CASE("StatisticalDetector memory management", "[security][statistics]") {
         // Scores should be independent
         AnomalyScore score1 = detector.getAnomalyScore(1);
         AnomalyScore score5 = detector.getAnomalyScore(5);
-        REQUIRE(score1.confidence == Approx(score5.confidence).margin(0.01f));
+        REQUIRE(score1.confidence == Catch::Approx(score5.confidence).margin(0.01f));
     }
     
     SECTION("Remove player clears data") {
