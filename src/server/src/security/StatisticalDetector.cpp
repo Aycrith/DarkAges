@@ -171,6 +171,21 @@ void StatisticalDetector::recordHitAttempt(uint64_t playerId, bool hitLanded,
     } else {
         stats.emaAccuracy = updateEMA(stats.emaAccuracy, currentAccuracy, config_.emaAlpha);
     }
+    
+    // Check for accuracy anomaly after updating EMA
+    bool accuracyAnomaly = false;
+    if (stats.hitsAttempted >= 10 && stats.emaAccuracy > config_.suspiciousAccuracyThreshold) {
+        accuracyAnomaly = true;
+    }
+    
+    // Update accuracy anomaly counter
+    if (accuracyAnomaly) {
+        stats.accuracyAnomalyCount = std::min(stats.accuracyAnomalyCount + 1, 10u);
+        stats.lastAccuracyAnomalyMs = timestampMs;
+    } else if (timestampMs - stats.lastAccuracyAnomalyMs > 5000 && 
+               stats.accuracyAnomalyCount > 0) {
+        --stats.accuracyAnomalyCount;
+    }
 }
 
 AnomalyScore StatisticalDetector::getAnomalyScore(uint64_t playerId) const {
