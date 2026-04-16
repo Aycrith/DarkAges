@@ -252,4 +252,40 @@ bool applyDeltaSnapshot(
 
 } // namespace Protocol
 
+// ============================================================================
+// DeltaEncoding Stub Implementation
+// ============================================================================
+
+namespace Protocol {
+namespace DeltaEncoding {
+
+size_t encodePositionDelta(uint8_t* buffer, size_t bufferSize,
+                           const Position& current, const Position& baseline) {
+    if (bufferSize < 12) return 0;
+    // Simple fixed-size encoding: 3 floats = 12 bytes
+    int32_t dx = current.x - baseline.x;
+    int32_t dy = current.y - baseline.y;
+    int32_t dz = current.z - baseline.z;
+    std::memcpy(buffer, &dx, 4);
+    std::memcpy(buffer + 4, &dy, 4);
+    std::memcpy(buffer + 8, &dz, 4);
+    return 12;
+}
+
+size_t decodePositionDelta(const uint8_t* buffer, size_t bufferSize,
+                           Position& outPosition, const Position& baseline) {
+    if (bufferSize < 12) return 0;
+    int32_t dx, dy, dz;
+    std::memcpy(&dx, buffer, 4);
+    std::memcpy(&dy, buffer + 4, 4);
+    std::memcpy(&dz, buffer + 8, 4);
+    outPosition.x = baseline.x + dx;
+    outPosition.y = baseline.y + dy;
+    outPosition.z = baseline.z + dz;
+    return 12;
+}
+
+} // namespace DeltaEncoding
+} // namespace Protocol
+
 } // namespace DarkAges

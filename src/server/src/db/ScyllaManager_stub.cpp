@@ -16,6 +16,7 @@ bool ScyllaManager::initialize(const std::string&, uint16_t) { return true; }
 void ScyllaManager::shutdown() {}
 void ScyllaManager::update() {}
 bool ScyllaManager::isConnected() const { return true; }
+
 void ScyllaManager::logCombatEvent(const CombatEvent&, WriteCallback) {}
 void ScyllaManager::logCombatEventsBatch(const std::vector<CombatEvent>&, WriteCallback) {}
 void ScyllaManager::logAntiCheatEvent(const AntiCheatEvent&, WriteCallback) {}
@@ -30,5 +31,8 @@ void ScyllaManager::getTopKillers(uint32_t, uint32_t, uint32_t, int,
     std::function<void(bool, const std::vector<std::pair<uint64_t, uint32_t>>&)>) {}
 void ScyllaManager::getKillFeed(uint32_t, int,
     std::function<void(bool, const std::vector<CombatEvent>&)>) {}
+
+void ScyllaManager::processBatch() {}
+void ScyllaManager::executeQuery(const std::string&, WriteCallback) {}
 
 } // namespace DarkAges

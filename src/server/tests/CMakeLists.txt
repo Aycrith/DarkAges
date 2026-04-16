@@ -36,6 +36,15 @@ set(TEST_SOURCES
     TestDDoSProtection.cpp
     TestRedisIntegration.cpp
     BenchmarkRedis.cpp
+    TestAntiCheat.cpp
+    TestPacketValidator.cpp
+    TestPacketIntegrity.cpp
+    TestStatisticalDetector.cpp
+    TestCrossZoneMessenger.cpp
+    TestPlayerManager.cpp
+    TestZoneHandoff.cpp
+    TestAuraZoneHandler.cpp
+    TestCombatEventHandler.cpp
 )
 
 # Server sources needed for tests (excluding main.cpp)
@@ -53,6 +62,11 @@ set(TEST_SERVER_SOURCES
     ${CMAKE_SOURCE_DIR}/src/zones/AreaOfInterest.cpp
     ${CMAKE_SOURCE_DIR}/src/zones/AuraProjection.cpp
     ${CMAKE_SOURCE_DIR}/src/zones/EntityMigration.cpp
+    ${CMAKE_SOURCE_DIR}/src/zones/CrossZoneMessenger.cpp
+    ${CMAKE_SOURCE_DIR}/src/zones/ZoneHandoff.cpp
+    ${CMAKE_SOURCE_DIR}/src/zones/AuraZoneHandler.cpp
+    ${CMAKE_SOURCE_DIR}/src/zones/CombatEventHandler.cpp
+    ${CMAKE_SOURCE_DIR}/src/zones/PlayerManager.cpp
     ${CMAKE_SOURCE_DIR}/src/combat/PositionHistory.cpp
     ${CMAKE_SOURCE_DIR}/src/combat/CombatSystem.cpp
     ${CMAKE_SOURCE_DIR}/src/combat/LagCompensatedCombat.cpp
@@ -65,6 +79,11 @@ set(TEST_SERVER_SOURCES
     ${CMAKE_SOURCE_DIR}/src/security/InputValidator.cpp
     ${CMAKE_SOURCE_DIR}/src/security/ConnectionThrottler.cpp
     ${CMAKE_SOURCE_DIR}/src/security/TrafficAnalyzer.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/PacketValidator.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/PacketIntegrity.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/StatisticalDetector.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/MovementValidator.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/ViolationTracker.cpp
     ${CMAKE_SOURCE_DIR}/src/monitoring/MetricsExporter.cpp
 )
 

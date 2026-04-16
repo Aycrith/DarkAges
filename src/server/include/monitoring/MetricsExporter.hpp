@@ -7,7 +7,9 @@
 #include <sstream>
 #include <atomic>
 #include <mutex>
+#include <thread>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <unordered_map>
 #include <memory>
