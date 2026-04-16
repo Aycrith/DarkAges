@@ -320,13 +320,6 @@ private:
     ZoneDefinition* lookupZone(uint32_t zoneId);
     uint32_t findZoneByPosition(float x, float z);
 
-    // Respawn system
-    struct PendingRespawn {
-        EntityID entity;
-        uint32_t respawnTimeMs;
-    };
-    std::vector<PendingRespawn> pendingRespawns_;
-    static constexpr uint32_t RESPAWN_DELAY_MS = 5000;  // 5 second respawn delay
     void processRespawns();
 };
 
