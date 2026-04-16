@@ -247,8 +247,126 @@ std::vector<uint8_t> ProtobufProtocol::serializePong(
 }
 
 // =========================================================================
-// Top-Level Message Wrapper
+// Top-Level Message Wrapper (oneof-based wrapping)
 // =========================================================================
+
+std::vector<uint8_t> ProtobufProtocol::serializeNetworkMessage(
+    const NetworkProto::NetworkMessage& msg
+) {
+    std::vector<uint8_t> buffer(msg.ByteSizeLong());
+    msg.SerializeToArray(buffer.data(), static_cast<int>(buffer.size()));
+    return buffer;
+}
+
+std::vector<uint8_t> ProtobufProtocol::wrapClientInput(
+    const NetworkProto::ClientInput& input,
+    uint32_t sequence
+) {
+    NetworkProto::NetworkMessage msg;
+    msg.set_type(NetworkProto::NetworkMessage::CLIENT_INPUT);
+    msg.set_sequence(sequence);
+    *msg.mutable_client_input() = input;
+    return serializeNetworkMessage(msg);
+}
+
+std::vector<uint8_t> ProtobufProtocol::wrapReliableEvent(
+    const NetworkProto::ReliableEvent& event,
+    uint32_t sequence
+) {
+    NetworkProto::NetworkMessage msg;
+    msg.set_type(NetworkProto::NetworkMessage::RELIABLE_EVENT);
+    msg.set_sequence(sequence);
+    *msg.mutable_reliable_event() = event;
+    return serializeNetworkMessage(msg);
+}
+
+std::vector<uint8_t> ProtobufProtocol::wrapHandshake(
+    const NetworkProto::Handshake& handshake,
+    uint32_t sequence
+) {
+    NetworkProto::NetworkMessage msg;
+    msg.set_type(NetworkProto::NetworkMessage::HANDSHAKE);
+    msg.set_sequence(sequence);
+    *msg.mutable_handshake() = handshake;
+    return serializeNetworkMessage(msg);
+}
+
+std::vector<uint8_t> ProtobufProtocol::wrapHandshakeResponse(
+    const NetworkProto::HandshakeResponse& response,
+    uint32_t sequence
+) {
+    NetworkProto::NetworkMessage msg;
+    msg.set_type(NetworkProto::NetworkMessage::HANDSHAKE_RESPONSE);
+    msg.set_sequence(sequence);
+    *msg.mutable_handshake_response() = response;
+    return serializeNetworkMessage(msg);
+}
+
+std::vector<uint8_t> ProtobufProtocol::wrapServerSnapshot(
+    const NetworkProto::ServerSnapshot& snapshot,
+    uint32_t sequence
+) {
+    NetworkProto::NetworkMessage msg;
+    msg.set_type(NetworkProto::NetworkMessage::SERVER_SNAPSHOT);
+    msg.set_sequence(sequence);
+    *msg.mutable_server_snapshot() = snapshot;
+    return serializeNetworkMessage(msg);
+}
+
+std::vector<uint8_t> ProtobufProtocol::wrapServerCorrection(
+    const NetworkProto::ServerCorrection& correction,
+    uint32_t sequence
+) {
+    NetworkProto::NetworkMessage msg;
+    msg.set_type(NetworkProto::NetworkMessage::SERVER_CORRECTION);
+    msg.set_sequence(sequence);
+    *msg.mutable_server_correction() = correction;
+    return serializeNetworkMessage(msg);
+}
+
+std::vector<uint8_t> ProtobufProtocol::wrapServerConfig(
+    const NetworkProto::ServerConfig& config,
+    uint32_t sequence
+) {
+    NetworkProto::NetworkMessage msg;
+    msg.set_type(NetworkProto::NetworkMessage::SERVER_CONFIG);
+    msg.set_sequence(sequence);
+    *msg.mutable_server_config() = config;
+    return serializeNetworkMessage(msg);
+}
+
+std::vector<uint8_t> ProtobufProtocol::wrapPing(
+    const NetworkProto::Ping& ping,
+    uint32_t sequence
+) {
+    NetworkProto::NetworkMessage msg;
+    msg.set_type(NetworkProto::NetworkMessage::PING);
+    msg.set_sequence(sequence);
+    *msg.mutable_ping() = ping;
+    return serializeNetworkMessage(msg);
+}
+
+std::vector<uint8_t> ProtobufProtocol::wrapPong(
+    const NetworkProto::Pong& pong,
+    uint32_t sequence
+) {
+    NetworkProto::NetworkMessage msg;
+    msg.set_type(NetworkProto::NetworkMessage::PONG);
+    msg.set_sequence(sequence);
+    *msg.mutable_pong() = pong;
+    return serializeNetworkMessage(msg);
+}
+
+std::vector<uint8_t> ProtobufProtocol::wrapDisconnect(
+    const NetworkProto::Disconnect& disconnect,
+    uint32_t sequence
+) {
+    NetworkProto::NetworkMessage msg;
+    msg.set_type(NetworkProto::NetworkMessage::DISCONNECT);
+    msg.set_sequence(sequence);
+    *msg.mutable_disconnect() = disconnect;
+    return serializeNetworkMessage(msg);
+}
 
 std::optional<NetworkProto::NetworkMessage> ProtobufProtocol::unwrapMessage(
     std::span<const uint8_t> data
@@ -258,6 +376,12 @@ std::optional<NetworkProto::NetworkMessage> ProtobufProtocol::unwrapMessage(
         return wrapper;
     }
     return std::nullopt;
+}
+
+NetworkProto::NetworkMessage::MessageType ProtobufProtocol::getPayloadType(
+    const NetworkProto::NetworkMessage& msg
+) {
+    return msg.type();
 }
 
 // =========================================================================

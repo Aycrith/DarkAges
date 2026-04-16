@@ -137,12 +137,82 @@ public:
     );
 
     // =========================================================================
-    // Top-Level Message Wrapper (TODO: Implement oneof-based wrapping)
+    // Top-Level Message Wrapper (oneof-based wrapping)
     // =========================================================================
-    
+
+    // Wrap a ClientInput into a NetworkMessage envelope
+    static std::vector<uint8_t> wrapClientInput(
+        const NetworkProto::ClientInput& input,
+        uint32_t sequence = 0
+    );
+
+    // Wrap a ReliableEvent into a NetworkMessage envelope
+    static std::vector<uint8_t> wrapReliableEvent(
+        const NetworkProto::ReliableEvent& event,
+        uint32_t sequence = 0
+    );
+
+    // Wrap a Handshake into a NetworkMessage envelope
+    static std::vector<uint8_t> wrapHandshake(
+        const NetworkProto::Handshake& handshake,
+        uint32_t sequence = 0
+    );
+
+    // Wrap a HandshakeResponse into a NetworkMessage envelope
+    static std::vector<uint8_t> wrapHandshakeResponse(
+        const NetworkProto::HandshakeResponse& response,
+        uint32_t sequence = 0
+    );
+
+    // Wrap a ServerSnapshot into a NetworkMessage envelope
+    static std::vector<uint8_t> wrapServerSnapshot(
+        const NetworkProto::ServerSnapshot& snapshot,
+        uint32_t sequence = 0
+    );
+
+    // Wrap a ServerCorrection into a NetworkMessage envelope
+    static std::vector<uint8_t> wrapServerCorrection(
+        const NetworkProto::ServerCorrection& correction,
+        uint32_t sequence = 0
+    );
+
+    // Wrap a ServerConfig into a NetworkMessage envelope
+    static std::vector<uint8_t> wrapServerConfig(
+        const NetworkProto::ServerConfig& config,
+        uint32_t sequence = 0
+    );
+
+    // Wrap a Ping into a NetworkMessage envelope
+    static std::vector<uint8_t> wrapPing(
+        const NetworkProto::Ping& ping,
+        uint32_t sequence = 0
+    );
+
+    // Wrap a Pong into a NetworkMessage envelope
+    static std::vector<uint8_t> wrapPong(
+        const NetworkProto::Pong& pong,
+        uint32_t sequence = 0
+    );
+
+    // Wrap a Disconnect into a NetworkMessage envelope
+    static std::vector<uint8_t> wrapDisconnect(
+        const NetworkProto::Disconnect& disconnect,
+        uint32_t sequence = 0
+    );
+
+    // Generic: wrap any NetworkMessage and serialize to bytes
+    static std::vector<uint8_t> serializeNetworkMessage(
+        const NetworkProto::NetworkMessage& msg
+    );
+
     // Unwrap a NetworkMessage envelope
     static std::optional<NetworkProto::NetworkMessage> unwrapMessage(
         std::span<const uint8_t> data
+    );
+
+    // Extract payload type from a NetworkMessage
+    static NetworkProto::NetworkMessage::MessageType getPayloadType(
+        const NetworkProto::NetworkMessage& msg
     );
 
     // =========================================================================

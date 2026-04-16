@@ -35,6 +35,9 @@ set(TEST_SOURCES
     TestMetricsExporter.cpp
     TestDDoSProtection.cpp
     TestRedisIntegration.cpp
+    TestCombatEventHandler.cpp
+    TestAuraZoneHandler.cpp
+    TestSecuritySubsystems.cpp
     BenchmarkRedis.cpp
 )
 
@@ -53,6 +56,12 @@ set(TEST_SERVER_SOURCES
     ${CMAKE_SOURCE_DIR}/src/zones/AreaOfInterest.cpp
     ${CMAKE_SOURCE_DIR}/src/zones/AuraProjection.cpp
     ${CMAKE_SOURCE_DIR}/src/zones/EntityMigration.cpp
+    ${CMAKE_SOURCE_DIR}/src/zones/CrossZoneMessenger.cpp
+    ${CMAKE_SOURCE_DIR}/src/zones/PlayerManager.cpp
+    ${CMAKE_SOURCE_DIR}/src/zones/CombatEventHandler.cpp
+    ${CMAKE_SOURCE_DIR}/src/zones/AuraZoneHandler.cpp
+    ${CMAKE_SOURCE_DIR}/src/zones/InputHandler.cpp
+    ${CMAKE_SOURCE_DIR}/src/zones/PerformanceHandler.cpp
     ${CMAKE_SOURCE_DIR}/src/combat/PositionHistory.cpp
     ${CMAKE_SOURCE_DIR}/src/combat/CombatSystem.cpp
     ${CMAKE_SOURCE_DIR}/src/combat/LagCompensatedCombat.cpp
@@ -60,6 +69,8 @@ set(TEST_SERVER_SOURCES
     ${CMAKE_SOURCE_DIR}/src/memory/MemoryPool.cpp
     ${CMAKE_SOURCE_DIR}/src/memory/LeakDetector.cpp
     ${CMAKE_SOURCE_DIR}/src/security/AntiCheat.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/MovementValidator.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/ViolationTracker.cpp
     ${CMAKE_SOURCE_DIR}/src/security/DDoSProtection.cpp
     ${CMAKE_SOURCE_DIR}/src/security/CircuitBreaker.cpp
     ${CMAKE_SOURCE_DIR}/src/security/InputValidator.cpp

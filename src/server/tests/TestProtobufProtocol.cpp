@@ -613,6 +613,215 @@ TEST_CASE("ProtobufProtocol message unwrapping", "[network][protobuf]") {
     }
 }
 
+TEST_CASE("ProtobufProtocol message wrapping (oneof)", "[network][protobuf]") {
+
+    SECTION("Wrap and unwrap ClientInput roundtrip") {
+        NP::ClientInput input;
+        input.set_sequence(42);
+        input.set_timestamp(1000);
+        input.set_input_flags(0xFF);
+        input.set_yaw(1.5f);
+        input.set_pitch(-0.5f);
+        input.set_target_entity(99);
+
+        auto data = ProtobufProtocol::wrapClientInput(input, 7);
+        REQUIRE_FALSE(data.empty());
+
+        auto msg = ProtobufProtocol::unwrapMessage(data);
+        REQUIRE(msg.has_value());
+        REQUIRE(msg->type() == NP::NetworkMessage::CLIENT_INPUT);
+        REQUIRE(msg->sequence() == 7);
+        REQUIRE(msg->client_input().sequence() == 42);
+        REQUIRE(msg->client_input().timestamp() == 1000);
+        REQUIRE(msg->client_input().input_flags() == 0xFF);
+        REQUIRE(msg->client_input().yaw() == Catch::Approx(1.5f));
+        REQUIRE(msg->client_input().pitch() == Catch::Approx(-0.5f));
+        REQUIRE(msg->client_input().target_entity() == 99);
+    }
+
+    SECTION("Wrap and unwrap ReliableEvent roundtrip") {
+        auto event = ProtobufProtocol::createDamageEvent(10, 20, 500, 42);
+        auto data = ProtobufProtocol::wrapReliableEvent(event, 3);
+        REQUIRE_FALSE(data.empty());
+
+        auto msg = ProtobufProtocol::unwrapMessage(data);
+        REQUIRE(msg.has_value());
+        REQUIRE(msg->type() == NP::NetworkMessage::RELIABLE_EVENT);
+        REQUIRE(msg->sequence() == 3);
+        REQUIRE(msg->reliable_event().type() == NP::ReliableEvent::DAMAGE_DEALT);
+        REQUIRE(msg->reliable_event().source_entity() == 10);
+        REQUIRE(msg->reliable_event().target_entity() == 20);
+        REQUIRE(msg->reliable_event().value() == 500);
+    }
+
+    SECTION("Wrap and unwrap Handshake roundtrip") {
+        auto hs = ProtobufProtocol::createHandshake(1, 100, "auth-token", "Player1");
+        auto data = ProtobufProtocol::wrapHandshake(hs, 1);
+        REQUIRE_FALSE(data.empty());
+
+        auto msg = ProtobufProtocol::unwrapMessage(data);
+        REQUIRE(msg.has_value());
+        REQUIRE(msg->type() == NP::NetworkMessage::HANDSHAKE);
+        REQUIRE(msg->sequence() == 1);
+        REQUIRE(msg->handshake().protocol_version() == 1);
+        REQUIRE(msg->handshake().auth_token() == "auth-token");
+        REQUIRE(msg->handshake().username() == "Player1");
+    }
+
+    SECTION("Wrap and unwrap HandshakeResponse roundtrip") {
+        auto resp = ProtobufProtocol::createHandshakeResponse(
+            true, 500, 42, 10.0f, 0.0f, 20.0f
+        );
+        auto data = ProtobufProtocol::wrapHandshakeResponse(resp, 2);
+        REQUIRE_FALSE(data.empty());
+
+        auto msg = ProtobufProtocol::unwrapMessage(data);
+        REQUIRE(msg.has_value());
+        REQUIRE(msg->type() == NP::NetworkMessage::HANDSHAKE_RESPONSE);
+        REQUIRE(msg->sequence() == 2);
+        REQUIRE(msg->handshake_response().accepted() == true);
+        REQUIRE(msg->handshake_response().your_entity_id() == 42);
+        REQUIRE(msg->handshake_response().spawn_x() == Catch::Approx(10.0f));
+    }
+
+    SECTION("Wrap and unwrap ServerSnapshot roundtrip") {
+        auto snapshot = ProtobufProtocol::buildServerSnapshot(100, 90);
+        EntityState entity{};
+        entity.id = 5;
+        entity.type = EntityType::PLAYER;
+        entity.position.x = 10.0f;
+        ProtobufProtocol::addEntityToSnapshot(snapshot, entity);
+
+        auto data = ProtobufProtocol::wrapServerSnapshot(snapshot, 8);
+        REQUIRE_FALSE(data.empty());
+
+        auto msg = ProtobufProtocol::unwrapMessage(data);
+        REQUIRE(msg.has_value());
+        REQUIRE(msg->type() == NP::NetworkMessage::SERVER_SNAPSHOT);
+        REQUIRE(msg->sequence() == 8);
+        REQUIRE(msg->server_snapshot().server_tick() == 100);
+        REQUIRE(msg->server_snapshot().entities_size() == 1);
+    }
+
+    SECTION("Wrap and unwrap ServerCorrection roundtrip") {
+        NP::ServerCorrection correction;
+        correction.set_server_tick(500);
+        correction.set_last_processed_input(499);
+        correction.set_pos_x(static_cast<int32_t>(10.0f * 64.0f));
+        correction.set_pos_z(static_cast<int32_t>(20.0f * 64.0f));
+
+        auto data = ProtobufProtocol::wrapServerCorrection(correction, 5);
+        REQUIRE_FALSE(data.empty());
+
+        auto msg = ProtobufProtocol::unwrapMessage(data);
+        REQUIRE(msg.has_value());
+        REQUIRE(msg->type() == NP::NetworkMessage::SERVER_CORRECTION);
+        REQUIRE(msg->sequence() == 5);
+        REQUIRE(msg->server_correction().server_tick() == 500);
+        REQUIRE(msg->server_correction().last_processed_input() == 499);
+    }
+
+    SECTION("Wrap and unwrap ServerConfig roundtrip") {
+        NP::ServerConfig config;
+        config.set_tick_rate(60);
+        config.set_world_min_x(-5000.0f);
+        config.set_world_max_x(5000.0f);
+        config.set_max_players(1000);
+        config.set_motd("Welcome to DarkAges");
+
+        auto data = ProtobufProtocol::wrapServerConfig(config, 0);
+        REQUIRE_FALSE(data.empty());
+
+        auto msg = ProtobufProtocol::unwrapMessage(data);
+        REQUIRE(msg.has_value());
+        REQUIRE(msg->type() == NP::NetworkMessage::SERVER_CONFIG);
+        REQUIRE(msg->server_config().tick_rate() == 60);
+        REQUIRE(msg->server_config().motd() == "Welcome to DarkAges");
+    }
+
+    SECTION("Wrap and unwrap Ping roundtrip") {
+        NP::Ping ping;
+        ping.set_client_timestamp(1234567);
+
+        auto data = ProtobufProtocol::wrapPing(ping, 100);
+        REQUIRE_FALSE(data.empty());
+
+        auto msg = ProtobufProtocol::unwrapMessage(data);
+        REQUIRE(msg.has_value());
+        REQUIRE(msg->type() == NP::NetworkMessage::PING);
+        REQUIRE(msg->sequence() == 100);
+        REQUIRE(msg->ping().client_timestamp() == 1234567);
+    }
+
+    SECTION("Wrap and unwrap Pong roundtrip") {
+        NP::Pong pong;
+        pong.set_client_timestamp(1000);
+        pong.set_server_timestamp(1500);
+
+        auto data = ProtobufProtocol::wrapPong(pong, 101);
+        REQUIRE_FALSE(data.empty());
+
+        auto msg = ProtobufProtocol::unwrapMessage(data);
+        REQUIRE(msg.has_value());
+        REQUIRE(msg->type() == NP::NetworkMessage::PONG);
+        REQUIRE(msg->sequence() == 101);
+        REQUIRE(msg->pong().client_timestamp() == 1000);
+        REQUIRE(msg->pong().server_timestamp() == 1500);
+    }
+
+    SECTION("Wrap and unwrap Disconnect roundtrip") {
+        NP::Disconnect disc;
+        disc.set_reason(NP::Disconnect::KICKED);
+        disc.set_message("Violation detected");
+
+        auto data = ProtobufProtocol::wrapDisconnect(disc, 999);
+        REQUIRE_FALSE(data.empty());
+
+        auto msg = ProtobufProtocol::unwrapMessage(data);
+        REQUIRE(msg.has_value());
+        REQUIRE(msg->type() == NP::NetworkMessage::DISCONNECT);
+        REQUIRE(msg->sequence() == 999);
+        REQUIRE(msg->disconnect().reason() == NP::Disconnect::KICKED);
+        REQUIRE(msg->disconnect().message() == "Violation detected");
+    }
+
+    SECTION("Default sequence is zero") {
+        auto event = ProtobufProtocol::createPlayerDeathEvent(50, 60);
+        auto data = ProtobufProtocol::wrapReliableEvent(event);
+        auto msg = ProtobufProtocol::unwrapMessage(data);
+        REQUIRE(msg.has_value());
+        REQUIRE(msg->sequence() == 0);
+    }
+
+    SECTION("getPayloadType returns correct type") {
+        auto ping = ProtobufProtocol::serializePing(42);
+        auto pingData = ProtobufProtocol::wrapPing(
+            [](){ NP::Ping p; p.set_client_timestamp(42); return p; }(), 1
+        );
+        auto msg = ProtobufProtocol::unwrapMessage(pingData);
+        REQUIRE(msg.has_value());
+        REQUIRE(ProtobufProtocol::getPayloadType(*msg) == NP::NetworkMessage::PING);
+    }
+
+    SECTION("serializeNetworkMessage produces same bytes as wrap*") {
+        // Verify serializeNetworkMessage is consistent with wrapClientInput
+        NP::ClientInput input;
+        input.set_sequence(10);
+        input.set_timestamp(2000);
+        input.set_input_flags(0x0F);
+
+        auto viaWrap = ProtobufProtocol::wrapClientInput(input, 5);
+
+        NP::NetworkMessage manual;
+        manual.set_type(NP::NetworkMessage::CLIENT_INPUT);
+        manual.set_sequence(5);
+        *manual.mutable_client_input() = input;
+        auto viaManual = ProtobufProtocol::serializeNetworkMessage(manual);
+
+        REQUIRE(viaWrap == viaManual);
+    }
+}
+
 // ============================================================================
 // Bandwidth Optimization Tests
 // ============================================================================
