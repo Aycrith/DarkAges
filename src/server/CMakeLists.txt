@@ -55,17 +55,17 @@ if(NOT HIREDIS_FOUND)
     set(REDIS_AVAILABLE FALSE)
 endif()
 
-# Source files
+# Source files - conditionally include based on dependencies
 set(SERVER_SOURCES
     src/main.cpp
     src/ecs/CoreTypes.cpp
     src/physics/SpatialHash.cpp
     src/physics/MovementSystem.cpp
-    src/netcode/NetworkManager.cpp
-    src/db/RedisManager.cpp
-    src/db/ConnectionPool.cpp
-    src/db/ScyllaManager.cpp
     src/zones/ZoneServer.cpp
+    src/zones/InputHandler.cpp
+    src/zones/PerformanceHandler.cpp
+    src/zones/CombatEventHandler.cpp
+    src/zones/AuraZoneHandler.cpp
     src/zones/ZoneOrchestrator.cpp
     src/zones/ReplicationOptimizer.cpp
     src/zones/AreaOfInterest.cpp
@@ -73,9 +73,6 @@ set(SERVER_SOURCES
     src/zones/EntityMigration.cpp
     src/zones/CrossZoneMessenger.cpp
     src/zones/ZoneHandoff.cpp
-    src/zones/AuraZoneHandler.cpp
-    src/zones/CombatEventHandler.cpp
-    src/zones/PlayerManager.cpp
     src/combat/PositionHistory.cpp
     src/combat/CombatSystem.cpp
     src/combat/LagCompensatedCombat.cpp
@@ -85,17 +82,31 @@ set(SERVER_SOURCES
     src/memory/LeakDetector.cpp
     src/security/AntiCheat.cpp
     src/security/DDoSProtection.cpp
-    src/security/CircuitBreaker.cpp
-    src/security/InputValidator.cpp
-    src/security/ConnectionThrottler.cpp
-    src/security/TrafficAnalyzer.cpp
     src/security/PacketValidator.cpp
-    src/security/PacketIntegrity.cpp
-    src/security/StatisticalDetector.cpp
-    src/security/MovementValidator.cpp
-    src/security/ViolationTracker.cpp
     src/monitoring/MetricsExporter.cpp
 )
+
+# Network manager: use stub if GNS not available
+if(GNS_AVAILABLE)
+    list(APPEND SERVER_SOURCES
+        src/netcode/NetworkManager.cpp
+        src/netcode/Protocol.cpp
+    )
+else()
+    list(APPEND SERVER_SOURCES
+        src/netcode/NetworkManager_stub.cpp
+    )
+endif()
+
+# Redis: use stub if hiredis not available
+if(REDIS_AVAILABLE)
+    list(APPEND SERVER_SOURCES src/db/RedisManager.cpp)
+else()
+    list(APPEND SERVER_SOURCES src/db/RedisManager_stub.cpp)
+endif()
+
+# Scylla: always use stub for now (no driver detection)
+list(APPEND SERVER_SOURCES src/db/ScyllaManager_stub.cpp)
 
 # Header files
 set(SERVER_HEADERS
@@ -104,9 +115,7 @@ set(SERVER_HEADERS
     include/physics/SpatialHash.hpp
     include/physics/MovementSystem.hpp
     include/netcode/NetworkManager.hpp
-    include/netcode/Protocol.hpp
     include/db/RedisManager.hpp
-    include/db/ConnectionPool.hpp
     include/db/ScyllaManager.hpp
     include/zones/ZoneServer.hpp
     include/zones/ZoneDefinition.hpp
@@ -117,9 +126,6 @@ set(SERVER_HEADERS
     include/zones/EntityMigration.hpp
     include/zones/CrossZoneMessenger.hpp
     include/zones/ZoneHandoff.hpp
-    include/zones/AuraZoneHandler.hpp
-    include/zones/CombatEventHandler.hpp
-    include/zones/PlayerManager.hpp
     include/combat/PositionHistory.hpp
     include/combat/CombatSystem.hpp
     include/combat/LagCompensatedCombat.hpp
@@ -133,18 +139,13 @@ set(SERVER_HEADERS
     include/Constants.hpp
     include/security/AntiCheat.hpp
     include/security/AntiCheatConfig.hpp
-    include/security/AntiCheatTypes.hpp
     include/security/DDoSProtection.hpp
-    include/security/CircuitBreaker.hpp
-    include/security/InputValidator.hpp
-    include/security/TrafficAnalyzer.hpp
-    include/security/RateLimiter.hpp
     include/security/PacketValidator.hpp
-    include/security/PacketIntegrity.hpp
-    include/security/StatisticalDetector.hpp
-    include/security/MovementValidator.hpp
-    include/security/ViolationTracker.hpp
-    include/monitoring/MetricsExporter.hpp
+    include/security/RateLimiter.hpp
+    include/zones/InputHandler.hpp
+    include/zones/PerformanceHandler.hpp
+    include/zones/CombatEventHandler.hpp
+    include/zones/AuraZoneHandler.hpp
 )
 
 # Main executable
