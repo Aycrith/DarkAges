@@ -5,6 +5,21 @@ All autonomous improvements tracked here. Most recent first.
 
 ---
 
+### ✅ 2026-04-15 — AntiCheat Refactor: Extract MovementValidator and ViolationTracker
+- **Task:** Refactor AntiCheat.cpp (922 lines) by extracting logically cohesive groups into separate classes/files
+- **Status:** SUCCESS
+- **Branch:** `autonomous/anticheat-refactor`
+- **Changes:** 8 files, +1106/-877 lines. Extracted 3 new files:
+  - `AntiCheatTypes.hpp` (152 lines) - shared enums, structs, callbacks (breaks circular dependency)
+  - `MovementValidator.hpp/.cpp` (478 lines) - speed/teleport/fly/noclip detection + position helpers
+  - `ViolationTracker.hpp/.cpp` (281 lines) - profile management, trust scores, ban/kick, statistics
+- **AntiCheat reduction:** .hpp 403→195 (52%), .cpp 922→446 (52%)
+- **Architecture:** AntiCheatSystem now a facade delegating to MovementValidator + ViolationTracker
+- **Validation:** Build PASS, Tests PASS (190 passed, 10 skipped Redis)
+- **Public API:** Unchanged - zero test modifications needed
+
+---
+
 ### ✅ 2026-04-16 — PlayerManager Unit Tests
 - **Task:** Add unit tests for PlayerManager
 - **Status:** SUCCESS

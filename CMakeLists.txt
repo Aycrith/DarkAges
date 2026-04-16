@@ -442,6 +442,8 @@ set(SERVER_SOURCES
     src/server/src/zones/CombatEventHandler.cpp
     src/server/src/zones/AuraZoneHandler.cpp
     src/server/src/security/AntiCheat.cpp
+    src/server/src/security/MovementValidator.cpp
+    src/server/src/security/ViolationTracker.cpp
     src/server/src/security/DDoSProtection.cpp
     src/server/src/security/PacketValidator.cpp
     src/server/src/profiling/PerformanceMonitor.cpp
