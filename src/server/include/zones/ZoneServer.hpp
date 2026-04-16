@@ -12,6 +12,8 @@
 #include "zones/PlayerManager.hpp"
 #include "zones/ZoneHandoff.hpp"
 #include "zones/ReplicationOptimizer.hpp"
+#include "zones/CombatEventHandler.hpp"
+#include "zones/AuraZoneHandler.hpp"
 #include "combat/PositionHistory.hpp"
 #include "combat/LagCompensatedCombat.hpp"
 #include "combat/CombatSystem.hpp"
@@ -132,6 +134,9 @@ public:
     
     // Get metrics
     [[nodiscard]] const TickMetrics& getMetrics() const { return metrics_; }
+    
+    // Get configuration
+    [[nodiscard]] const ZoneConfig& getConfig() const { return config_; }
     
     // Spawn player entity
     EntityID spawnPlayer(ConnectionID connectionId, uint64_t playerId, 
@@ -283,6 +288,12 @@ private:
 
     // [ZONE_AGENT] Player management
     PlayerManager playerManager_;
+
+    // [ZONE_AGENT] Combat event handling
+    CombatEventHandler combatEventHandler_;
+
+    // [ZONE_AGENT] Aura and zone migration handling
+    AuraZoneHandler auraZoneHandler_;
 
     // Entity migration manager
     std::unique_ptr<EntityMigrationManager> migrationManager_;

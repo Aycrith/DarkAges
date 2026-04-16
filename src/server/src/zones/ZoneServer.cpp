@@ -40,6 +40,8 @@ namespace DarkAges {
 
 ZoneServer::ZoneServer() 
     : auraManager_(1),  // Default zone ID, will be updated in initialize
+      combatEventHandler_(*this),
+      auraZoneHandler_(*this),
       tempAllocator_(std::make_unique<Memory::StackAllocator>(1024 * 1024)),
       smallPool_(std::make_unique<Memory::SmallPool>()),
       mediumPool_(std::make_unique<Memory::MediumPool>()),
@@ -62,55 +64,16 @@ bool ZoneServer::initialize(const ZoneConfig& config) {
     
     std::cout << "[ZONE " << config_.zoneId << "] Entity migration initialized" << std::endl;
     
-    // [PHASE 4E] Initialize zone handoff controller
-    initializeHandoffController();
-    
-    // [PHASE 4B] Initialize aura projection manager
+    // [ZONE_AGENT] Initialize aura zone handler
     auraManager_ = AuraProjectionManager(config_.zoneId);
+    auraZoneHandler_.setRedis(redis_.get());
+    auraZoneHandler_.setAuraManager(&auraManager_);
+    auraZoneHandler_.setMigrationManager(migrationManager_.get());
+    auraZoneHandler_.setConnectionMappings(&connectionToEntity_, &entityToConnection_);
+    auraZoneHandler_.initializeAuraManager();
     
-    // Build adjacent zone definitions from grid layout
-    // Current zone is at grid position (myX, myZ) in a 2x2 grid
-    std::vector<ZoneDefinition> adjacentZones;
-    uint32_t myZoneId = config_.zoneId;
-    uint32_t myX = (myZoneId - 1) % 2;
-    uint32_t myZ = (myZoneId - 1) / 2;
-
-    float zoneWidth = (Constants::WORLD_MAX_X - Constants::WORLD_MIN_X) / 2.0f;
-    float zoneDepth = (Constants::WORLD_MAX_Z - Constants::WORLD_MIN_Z) / 2.0f;
-
-    // Check all 8 neighbors (including diagonals)
-    for (int dx = -1; dx <= 1; ++dx) {
-        for (int dz = -1; dz <= 1; ++dz) {
-            if (dx == 0 && dz == 0) continue; // Skip self
-
-            int nx = static_cast<int>(myX) + dx;
-            int nz = static_cast<int>(myZ) + dz;
-
-            // Bounds check for 2x2 grid
-            if (nx < 0 || nx > 1 || nz < 0 || nz > 1) continue;
-
-            uint32_t adjId = static_cast<uint32_t>(nz) * 2 + static_cast<uint32_t>(nx) + 1;
-
-            ZoneDefinition adjDef;
-            adjDef.zoneId = adjId;
-            adjDef.zoneName = "Zone_" + std::to_string(adjId);
-            adjDef.shape = ZoneShape::RECTANGLE;
-            adjDef.minX = Constants::WORLD_MIN_X + static_cast<float>(nx) * zoneWidth;
-            adjDef.maxX = adjDef.minX + zoneWidth;
-            adjDef.minZ = Constants::WORLD_MIN_Z + static_cast<float>(nz) * zoneDepth;
-            adjDef.maxZ = adjDef.minZ + zoneDepth;
-            adjDef.centerX = (adjDef.minX + adjDef.maxX) / 2.0f;
-            adjDef.centerZ = (adjDef.minZ + adjDef.maxZ) / 2.0f;
-            adjDef.host = "127.0.0.1";
-            adjDef.port = Constants::DEFAULT_SERVER_PORT + static_cast<uint16_t>(adjId) - 1;
-
-            adjacentZones.push_back(adjDef);
-        }
-    }
-
-    auraManager_.initialize(adjacentZones);
-    
-    std::cout << "[ZONE " << config_.zoneId << "] Aura projection initialized" << std::endl;
+    // [ZONE_AGENT] Initialize combat event handler
+    combatEventHandler_.setConnectionMappings(&connectionToEntity_, &entityToConnection_);
 
     // [ZONE_AGENT] Initialize player manager
     playerManager_.setDatabaseConnections(redis_.get(), scylla_.get());
@@ -156,18 +119,31 @@ bool ZoneServer::initialize(const ZoneConfig& config) {
     startTime_ = std::chrono::steady_clock::now();
     lastTickTime_ = startTime_;
     
-    // Set up combat callbacks
+    // Set up combat callbacks - delegate to CombatEventHandler
     combatSystem_.setOnDeath([this](EntityID victim, EntityID killer) {
-        onEntityDied(victim, killer);
+        combatEventHandler_.onEntityDied(victim, killer);
     });
     
     combatSystem_.setOnDamage([this](EntityID attacker, EntityID target, 
                                      int16_t damage, const Position& location) {
-        sendCombatEvent(attacker, target, damage, location);
+        combatEventHandler_.sendCombatEvent(attacker, target, damage, location);
     });
     
     // [SECURITY_AGENT] Initialize anti-cheat system
     initializeAntiCheat();
+    
+    // [ZONE_AGENT] Set up extracted handler references
+    combatEventHandler_.setNetwork(network_.get());
+    combatEventHandler_.setScylla(scylla_.get());
+    combatEventHandler_.setCombatSystem(&combatSystem_);
+    combatEventHandler_.setLagCompensator(&lagCompensator_);
+    combatEventHandler_.setAntiCheat(&antiCheat_);
+    
+    auraZoneHandler_.setNetwork(network_.get());
+    auraZoneHandler_.setHandoffController(handoffController_.get());
+    
+    // [ZONE_AGENT] Initialize zone handoff controller via AuraZoneHandler
+    auraZoneHandler_.initializeHandoffController();
     
     // [PERFORMANCE_AGENT] Initialize profiler if enabled
 #ifdef ENABLE_PROFILING
@@ -544,16 +520,16 @@ void ZoneServer::updateGameLogic() {
     
     // Process combat inputs (attacks triggered by client input)
     ZONE_TRACE_EVENT("Combat::process", Profiling::TraceCategory::GAME_LOGIC);
-    processCombat();
+    combatEventHandler_.processCombat();
     
     // Health regeneration
     healthRegenSystem_.update(registry_, getCurrentTimeMs());
     
     // Process pending respawns
-    processRespawns();
+    combatEventHandler_.processRespawns();
     
     // [PHASE 4] Zone transitions and migration
-    checkEntityZoneTransitions();
+    auraZoneHandler_.checkEntityZoneTransitions();
     
     // [PHASE 4C] Update entity migrations
     if (migrationManager_) {
@@ -561,7 +537,7 @@ void ZoneServer::updateGameLogic() {
     }
     
     // [PHASE 4E] Update zone handoffs
-    updateZoneHandoffs();
+    auraZoneHandler_.updateZoneHandoffs();
     
     auto elapsed = std::chrono::steady_clock::now() - start;
     metrics_.gameLogicTimeUs += std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
@@ -808,7 +784,7 @@ void ZoneServer::updateReplication() {
     
     // [PHASE 4B] Sync aura state with adjacent zones
     ZONE_TRACE_EVENT("Aura::syncState", Profiling::TraceCategory::REPLICATION);
-    syncAuraState();
+    auraZoneHandler_.syncAuraState();
     
     // Only send snapshots at snapshot rate (20Hz default)
     static uint32_t lastSnapshotTick = 0;
@@ -1150,7 +1126,7 @@ void ZoneServer::validateAndApplyInput(EntityID entity, const ClientInputPacket&
     
     // [PHASE 3C] Process attack input with lag compensation and combat validation
     if (input.input.attack) {
-        processAttackInput(entity, input);
+        combatEventHandler_.processAttackInput(entity, input);
     }
 }
 
