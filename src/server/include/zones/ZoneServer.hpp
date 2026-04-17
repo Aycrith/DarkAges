@@ -190,6 +190,7 @@ private:
     void onEntityDied(EntityID victim, EntityID killer);
     void sendCombatEvent(EntityID attacker, EntityID target, int16_t damage, const Position& location);
     void logCombatEvent(const HitResult& hit, EntityID attacker, EntityID target);
+    void processAttackInput(EntityID entity, const ClientInputPacket& input);
     
     // Performance monitoring (delegated to PerformanceHandler)
 
