@@ -28,10 +28,10 @@ bool AdaptiveRateLimiter::allow(const std::string& ipAddress, float currentServe
     } else {
         effectiveRate = config_.normalRate;
     }
-    (void)effectiveRate;  // TODO: Use when limiter rate update is implemented
     
-    // Note: In a real implementation, you'd update the limiter's rate
-    // For now, just use the existing limiter
+    // Update the underlying limiter's rate to match current load
+    limiter_.setTokensPerSecond(effectiveRate);
+    
     return limiter_.allow(ipAddress);
 }
 

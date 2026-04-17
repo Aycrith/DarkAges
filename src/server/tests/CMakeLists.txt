@@ -43,6 +43,7 @@ set(TEST_SOURCES
     TestInputValidator.cpp
     TestRateLimiter.cpp
     TestTrafficAnalyzer.cpp
+    TestConnectionPool.cpp
 )
 
 # Conditional test sources based on dependencies
@@ -110,6 +111,7 @@ endif()
 # Redis: use stub if not available
 if(REDIS_AVAILABLE)
     list(APPEND TEST_SERVER_SOURCES ${CMAKE_SOURCE_DIR}/src/db/RedisManager.cpp)
+    list(APPEND TEST_SERVER_SOURCES ${CMAKE_SOURCE_DIR}/src/db/ConnectionPool.cpp)
 else()
     list(APPEND TEST_SERVER_SOURCES ${CMAKE_SOURCE_DIR}/src/db/RedisManager_stub.cpp)
 endif()

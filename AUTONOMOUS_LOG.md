@@ -3,6 +3,19 @@
 All autonomous improvements tracked here. Most recent first.
 
 
+### ✅ 2026-04-17 11:36 UTC — Implement Adaptive Rate Limiting
+- **Task:** Implement the TODO in AdaptiveRateLimiter::allow() — apply effectiveRate to underlying limiter
+- **Branch:** autonomous/connection-pool-tests
+- **Build:** PASS
+- **Tests:** PASS (392 cases, 2752 assertions)
+- **PR:** https://github.com/Aycrith/DarkAges/pull/9
+- **Changes:**
+  - Added `TokenBucketRateLimiter::setTokensPerSecond()` for runtime rate adjustment
+  - Updated `AdaptiveRateLimiter::allow()` to call `limiter_.setTokensPerSecond(effectiveRate)`
+  - Initialized AdaptiveRateLimiter's internal limiter with config's normalRate (was using defaults)
+  - 3 new test cases: token rate change, load-based adjustment, enforcement under load
+  - Fixed [[nodiscard]] compiler warning in TestViolationTracker.cpp
+
 ### ✅ 2026-04-17 — Test Coverage: PositionHistory, CircuitBreaker, ViolationTracker
 - **Task:** Add unit tests for previously untested components
 - **Status:** SUCCESS
