@@ -2,6 +2,7 @@
 #include "netcode/NetworkManager.hpp"
 
 #include <cstring>
+#include <unordered_map>
 
 namespace DarkAges {
 
@@ -125,8 +126,6 @@ std::vector<uint8_t> createDeltaSnapshot(
     std::span<const EntityID> removedEntities,
     std::span<const EntityStateData> baselineEntities) {
     
-    (void)baselineEntities;  // Unused in stub
-    
     std::vector<uint8_t> data;
     
     // Header
@@ -137,34 +136,95 @@ std::vector<uint8_t> createDeltaSnapshot(
         data.insert(data.end(), bytes, bytes + sizeof(uint32_t));
     };
     
+    auto appendFloat = [&data](float value) {
+        const uint8_t* bytes = reinterpret_cast<const uint8_t*>(&value);
+        data.insert(data.end(), bytes, bytes + sizeof(float));
+    };
+    
     appendUInt32(serverTick);
     appendUInt32(baselineTick);
-    appendUInt32(static_cast<uint32_t>(currentEntities.size()));
     
-    for (const auto& entity : currentEntities) {
+    // Build baseline lookup map for delta comparison
+    std::unordered_map<EntityID, const EntityStateData*> baselineMap;
+    for (const auto& entity : baselineEntities) {
+        baselineMap[entity.entity] = &entity;
+    }
+    
+    // Determine which entities to send and their changed field masks
+    struct ChangedEntity {
+        const EntityStateData* entity;
+        uint16_t changedFields;
+    };
+    std::vector<ChangedEntity> entitiesToSend;
+    
+    for (const auto& current : currentEntities) {
+        auto it = baselineMap.find(current.entity);
+        if (it == baselineMap.end()) {
+            // New entity - send all fields
+            entitiesToSend.push_back({&current, 0xFFFF});
+        } else {
+            // Existing entity - check what changed
+            const auto* baseline = it->second;
+            uint16_t changed = 0;
+            
+            if (!current.equalsPosition(*baseline)) {
+                changed |= 0x0001; // Position changed
+            }
+            if (!current.equalsVelocity(*baseline)) {
+                changed |= 0x0002; // Velocity changed
+            }
+            if (!current.equalsRotation(*baseline)) {
+                changed |= 0x0004; // Rotation changed
+            }
+            if (current.healthPercent != baseline->healthPercent) {
+                changed |= 0x0008; // Health changed
+            }
+            if (current.animState != baseline->animState) {
+                changed |= 0x0010; // Anim state changed
+            }
+            
+            if (changed != 0) {
+                entitiesToSend.push_back({&current, changed});
+            }
+            // If nothing changed, don't include in delta
+        }
+    }
+    
+    appendUInt32(static_cast<uint32_t>(entitiesToSend.size()));
+    
+    for (const auto& item : entitiesToSend) {
+        const auto& entity = *item.entity;
+        uint16_t changedFields = item.changedFields;
+        
         appendUInt32(static_cast<uint32_t>(entity.entity));
         
-        uint16_t changedFields = 0xFFFF;  // All fields
         data.push_back(static_cast<uint8_t>(changedFields & 0xFF));
         data.push_back(static_cast<uint8_t>((changedFields >> 8) & 0xFF));
         
-        appendUInt32(static_cast<uint32_t>(entity.position.x));
-        appendUInt32(static_cast<uint32_t>(entity.position.y));
-        appendUInt32(static_cast<uint32_t>(entity.position.z));
-        appendUInt32(static_cast<uint32_t>(entity.velocity.dx));
-        appendUInt32(static_cast<uint32_t>(entity.velocity.dy));
-        appendUInt32(static_cast<uint32_t>(entity.velocity.dz));
-        
-        auto appendFloat = [&data](float value) {
-            const uint8_t* bytes = reinterpret_cast<const uint8_t*>(&value);
-            data.insert(data.end(), bytes, bytes + sizeof(float));
-        };
-        appendFloat(entity.rotation.yaw);
-        appendFloat(entity.rotation.pitch);
-        
-        data.push_back(entity.healthPercent);
-        data.push_back(entity.animState);
-        data.push_back(entity.entityType);
+        if (changedFields & 0x0001) { // Position
+            appendUInt32(static_cast<uint32_t>(entity.position.x));
+            appendUInt32(static_cast<uint32_t>(entity.position.y));
+            appendUInt32(static_cast<uint32_t>(entity.position.z));
+        }
+        if (changedFields & 0x0002) { // Velocity
+            appendUInt32(static_cast<uint32_t>(entity.velocity.dx));
+            appendUInt32(static_cast<uint32_t>(entity.velocity.dy));
+            appendUInt32(static_cast<uint32_t>(entity.velocity.dz));
+        }
+        if (changedFields & 0x0004) { // Rotation
+            appendFloat(entity.rotation.yaw);
+            appendFloat(entity.rotation.pitch);
+        }
+        if (changedFields & 0x0008) { // Health
+            data.push_back(entity.healthPercent);
+        }
+        if (changedFields & 0x0010) { // Anim state
+            data.push_back(entity.animState);
+        }
+        // Always include entity type for new entities
+        if (changedFields == 0xFFFF) {
+            data.push_back(entity.entityType);
+        }
     }
     
     appendUInt32(static_cast<uint32_t>(removedEntities.size()));
@@ -195,6 +255,13 @@ bool applyDeltaSnapshot(
         return value;
     };
     
+    auto readFloat = [&data, &offset]() -> float {
+        float value;
+        std::memcpy(&value, &data[offset], sizeof(float));
+        offset += sizeof(float);
+        return value;
+    };
+    
     outServerTick = readUInt32();
     outBaselineTick = readUInt32();
     
@@ -206,32 +273,47 @@ bool applyDeltaSnapshot(
     for (uint32_t i = 0; i < entityCount; ++i) {
         if (offset + 4 > data.size()) return false;
         
-        EntityStateData entity;
+        EntityStateData entity;  // Default-initialized
         entity.entity = static_cast<EntityID>(readUInt32());
         
         if (offset + 2 > data.size()) return false;
-        offset += 2;  // Skip changed fields
+        uint16_t changedFields = data[offset] | (data[offset + 1] << 8);
+        offset += 2;
         
-        if (offset + 12 > data.size()) return false;
-        entity.position.x = static_cast<int32_t>(readUInt32());
-        entity.position.y = static_cast<int32_t>(readUInt32());
-        entity.position.z = static_cast<int32_t>(readUInt32());
+        if (changedFields & 0x0001) { // Position
+            if (offset + 12 > data.size()) return false;
+            entity.position.x = static_cast<int32_t>(readUInt32());
+            entity.position.y = static_cast<int32_t>(readUInt32());
+            entity.position.z = static_cast<int32_t>(readUInt32());
+        }
         
-        if (offset + 12 > data.size()) return false;
-        entity.velocity.dx = static_cast<int32_t>(readUInt32());
-        entity.velocity.dy = static_cast<int32_t>(readUInt32());
-        entity.velocity.dz = static_cast<int32_t>(readUInt32());
+        if (changedFields & 0x0002) { // Velocity
+            if (offset + 12 > data.size()) return false;
+            entity.velocity.dx = static_cast<int32_t>(readUInt32());
+            entity.velocity.dy = static_cast<int32_t>(readUInt32());
+            entity.velocity.dz = static_cast<int32_t>(readUInt32());
+        }
         
-        if (offset + 8 > data.size()) return false;
-        std::memcpy(&entity.rotation.yaw, &data[offset], sizeof(float));
-        offset += sizeof(float);
-        std::memcpy(&entity.rotation.pitch, &data[offset], sizeof(float));
-        offset += sizeof(float);
+        if (changedFields & 0x0004) { // Rotation
+            if (offset + 8 > data.size()) return false;
+            entity.rotation.yaw = readFloat();
+            entity.rotation.pitch = readFloat();
+        }
         
-        if (offset + 3 > data.size()) return false;
-        entity.healthPercent = data[offset++];
-        entity.animState = data[offset++];
-        entity.entityType = data[offset++];
+        if (changedFields & 0x0008) { // Health
+            if (offset + 1 > data.size()) return false;
+            entity.healthPercent = data[offset++];
+        }
+        
+        if (changedFields & 0x0010) { // Anim state
+            if (offset + 1 > data.size()) return false;
+            entity.animState = data[offset++];
+        }
+        
+        if (changedFields == 0xFFFF) { // Full entity - also has entity type
+            if (offset + 1 > data.size()) return false;
+            entity.entityType = data[offset++];
+        }
         
         outEntities.push_back(entity);
     }
@@ -250,6 +332,42 @@ bool applyDeltaSnapshot(
     return true;
 }
 
+} // namespace Protocol
+
+// ============================================================================
+// DeltaEncoding Stub Implementation
+// ============================================================================
+
+namespace Protocol {
+namespace DeltaEncoding {
+
+size_t encodePositionDelta(uint8_t* buffer, size_t bufferSize,
+                           const Position& current, const Position& baseline) {
+    if (bufferSize < 12) return 0;
+    // Simple fixed-size encoding: 3 floats = 12 bytes
+    int32_t dx = current.x - baseline.x;
+    int32_t dy = current.y - baseline.y;
+    int32_t dz = current.z - baseline.z;
+    std::memcpy(buffer, &dx, 4);
+    std::memcpy(buffer + 4, &dy, 4);
+    std::memcpy(buffer + 8, &dz, 4);
+    return 12;
+}
+
+size_t decodePositionDelta(const uint8_t* buffer, size_t bufferSize,
+                           Position& outPosition, const Position& baseline) {
+    if (bufferSize < 12) return 0;
+    int32_t dx, dy, dz;
+    std::memcpy(&dx, buffer, 4);
+    std::memcpy(&dy, buffer + 4, 4);
+    std::memcpy(&dz, buffer + 8, 4);
+    outPosition.x = baseline.x + dx;
+    outPosition.y = baseline.y + dy;
+    outPosition.z = baseline.z + dz;
+    return 12;
+}
+
+} // namespace DeltaEncoding
 } // namespace Protocol
 
 } // namespace DarkAges

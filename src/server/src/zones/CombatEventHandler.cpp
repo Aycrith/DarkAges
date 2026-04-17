@@ -64,6 +64,7 @@ void CombatEventHandler::onEntityDied(EntityID victim, EntityID killer) {
 
     // Send death event to clients
     if (network_) {
+#ifdef DARKAGES_HAS_PROTOBUF
         auto deathEvent = Netcode::ProtobufProtocol::createPlayerDeathEvent(
             static_cast<uint32_t>(victim),
             static_cast<uint32_t>(killer)
@@ -71,6 +72,7 @@ void CombatEventHandler::onEntityDied(EntityID victim, EntityID killer) {
         deathEvent.set_timestamp(getCurrentTimeMs());
         auto eventData = Netcode::ProtobufProtocol::serializeEvent(deathEvent);
         network_->broadcastEvent(eventData);
+#endif
     }
 
     // [DATABASE_AGENT] Log kill event to ScyllaDB
@@ -199,6 +201,7 @@ void CombatEventHandler::processRespawns() {
 void CombatEventHandler::sendCombatEvent(EntityID attacker, EntityID target, int16_t damage, const Position& location) {
     if (!network_ || !entityToConnection_) return;
 
+#ifdef DARKAGES_HAS_PROTOBUF
     auto attackerConnIt = entityToConnection_->find(attacker);
     auto targetConnIt = entityToConnection_->find(target);
 
@@ -216,6 +219,7 @@ void CombatEventHandler::sendCombatEvent(EntityID attacker, EntityID target, int
     if (targetConnIt != entityToConnection_->end()) {
         network_->sendEvent(targetConnIt->second, eventData);
     }
+#endif
 
     HitResult hit;
     hit.hit = true;
@@ -349,6 +353,7 @@ void CombatEventHandler::processAttackInput(EntityID entity, const ClientInputPa
             // Send damage event to target
             auto targetConnIt = entityToConnection_->find(hit.target);
             if (targetConnIt != entityToConnection_->end()) {
+#ifdef DARKAGES_HAS_PROTOBUF
                 auto damageEvent = Netcode::ProtobufProtocol::createDamageEvent(
                     static_cast<uint32_t>(entity),
                     static_cast<uint32_t>(hit.target),
@@ -357,6 +362,7 @@ void CombatEventHandler::processAttackInput(EntityID entity, const ClientInputPa
                 damageEvent.set_timestamp(getCurrentTimeMs());
                 auto eventData = Netcode::ProtobufProtocol::serializeEvent(damageEvent);
                 network_->sendEvent(targetConnIt->second, eventData);
+#endif
                 std::cerr << "[NETWORK] Sent damage event: " << hit.damageDealt
                           << " to entity " << static_cast<uint32_t>(hit.target) << std::endl;
             }
@@ -364,6 +370,7 @@ void CombatEventHandler::processAttackInput(EntityID entity, const ClientInputPa
             // Send hit confirmation to attacker
             auto attackerConnIt = entityToConnection_->find(entity);
             if (attackerConnIt != entityToConnection_->end()) {
+#ifdef DARKAGES_HAS_PROTOBUF
                 auto hitConfirm = Netcode::ProtobufProtocol::createDamageEvent(
                     static_cast<uint32_t>(entity),
                     static_cast<uint32_t>(hit.target),
@@ -372,6 +379,7 @@ void CombatEventHandler::processAttackInput(EntityID entity, const ClientInputPa
                 hitConfirm.set_timestamp(getCurrentTimeMs());
                 auto eventData = Netcode::ProtobufProtocol::serializeEvent(hitConfirm);
                 network_->sendEvent(attackerConnIt->second, eventData);
+#endif
                 std::cerr << "[NETWORK] Sent hit confirmation: " << hit.damageDealt
                           << " to attacker entity " << static_cast<uint32_t>(entity) << std::endl;
             }

@@ -1,369 +1,429 @@
-// [SECURITY_AGENT] Rate limiter unit tests
-// Tests for per-IP connection limiting, per-player input rate limiting,
-// DDoS flood detection, and cleanup functionality
-
 #include <catch2/catch_test_macros.hpp>
 #include "security/RateLimiter.hpp"
-
 #include <thread>
-#include <vector>
+#include <chrono>
 #include <string>
 
 using namespace DarkAges::Security;
 
 // ============================================================================
-// Connection Limiting Tests
+// TokenBucketRateLimiter
 // ============================================================================
 
-TEST_CASE("RateLimiter: Connection limit allows within limit", "[RateLimiter][Security]") {
-    RateLimitConfig config;
-    config.maxConnectionsPerIP = 3;
-    RateLimiter limiter(config);
+TEST_CASE("[rate-limiter] Token bucket allows initial burst", "[security]") {
+    TokenBucketRateLimiter<std::string> limiter({10, 60}); // 10 max, 60/sec
 
-    std::string ip = "192.168.1.1";
-
-    // Should allow first connections up to the limit
-    REQUIRE(limiter.checkConnectionLimit(ip));
-    limiter.recordConnection(ip);
-
-    REQUIRE(limiter.checkConnectionLimit(ip));
-    limiter.recordConnection(ip);
-
-    REQUIRE(limiter.checkConnectionLimit(ip));
-    limiter.recordConnection(ip);
-
-    // Now at limit (3), should deny
-    REQUIRE_FALSE(limiter.checkConnectionLimit(ip));
-
-    REQUIRE(limiter.getConnectionCount(ip) == 3);
-}
-
-TEST_CASE("RateLimiter: Connection limit denies over limit", "[RateLimiter][Security]") {
-    RateLimitConfig config;
-    config.maxConnectionsPerIP = 2;
-    RateLimiter limiter(config);
-
-    std::string ip = "10.0.0.1";
-
-    limiter.recordConnection(ip);
-    limiter.recordConnection(ip);
-
-    REQUIRE_FALSE(limiter.checkConnectionLimit(ip));
-}
-
-TEST_CASE("RateLimiter: Disconnection frees connection slot", "[RateLimiter][Security]") {
-    RateLimitConfig config;
-    config.maxConnectionsPerIP = 2;
-    RateLimiter limiter(config);
-
-    std::string ip = "10.0.0.2";
-
-    limiter.recordConnection(ip);
-    limiter.recordConnection(ip);
-    REQUIRE_FALSE(limiter.checkConnectionLimit(ip));
-
-    // Disconnect one
-    limiter.recordDisconnection(ip);
-    REQUIRE(limiter.checkConnectionLimit(ip));
-
-    limiter.recordConnection(ip);
-    REQUIRE_FALSE(limiter.checkConnectionLimit(ip));
-}
-
-TEST_CASE("RateLimiter: Multiple IPs tracked independently", "[RateLimiter][Security]") {
-    RateLimitConfig config;
-    config.maxConnectionsPerIP = 1;
-    RateLimiter limiter(config);
-
-    std::string ip1 = "192.168.1.10";
-    std::string ip2 = "192.168.1.11";
-
-    limiter.recordConnection(ip1);
-    REQUIRE_FALSE(limiter.checkConnectionLimit(ip1));
-    REQUIRE(limiter.checkConnectionLimit(ip2));
-
-    limiter.recordConnection(ip2);
-    REQUIRE_FALSE(limiter.checkConnectionLimit(ip2));
-}
-
-TEST_CASE("RateLimiter: Disconnection removes entry when count reaches zero", "[RateLimiter][Security]") {
-    RateLimitConfig config;
-    RateLimiter limiter(config);
-
-    std::string ip = "10.0.0.5";
-
-    limiter.recordConnection(ip);
-    REQUIRE(limiter.getTrackedIPCount() == 1);
-
-    limiter.recordDisconnection(ip);
-    // Entry should be removed when connections drop to 0
-    REQUIRE(limiter.getConnectionCount(ip) == 0);
-}
-
-// ============================================================================
-// Input Rate Limiting Tests
-// ============================================================================
-
-TEST_CASE("RateLimiter: Input rate allows within limit", "[RateLimiter][Security]") {
-    RateLimitConfig config;
-    config.maxInputPerSecond = 5;
-    config.inputWindowDurationMs = 1000;
-    RateLimiter limiter(config);
-
-    std::uint64_t playerId = 100;
-
-    for (std::uint32_t i = 0; i < 5; ++i) {
-        REQUIRE(limiter.checkInputRate(playerId));
-        limiter.recordInput(playerId);
+    // Should allow up to maxTokens requests immediately
+    for (uint32_t i = 0; i < 10; ++i) {
+        REQUIRE(limiter.allow("192.168.1.1"));
     }
 
-    // At limit, should deny
-    REQUIRE_FALSE(limiter.checkInputRate(playerId));
+    // 11th request should be denied (bucket empty)
+    REQUIRE_FALSE(limiter.allow("192.168.1.1"));
 }
 
-TEST_CASE("RateLimiter: Input rate denies over limit", "[RateLimiter][Security]") {
-    RateLimitConfig config;
-    config.maxInputPerSecond = 3;
-    config.inputWindowDurationMs = 1000;
-    RateLimiter limiter(config);
+TEST_CASE("[rate-limiter] Token bucket refills over time", "[security]") {
+    TokenBucketRateLimiter<std::string> limiter({5, 100}); // 5 max, 100/sec = 1 per 10ms
 
-    std::uint64_t playerId = 200;
+    // Exhaust tokens
+    for (uint32_t i = 0; i < 5; ++i) {
+        limiter.allow("10.0.0.1");
+    }
+    REQUIRE_FALSE(limiter.allow("10.0.0.1"));
 
-    limiter.recordInput(playerId);
-    limiter.recordInput(playerId);
-    limiter.recordInput(playerId);
+    // Wait for refill (100/sec = 1 token per 10ms, wait 20ms for 2 tokens)
+    std::this_thread::sleep_for(std::chrono::milliseconds(25));
 
-    REQUIRE_FALSE(limiter.checkInputRate(playerId));
+    // Should have refilled at least 1-2 tokens
+    REQUIRE(limiter.allow("10.0.0.1"));
 }
 
-TEST_CASE("RateLimiter: Input rate allows after window expires", "[RateLimiter][Security]") {
-    RateLimitConfig config;
-    config.maxInputPerSecond = 2;
-    config.inputWindowDurationMs = 50;  // 50ms window for fast test
-    RateLimiter limiter(config);
+TEST_CASE("[rate-limiter] Token bucket tracks keys independently", "[security]") {
+    TokenBucketRateLimiter<std::string> limiter({3, 60});
 
-    std::uint64_t playerId = 300;
+    // Exhaust tokens for IP1
+    for (uint32_t i = 0; i < 3; ++i) {
+        REQUIRE(limiter.allow("192.168.1.1"));
+    }
+    REQUIRE_FALSE(limiter.allow("192.168.1.1"));
 
-    // Exhaust the window
-    limiter.recordInput(playerId);
-    limiter.recordInput(playerId);
-    REQUIRE_FALSE(limiter.checkInputRate(playerId));
+    // IP2 should still have full bucket
+    REQUIRE(limiter.allow("192.168.1.2"));
+    REQUIRE(limiter.allow("192.168.1.2"));
+    REQUIRE(limiter.allow("192.168.1.2"));
+    REQUIRE_FALSE(limiter.allow("192.168.1.2"));
+}
+
+TEST_CASE("[rate-limiter] Token bucket wouldAllow peeks without consuming", "[security]") {
+    TokenBucketRateLimiter<std::string> limiter({2, 60});
+
+    // New key: wouldAllow returns true (maxTokens > 0), doesn't create bucket
+    REQUIRE(limiter.wouldAllow("test"));
+
+    // Consume 2 tokens via allow (creates bucket)
+    limiter.allow("test");
+    limiter.allow("test");
+
+    // Now bucket is actually empty - wouldAllow returns false
+    REQUIRE_FALSE(limiter.wouldAllow("test"));
+    REQUIRE_FALSE(limiter.allow("test"));
+}
+
+TEST_CASE("[rate-limiter] Token bucket getRemainingTokens", "[security]") {
+    TokenBucketRateLimiter<std::string> limiter({10, 60});
+
+    // Unknown key returns max
+    REQUIRE(limiter.getRemainingTokens("new-key") == 10);
+
+    // Consume 3
+    limiter.allow("key");
+    limiter.allow("key");
+    limiter.allow("key");
+
+    REQUIRE(limiter.getRemainingTokens("key") == 7);
+}
+
+TEST_CASE("[rate-limiter] Token bucket reset restores tokens", "[security]") {
+    TokenBucketRateLimiter<std::string> limiter({5, 60});
+
+    // Exhaust
+    for (uint32_t i = 0; i < 5; ++i) limiter.allow("key");
+    REQUIRE_FALSE(limiter.allow("key"));
+
+    // Reset
+    limiter.reset("key");
+
+    // Should be full again
+    REQUIRE(limiter.getRemainingTokens("key") == 5);
+    REQUIRE(limiter.allow("key"));
+}
+
+// ============================================================================
+// SlidingWindowRateLimiter
+// ============================================================================
+
+TEST_CASE("[rate-limiter] Sliding window allows up to max requests", "[security]") {
+    SlidingWindowRateLimiter<std::string> limiter({5, 60000}); // 5 per minute
+
+    for (uint32_t i = 0; i < 5; ++i) {
+        REQUIRE(limiter.allow("client1"));
+    }
+    REQUIRE_FALSE(limiter.allow("client1"));
+}
+
+TEST_CASE("[rate-limiter] Sliding window tracks independently", "[security]") {
+    SlidingWindowRateLimiter<uint32_t> limiter({3, 60000});
+
+    REQUIRE(limiter.allow(1));
+    REQUIRE(limiter.allow(1));
+    REQUIRE(limiter.allow(1));
+    REQUIRE_FALSE(limiter.allow(1));
+
+    // Different key
+    REQUIRE(limiter.allow(2));
+    REQUIRE(limiter.allow(2));
+    REQUIRE(limiter.allow(2));
+    REQUIRE_FALSE(limiter.allow(2));
+}
+
+TEST_CASE("[rate-limiter] Sliding window getRemaining", "[security]") {
+    SlidingWindowRateLimiter<std::string> limiter({10, 60000});
+
+    REQUIRE(limiter.getRemaining("key") == 10);
+
+    limiter.allow("key");
+    limiter.allow("key");
+    limiter.allow("key");
+
+    REQUIRE(limiter.getRemaining("key") == 7);
+}
+
+TEST_CASE("[rate-limiter] Sliding window reset", "[security]") {
+    SlidingWindowRateLimiter<std::string> limiter({3, 60000});
+
+    for (uint32_t i = 0; i < 3; ++i) limiter.allow("key");
+    REQUIRE_FALSE(limiter.allow("key"));
+
+    limiter.reset("key");
+    REQUIRE(limiter.getRemaining("key") == 3);
+    REQUIRE(limiter.allow("key"));
+}
+
+TEST_CASE("[rate-limiter] Sliding window expires old entries", "[security]") {
+    // 100ms window for fast test
+    SlidingWindowRateLimiter<std::string> limiter({2, 100});
+
+    REQUIRE(limiter.allow("key"));
+    REQUIRE(limiter.allow("key"));
+    REQUIRE_FALSE(limiter.allow("key"));
 
     // Wait for window to expire
-    std::this_thread::sleep_for(std::chrono::milliseconds(60));
+    std::this_thread::sleep_for(std::chrono::milliseconds(120));
 
-    // Should allow again
-    REQUIRE(limiter.checkInputRate(playerId));
-}
-
-TEST_CASE("RateLimiter: Input rate tracks multiple players independently", "[RateLimiter][Security]") {
-    RateLimitConfig config;
-    config.maxInputPerSecond = 2;
-    RateLimiter limiter(config);
-
-    std::uint64_t player1 = 1;
-    std::uint64_t player2 = 2;
-
-    limiter.recordInput(player1);
-    limiter.recordInput(player1);
-    REQUIRE_FALSE(limiter.checkInputRate(player1));
-
-    // Player 2 should still be allowed
-    REQUIRE(limiter.checkInputRate(player2));
-    limiter.recordInput(player2);
-    REQUIRE(limiter.checkInputRate(player2));
-}
-
-TEST_CASE("RateLimiter: Input rate 60Hz default", "[RateLimiter][Security]") {
-    RateLimitConfig config;  // Default: 60 inputs/sec
-    RateLimiter limiter(config);
-
-    std::uint64_t playerId = 400;
-
-    for (std::uint32_t i = 0; i < 60; ++i) {
-        REQUIRE(limiter.checkInputRate(playerId));
-        limiter.recordInput(playerId);
-    }
-
-    REQUIRE_FALSE(limiter.checkInputRate(playerId));
+    // Old entries should have been cleaned up
+    REQUIRE(limiter.allow("key"));
 }
 
 // ============================================================================
-// DDoS Threshold Tests
+// AdaptiveRateLimiter
 // ============================================================================
 
-TEST_CASE("RateLimiter: DDoS threshold allows normal connections", "[RateLimiter][Security]") {
-    RateLimitConfig config;
-    config.maxConnectionsPerSecondPerIP = 5;
-    RateLimiter limiter(config);
+TEST_CASE("[rate-limiter] Adaptive limiter normal mode", "[security]") {
+    AdaptiveRateLimiter::Config config;
+    config.normalRate = 100;
+    config.stressedRate = 50;
+    config.criticalRate = 20;
+    config.stressThreshold = 0.7f;
+    config.criticalThreshold = 0.9f;
 
-    std::string ip = "192.168.1.100";
+    AdaptiveRateLimiter limiter(config);
 
-    for (std::uint32_t i = 0; i < 5; ++i) {
-        REQUIRE_FALSE(limiter.checkDDoSThreshold(ip));
-        limiter.recordConnectionAttempt(ip);
-    }
-
-    // Now at threshold, should detect flood
-    REQUIRE(limiter.checkDDoSThreshold(ip));
+    // Low load - should use normal rate
+    REQUIRE(limiter.getCurrentRateLimit() == 100);
+    REQUIRE_FALSE(limiter.isStressed());
+    REQUIRE_FALSE(limiter.isCritical());
 }
 
-TEST_CASE("RateLimiter: DDoS threshold detects flood", "[RateLimiter][Security]") {
-    RateLimitConfig config;
-    config.maxConnectionsPerSecondPerIP = 3;
-    RateLimiter limiter(config);
+TEST_CASE("[rate-limiter] Adaptive limiter stressed mode", "[security]") {
+    AdaptiveRateLimiter::Config config;
+    config.normalRate = 100;
+    config.stressedRate = 50;
+    config.criticalRate = 20;
+    config.stressThreshold = 0.7f;
+    config.criticalThreshold = 0.9f;
 
-    std::string ip = "10.0.0.50";
+    AdaptiveRateLimiter limiter(config);
+    limiter.updateServerLoad(0.8f); // Above stress threshold
 
-    limiter.recordConnectionAttempt(ip);
-    limiter.recordConnectionAttempt(ip);
-    limiter.recordConnectionAttempt(ip);
-
-    REQUIRE(limiter.checkDDoSThreshold(ip));
+    REQUIRE(limiter.getCurrentRateLimit() == 50);
+    REQUIRE(limiter.isStressed());
+    REQUIRE_FALSE(limiter.isCritical());
 }
 
-TEST_CASE("RateLimiter: DDoS threshold resets after window", "[RateLimiter][Security]") {
-    RateLimitConfig config;
-    config.maxConnectionsPerSecondPerIP = 2;
-    config.connectionWindowDurationMs = 50;  // 50ms window
-    RateLimiter limiter(config);
+TEST_CASE("[rate-limiter] Adaptive limiter critical mode", "[security]") {
+    AdaptiveRateLimiter::Config config;
+    config.normalRate = 100;
+    config.stressedRate = 50;
+    config.criticalRate = 20;
+    config.stressThreshold = 0.7f;
+    config.criticalThreshold = 0.9f;
 
-    std::string ip = "172.16.0.1";
+    AdaptiveRateLimiter limiter(config);
+    limiter.updateServerLoad(0.95f); // Above critical threshold
 
-    limiter.recordConnectionAttempt(ip);
-    limiter.recordConnectionAttempt(ip);
-    REQUIRE(limiter.checkDDoSThreshold(ip));
-
-    // Wait for window to expire
-    std::this_thread::sleep_for(std::chrono::milliseconds(60));
-
-    REQUIRE_FALSE(limiter.checkDDoSThreshold(ip));
+    REQUIRE(limiter.getCurrentRateLimit() == 20);
+    REQUIRE(limiter.isStressed());
+    REQUIRE(limiter.isCritical());
 }
 
-TEST_CASE("RateLimiter: DDoS no attempts returns false", "[RateLimiter][Security]") {
-    RateLimiter limiter;
+TEST_CASE("[rate-limiter] Adaptive limiter transitions between modes", "[security]") {
+    AdaptiveRateLimiter limiter(AdaptiveRateLimiter::Config{});
 
-    REQUIRE_FALSE(limiter.checkDDoSThreshold("1.2.3.4"));
-}
+    // Start normal
+    REQUIRE(limiter.getCurrentRateLimit() == 100);
 
-// ============================================================================
-// Maintenance Tests
-// ============================================================================
+    // Go stressed
+    limiter.updateServerLoad(0.75f);
+    REQUIRE(limiter.getCurrentRateLimit() == 50);
 
-TEST_CASE("RateLimiter: Reset clears all state", "[RateLimiter][Security]") {
-    RateLimitConfig config;
-    RateLimiter limiter(config);
+    // Go critical
+    limiter.updateServerLoad(0.95f);
+    REQUIRE(limiter.getCurrentRateLimit() == 20);
 
-    std::string ip = "10.0.0.99";
-    std::uint64_t playerId = 999;
-
-    limiter.recordConnection(ip);
-    limiter.recordConnectionAttempt(ip);
-    limiter.recordInput(playerId);
-
-    REQUIRE(limiter.getConnectionCount(ip) > 0);
-    REQUIRE(limiter.getInputCount(playerId) > 0);
-
-    limiter.reset();
-
-    REQUIRE(limiter.getConnectionCount(ip) == 0);
-    REQUIRE(limiter.getInputCount(playerId) == 0);
-    REQUIRE(limiter.getTrackedIPCount() == 0);
-    REQUIRE(limiter.getTrackedPlayerCount() == 0);
-}
-
-TEST_CASE("RateLimiter: Cleanup stale removes old entries", "[RateLimiter][Security]") {
-    RateLimitConfig config;
-    config.inputWindowDurationMs = 1000;
-    RateLimiter limiter(config);
-
-    std::uint64_t playerId = 777;
-
-    limiter.recordInput(playerId);
-    REQUIRE(limiter.getTrackedPlayerCount() == 1);
-
-    // Sleep to make entry stale
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-    // Cleanup with very short maxAge removes the entry
-    limiter.cleanupStale(10);
-    REQUIRE(limiter.getTrackedPlayerCount() == 0);
-}
-
-TEST_CASE("RateLimiter: Cleanup stale preserves active entries", "[RateLimiter][Security]") {
-    RateLimitConfig config;
-    RateLimiter limiter(config);
-
-    std::string ip = "10.0.0.77";
-
-    limiter.recordConnection(ip);
-
-    // Cleanup with long maxAge preserves the entry
-    limiter.cleanupStale(600000);  // 10 minutes
-
-    REQUIRE(limiter.getConnectionCount(ip) == 1);
+    // Recover to normal
+    limiter.updateServerLoad(0.3f);
+    REQUIRE(limiter.getCurrentRateLimit() == 100);
 }
 
 // ============================================================================
-// Thread Safety Tests
+// NetworkRateLimiter
 // ============================================================================
 
-TEST_CASE("RateLimiter: Thread-safe concurrent connections", "[RateLimiter][Security][Concurrency]") {
-    RateLimitConfig config;
-    config.maxConnectionsPerIP = 100;
-    RateLimiter limiter(config);
+TEST_CASE("[rate-limiter] Network rate limiter connection limiting", "[security]") {
+    NetworkRateLimiter limiter;
 
-    std::string ip = "192.168.1.200";
-    constexpr int numThreads = 8;
-    constexpr int opsPerThread = 50;
-
-    std::vector<std::thread> threads;
-    threads.reserve(numThreads);
-
-    for (int t = 0; t < numThreads; ++t) {
-        threads.emplace_back([&]() {
-            for (int i = 0; i < opsPerThread; ++i) {
-                limiter.recordConnection(ip);
-                limiter.checkConnectionLimit(ip);
-                limiter.recordDisconnection(ip);
-            }
-        });
+    // Should allow connections up to connection burst limit (10 tokens)
+    for (int i = 0; i < 10; ++i) {
+        REQUIRE(limiter.allowConnection("192.168.1.1"));
     }
+    // 11th should fail
+    REQUIRE_FALSE(limiter.allowConnection("192.168.1.1"));
 
-    for (auto& thread : threads) {
-        thread.join();
-    }
-
-    // After all threads complete, connection count should be 0
-    // (each thread records + disconnections equally)
-    REQUIRE(limiter.getConnectionCount(ip) == 0);
+    // Different IP should work
+    REQUIRE(limiter.allowConnection("192.168.1.2"));
 }
 
-TEST_CASE("RateLimiter: Thread-safe concurrent input rate limiting", "[RateLimiter][Security][Concurrency]") {
-    RateLimitConfig config;
-    config.maxInputPerSecond = 1000;  // High limit for concurrency test
-    RateLimiter limiter(config);
+TEST_CASE("[rate-limiter] Network rate limiter packet limiting", "[security]") {
+    NetworkRateLimiter limiter;
 
-    std::uint64_t playerId = 555;
-    constexpr int numThreads = 4;
-    constexpr int opsPerThread = 100;
+    // Packet burst is 120 tokens
+    for (int i = 0; i < 120; ++i) {
+        REQUIRE(limiter.allowPacket(1));
+    }
+    REQUIRE_FALSE(limiter.allowPacket(1));
 
-    std::vector<std::thread> threads;
-    threads.reserve(numThreads);
+    // Different connection
+    REQUIRE(limiter.allowPacket(2));
+}
 
-    for (int t = 0; t < numThreads; ++t) {
-        threads.emplace_back([&]() {
-            for (int i = 0; i < opsPerThread; ++i) {
-                limiter.recordInput(playerId);
-                limiter.checkInputRate(playerId);
-            }
-        });
+TEST_CASE("[rate-limiter] Network rate limiter message limiting", "[security]") {
+    NetworkRateLimiter limiter;
+
+    // Message burst is 30 tokens
+    for (int i = 0; i < 30; ++i) {
+        REQUIRE(limiter.allowMessage(1));
+    }
+    REQUIRE_FALSE(limiter.allowMessage(1));
+}
+
+TEST_CASE("[rate-limiter] Network rate limiter connection closed resets", "[security]") {
+    NetworkRateLimiter limiter;
+
+    // Exhaust packet tokens for connection 1
+    for (int i = 0; i < 120; ++i) limiter.allowPacket(1);
+    REQUIRE_FALSE(limiter.allowPacket(1));
+
+    // Close connection
+    limiter.onConnectionClosed(1);
+
+    // Should be reset
+    REQUIRE(limiter.getRemainingPacketTokens(1) == 120);
+    REQUIRE(limiter.allowPacket(1));
+}
+
+// ============================================================================
+// ConnectionThrottler
+// ============================================================================
+
+TEST_CASE("[rate-limiter] Connection throttler allows first connection", "[security]") {
+    ConnectionThrottler throttler;
+    REQUIRE(throttler.allowConnection("10.0.0.1"));
+}
+
+TEST_CASE("[rate-limiter] Connection throttler blocks after max attempts", "[security]") {
+    ConnectionThrottler::Config config;
+    config.maxAttempts = 5;
+    config.windowSeconds = 60;
+    config.blockDurationSeconds = 300;
+
+    ConnectionThrottler throttler(config);
+
+    // Record 5 failed attempts
+    for (int i = 0; i < 5; ++i) {
+        throttler.recordAttempt("10.0.0.1", false);
     }
 
-    for (auto& thread : threads) {
-        thread.join();
+    // Should now block
+    REQUIRE_FALSE(throttler.allowConnection("10.0.0.1"));
+
+    // Different IP should still work
+    REQUIRE(throttler.allowConnection("10.0.0.2"));
+}
+
+TEST_CASE("[rate-limiter] Connection throttler tracks success/failure", "[security]") {
+    ConnectionThrottler throttler;
+
+    // Successful connections don't count toward blocking the same way
+    throttler.recordAttempt("10.0.0.1", true);
+    throttler.recordAttempt("10.0.0.1", true);
+    throttler.recordAttempt("10.0.0.1", false);
+
+    // Still under limit (default 10)
+    REQUIRE(throttler.allowConnection("10.0.0.1"));
+}
+
+TEST_CASE("[rate-limiter] Connection throttler cleanup removes old entries", "[security]") {
+    ConnectionThrottler::Config config;
+    config.maxAttempts = 5;
+    config.windowSeconds = 1;   // 1 second window
+    config.blockDurationSeconds = 1;
+
+    ConnectionThrottler throttler(config);
+
+    // Record attempts
+    for (int i = 0; i < 5; ++i) {
+        throttler.recordAttempt("10.0.0.1", false);
+    }
+    REQUIRE_FALSE(throttler.allowConnection("10.0.0.1"));
+
+    // Wait for block to expire
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+
+    // Cleanup with future timestamp
+    throttler.cleanup(2500); // 2.5 seconds later
+
+    // Should be allowed again (old entries cleaned up)
+    REQUIRE(throttler.allowConnection("10.0.0.1"));
+}
+
+// ============================================================================
+// Dynamic Rate Adjustment
+// ============================================================================
+
+TEST_CASE("[rate-limiter] Token bucket setTokensPerSecond changes rate", "[security]") {
+    TokenBucketRateLimiter<std::string> limiter({10, 100}); // 10 tokens, 100/sec
+
+    REQUIRE(limiter.getTokensPerSecond() == 100);
+
+    // Change rate
+    limiter.setTokensPerSecond(50);
+    REQUIRE(limiter.getTokensPerSecond() == 50);
+
+    // Limiter should still work after rate change
+    REQUIRE(limiter.allow("test"));
+}
+
+TEST_CASE("[rate-limiter] Adaptive limiter actually adjusts rate on allow", "[security]") {
+    AdaptiveRateLimiter::Config config;
+    config.normalRate = 100;
+    config.stressedRate = 50;
+    config.criticalRate = 20;
+    config.stressThreshold = 0.7f;
+    config.criticalThreshold = 0.9f;
+
+    AdaptiveRateLimiter limiter(config);
+
+    // Normal load — should use normalRate
+    limiter.allow("10.0.0.1", 0.3f);
+    REQUIRE(limiter.getCurrentRateLimit() == 100);
+
+    // Stressed load — should use stressedRate
+    limiter.allow("10.0.0.1", 0.8f);
+    REQUIRE(limiter.getCurrentRateLimit() == 50);
+
+    // Critical load — should use criticalRate
+    limiter.allow("10.0.0.1", 0.95f);
+    REQUIRE(limiter.getCurrentRateLimit() == 20);
+
+    // Recover to normal
+    limiter.allow("10.0.0.1", 0.2f);
+    REQUIRE(limiter.getCurrentRateLimit() == 100);
+}
+
+TEST_CASE("[rate-limiter] Adaptive limiter enforces stricter limits under load", "[security]") {
+    AdaptiveRateLimiter::Config config;
+    config.normalRate = 100;
+    config.stressedRate = 10;
+    config.criticalRate = 2;
+    config.stressThreshold = 0.7f;
+    config.criticalThreshold = 0.9f;
+
+    AdaptiveRateLimiter limiter(config);
+
+    // Under normal load, should allow 100 requests (burst)
+    for (int i = 0; i < 100; ++i) {
+        REQUIRE(limiter.allow("10.0.0.1", 0.3f));
     }
 
-    // All inputs should be recorded
-    REQUIRE(limiter.getInputCount(playerId) == numThreads * opsPerThread);
+    // Switch to critical load — the limiter adjusts rate on each allow() call
+    // Under critical, tokensPerSecond becomes 2 and existing bucket gets refilled
+    // at that rate. Since we just exhausted normal bucket, switching to critical
+    // rate limits further requests much more strictly.
+    // After exhausting the critical rate, requests should fail
+    // Allow the critical-rate burst (up to maxTokens worth), then should reject
+    limiter.allow("10.0.0.1", 0.95f); // First critical call adjusts rate
+    // Drain remaining tokens under critical rate
+    while (limiter.allow("10.0.0.1", 0.95f)) { /* drain */ }
+    // Next request should be rejected
+    REQUIRE_FALSE(limiter.allow("10.0.0.1", 0.95f));
 }

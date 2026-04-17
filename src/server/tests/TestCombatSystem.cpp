@@ -581,6 +581,7 @@ TEST_CASE("CombatSystem damage calculation", "[combat]") {
         
         // Variance should cause some differences
         // Note: This could theoretically fail due to RNG but very unlikely with 10 samples
+        (void)foundVariation;  // Set in loop but assertion depends on RNG
     }
     
     SECTION("Critical hits do more damage") {

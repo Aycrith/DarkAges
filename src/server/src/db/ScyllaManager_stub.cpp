@@ -1,5 +1,7 @@
 // Stub implementation for ScyllaManager when driver is not available
 #include "db/ScyllaManager.hpp"
+#include "db/AntiCheatLogger.hpp"
+#include "db/CombatEventLogger.hpp"
 
 namespace DarkAges {
 
@@ -15,7 +17,8 @@ ScyllaManager::~ScyllaManager() = default;
 bool ScyllaManager::initialize(const std::string&, uint16_t) { return true; }
 void ScyllaManager::shutdown() {}
 void ScyllaManager::update() {}
-bool ScyllaManager::isConnected() const { return true; }
+bool ScyllaManager::isConnected() const { return false; }
+
 void ScyllaManager::logCombatEvent(const CombatEvent&, WriteCallback) {}
 void ScyllaManager::logCombatEventsBatch(const std::vector<CombatEvent>&, WriteCallback) {}
 void ScyllaManager::logAntiCheatEvent(const AntiCheatEvent&, WriteCallback) {}
@@ -30,5 +33,8 @@ void ScyllaManager::getTopKillers(uint32_t, uint32_t, uint32_t, int,
     std::function<void(bool, const std::vector<std::pair<uint64_t, uint32_t>>&)>) {}
 void ScyllaManager::getKillFeed(uint32_t, int,
     std::function<void(bool, const std::vector<CombatEvent>&)>) {}
+
+void ScyllaManager::processBatch() {}
+void ScyllaManager::executeQuery(const std::string&, WriteCallback) {}
 
 } // namespace DarkAges

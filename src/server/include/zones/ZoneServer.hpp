@@ -318,17 +318,19 @@ private:
     void onHandoffStarted(uint64_t playerId, uint32_t sourceZone, uint32_t targetZone, bool success);
     void onHandoffCompleted(uint64_t playerId, uint32_t sourceZone, uint32_t targetZone, bool success);
     
+    // Respawn timer
+    struct PendingRespawn {
+        EntityID entity;
+        uint64_t respawnTimeMs;  // Absolute time when respawn should occur
+        Position spawnPos;
+    };
+    std::vector<PendingRespawn> pendingRespawns_;
+    static constexpr uint32_t RESPAWN_DELAY_MS = 5000;  // 5 seconds
+    
     // Zone lookup callbacks for handoff controller
     ZoneDefinition* lookupZone(uint32_t zoneId);
     uint32_t findZoneByPosition(float x, float z);
 
-    // Respawn system
-    struct PendingRespawn {
-        EntityID entity;
-        uint32_t respawnTimeMs;
-    };
-    std::vector<PendingRespawn> pendingRespawns_;
-    static constexpr uint32_t RESPAWN_DELAY_MS = 5000;  // 5 second respawn delay
     void processRespawns();
 };
 

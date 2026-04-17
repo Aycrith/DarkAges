@@ -201,6 +201,7 @@ TEST_CASE("MovementSystem applyInput", "[movement]") {
         input.sequence = 1;
         
         auto result = movement.applyInput(registry, entity, input, 16);
+        (void)result;  // Validation test — behavior depends on implementation
         
         // Movement from far away should be rejected
         // Note: This depends on the exact validation logic

@@ -88,6 +88,18 @@ public:
         buckets_.erase(key);
     }
 
+    // Update refill rate at runtime (for adaptive rate limiting)
+    void setTokensPerSecond(uint32_t tokensPerSecond) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        config_.tokensPerSecond = tokensPerSecond;
+    }
+
+    // Get current refill rate
+    uint32_t getTokensPerSecond() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return config_.tokensPerSecond;
+    }
+
 private:
     void refill(Bucket& bucket, uint64_t now) const {
         uint64_t elapsedMs = now - bucket.lastRefillTime;
@@ -227,7 +239,8 @@ public:
 
 public:
     explicit AdaptiveRateLimiter(const Config& config)
-        : config_(config) {}
+        : config_(config)
+        , limiter_({config.normalRate, config.normalRate}) {}
     
     // Check if request allowed from IP
     bool allow(const std::string& ipAddress, float currentServerLoad);

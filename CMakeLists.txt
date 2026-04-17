@@ -454,6 +454,8 @@ set(SERVER_SOURCES
     src/server/src/security/PacketIntegrity.cpp
     src/server/src/security/RateLimiter.cpp
     src/server/src/security/PacketValidator.cpp
+    src/server/src/security/StatisticalDetector.cpp
+    src/server/src/security/PacketIntegrity.cpp
     src/server/src/profiling/PerformanceMonitor.cpp
 )
 
@@ -482,20 +484,26 @@ else()
     message(STATUS "Protocol: Using stub implementation (GNS not available)")
 endif()
 
+# Database layer - ZoneMessage always compiled (no Redis dependency)
+list(APPEND SERVER_SOURCES src/server/src/db/ZoneMessage.cpp)
+
 # Database layer - conditional on hiredis
 if(HIREDIS_FOUND)
     list(APPEND SERVER_SOURCES
         src/server/src/db/RedisManager.cpp
         src/server/src/db/ConnectionPool.cpp
         src/server/src/db/PlayerSessionManager.cpp
-        src/server/src/db/PubSubManager.cpp
-        src/server/src/db/ZoneManager.cpp
-        src/server/src/db/StreamManager.cpp)
+        src/server/src/db/PubSubManager.cpp)
     message(STATUS "RedisManager: Using hiredis implementation with extracted managers")
 else()
     list(APPEND SERVER_SOURCES src/server/src/db/RedisManager_stub.cpp)
     message(WARNING "RedisManager: Using stub implementation")
 endif()
+
+# ZoneManager and StreamManager always compiled (have #else stub branches for non-Redis builds)
+list(APPEND SERVER_SOURCES
+    src/server/src/db/ZoneManager.cpp
+    src/server/src/db/StreamManager.cpp)
 
 # ScyllaDB layer - conditional on cassandra-cpp-driver (stub on Windows)
 if(CASSANDRA_FOUND)
@@ -636,7 +644,7 @@ if(TARGET protobuf::libprotobuf-lite)
 elseif(TARGET protobuf::libprotobuf)
     target_link_libraries(darkages_core PUBLIC protobuf::libprotobuf)
 endif()
-target_compile_definitions(darkages_core PUBLIC ENABLE_PROTOBUF=1)
+target_compile_definitions(darkages_core PUBLIC DARKAGES_HAS_PROTOBUF=1)
 
 # Core linking
 target_link_libraries(darkages_core PUBLIC Threads::Threads)
@@ -704,10 +712,15 @@ if(BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
         src/server/tests/TestLagCompensator.cpp
         src/server/tests/TestLagCompensatedCombat.cpp
         src/server/tests/TestAuraProjection.cpp
+        src/server/tests/TestCombatEventHandler.cpp
+        src/server/tests/TestAuraZoneHandler.cpp
         src/server/tests/TestEntityMigration.cpp
         src/server/tests/TestZoneOrchestrator.cpp
         src/server/tests/TestDDoSProtection.cpp
+        src/server/tests/TestMovementValidator.cpp
         src/server/tests/TestPacketValidator.cpp
+        src/server/tests/TestStatisticalDetector.cpp
+        src/server/tests/TestPacketIntegrity.cpp
         src/server/tests/TestProfiling.cpp
         src/server/tests/TestAntiCheat.cpp
         src/server/tests/TestMetricsExporter.cpp
@@ -715,14 +728,13 @@ if(BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
         src/server/tests/TestZoneHandoff.cpp
         src/server/tests/TestCrossZoneMessenger.cpp
         src/server/tests/TestProtobufProtocol.cpp
-        src/server/tests/TestCombatEventHandler.cpp
-        src/server/tests/TestAuraZoneHandler.cpp
-        src/server/tests/TestMovementValidator.cpp
-        src/server/tests/TestSecuritySubsystems.cpp
-        src/server/tests/TestPlayerSessionManager.cpp
-        src/server/tests/TestPacketIntegrity.cpp
+        src/server/tests/TestPositionHistory.cpp
+        src/server/tests/TestCircuitBreaker.cpp
+        src/server/tests/TestViolationTracker.cpp
+        src/server/tests/TestInputValidator.cpp
         src/server/tests/TestRateLimiter.cpp
-        src/server/tests/TestZoneManager.cpp
+        src/server/tests/TestTrafficAnalyzer.cpp
+        src/server/tests/TestConnectionPool.cpp
         src/server/tests/TestStreamManager.cpp
     )
 

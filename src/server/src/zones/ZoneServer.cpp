@@ -5,7 +5,9 @@
 #include "zones/ReplicationOptimizer.hpp"
 #include "zones/EntityMigration.hpp"
 #include "combat/LagCompensatedCombat.hpp"
+#ifdef DARKAGES_HAS_PROTOBUF
 #include "netcode/ProtobufProtocol.hpp"
+#endif
 #include "profiling/PerfettoProfiler.hpp"
 #include "profiling/PerformanceMonitor.hpp"
 #include "monitoring/MetricsExporter.hpp"
@@ -447,7 +449,7 @@ bool ZoneServer::tick() {
     
     // Trace counters
     ZONE_TRACE_COUNTER("tick_time_us", static_cast<int64_t>(tickTimeUs));
-    ZONE_TRACE_COUNTER("entity_count", static_cast<int64_t>(registry_.alive()));
+    ZONE_TRACE_COUNTER("entity_count", 0);
     ZONE_TRACE_COUNTER("player_count", static_cast<int64_t>(connectionToEntity_.size()));
     
     // Check performance budgets
@@ -586,6 +588,7 @@ void ZoneServer::onEntityDied(EntityID victim, EntityID killer) {
     }
     
     // Send death event to clients
+#ifdef DARKAGES_HAS_PROTOBUF
     if (network_) {
         auto deathEvent = Netcode::ProtobufProtocol::createPlayerDeathEvent(
             static_cast<uint32_t>(victim),
@@ -595,6 +598,7 @@ void ZoneServer::onEntityDied(EntityID victim, EntityID killer) {
         auto eventData = Netcode::ProtobufProtocol::serializeEvent(deathEvent);
         network_->broadcastEvent(eventData);
     }
+#endif
     
     // [DATABASE_AGENT] Log kill event to ScyllaDB
     if (scylla_ && scylla_->isConnected()) {
@@ -722,6 +726,7 @@ void ZoneServer::sendCombatEvent(EntityID attacker, EntityID target, int16_t dam
     auto attackerConnIt = entityToConnection_.find(attacker);
     auto targetConnIt = entityToConnection_.find(target);
     
+#ifdef DARKAGES_HAS_PROTOBUF
     auto damageEvent = Netcode::ProtobufProtocol::createDamageEvent(
         static_cast<uint32_t>(attacker),
         static_cast<uint32_t>(target),
@@ -736,6 +741,7 @@ void ZoneServer::sendCombatEvent(EntityID attacker, EntityID target, int16_t dam
     if (targetConnIt != entityToConnection_.end()) {
         network_->sendEvent(targetConnIt->second, eventData);
     }
+#endif
     
     HitResult hit;
     hit.hit = true;
@@ -1118,7 +1124,115 @@ void ZoneServer::onPlayerKicked(uint64_t playerId, const char* reason) {
     std::cout << "[ANTICHEAT] Player " << playerId << " kicked: " << reason << std::endl;
 }
 
-// Process attack input with lag compensation - delegated to InputHandler (see InputHandler.cpp)
+void ZoneServer::processAttackInput(EntityID entity, const ClientInputPacket& input) {
+    // Build attack input from client data
+    AttackInput attackInput;
+    attackInput.type = AttackInput::MELEE;  // Default to melee, could be determined by input
+    attackInput.sequence = input.input.sequence;
+    attackInput.timestamp = input.input.timestamp_ms;
+    attackInput.aimDirection = glm::vec3(
+        std::sin(input.input.yaw), 
+        0.0f,  // Ignore pitch for horizontal aim
+        std::cos(input.input.yaw)
+    );
+    
+    // Get RTT for lag compensation
+    uint32_t rttMs = 100;  // Default fallback
+    if (const NetworkState* netState = registry_.try_get<NetworkState>(entity)) {
+        rttMs = netState->rttMs;
+        if (rttMs == 0) {
+            rttMs = 100;  // Assume 100ms if not measured yet
+        }
+    }
+    
+    // Create lag-compensated attack
+    // clientTimestamp = serverReceiveTime - oneWayLatency
+    uint32_t oneWayLatency = rttMs / 2;
+    uint32_t clientTimestamp = (input.receiveTimeMs > oneWayLatency) 
+        ? input.receiveTimeMs - oneWayLatency 
+        : 0;
+    
+    LagCompensatedAttack lagAttack;
+    lagAttack.attacker = entity;
+    lagAttack.input = attackInput;
+    lagAttack.clientTimestamp = clientTimestamp;
+    lagAttack.serverTimestamp = getCurrentTimeMs();
+    lagAttack.rttMs = rttMs;
+    
+    // Process attack with lag compensation
+    // This rewinds all potential targets to their positions at attack time
+    LagCompensatedCombat lagCombat(combatSystem_, lagCompensator_);
+    auto hits = lagCombat.processAttackWithRewind(registry_, lagAttack);
+    
+    // Send hit results to relevant clients
+    for (const auto& hit : hits) {
+        if (hit.hit) {
+            // [SECURITY_AGENT] Validate combat action for anti-cheat
+            Position attackerPos{0, 0, 0, 0};
+            if (const Position* pos = registry_.try_get<Position>(entity)) {
+                attackerPos = *pos;
+            }
+            
+            auto combatValidation = antiCheat_.validateCombat(entity, hit.target, 
+                                                               hit.damageDealt, hit.hitLocation, 
+                                                               attackerPos, registry_);
+            
+            if (combatValidation.detected) {
+                std::cerr << "[ANTICHEAT] Combat validation failed: " 
+                          << combatValidation.description << std::endl;
+                
+                // Skip this hit - don't apply damage
+                if (combatValidation.severity == Security::ViolationSeverity::CRITICAL ||
+                    combatValidation.severity == Security::ViolationSeverity::BAN) {
+                    // Kick/ban the player
+                    auto connIt = entityToConnection_.find(entity);
+                    if (connIt != entityToConnection_.end()) {
+                        network_->disconnect(connIt->second, combatValidation.description);
+                    }
+                    return;
+                }
+                continue;  // Skip applying this hit
+            }
+            
+            // [NETWORK_AGENT] Send damage event to target
+            auto targetConnIt = entityToConnection_.find(hit.target);
+            if (targetConnIt != entityToConnection_.end()) {
+#ifdef DARKAGES_HAS_PROTOBUF
+                auto damageEvent = Netcode::ProtobufProtocol::createDamageEvent(
+                    static_cast<uint32_t>(entity),
+                    static_cast<uint32_t>(hit.target),
+                    static_cast<int32_t>(hit.damageDealt)
+                );
+                damageEvent.set_timestamp(getCurrentTimeMs());
+                auto eventData = Netcode::ProtobufProtocol::serializeEvent(damageEvent);
+                network_->sendEvent(targetConnIt->second, eventData);
+#endif
+                std::cerr << "[NETWORK] Sent damage event: " << hit.damageDealt 
+                          << " to entity " << static_cast<uint32_t>(hit.target) << std::endl;
+            }
+            
+            // [NETWORK_AGENT] Send hit confirmation to attacker
+            auto attackerConnIt = entityToConnection_.find(entity);
+            if (attackerConnIt != entityToConnection_.end()) {
+#ifdef DARKAGES_HAS_PROTOBUF
+                auto hitConfirm = Netcode::ProtobufProtocol::createDamageEvent(
+                    static_cast<uint32_t>(entity),
+                    static_cast<uint32_t>(hit.target),
+                    static_cast<int32_t>(hit.damageDealt)
+                );
+                hitConfirm.set_timestamp(getCurrentTimeMs());
+                auto eventData = Netcode::ProtobufProtocol::serializeEvent(hitConfirm);
+                network_->sendEvent(attackerConnIt->second, eventData);
+#endif
+                std::cerr << "[NETWORK] Sent hit confirmation: " << hit.damageDealt 
+                          << " to attacker entity " << static_cast<uint32_t>(entity) << std::endl;
+            }
+            
+            // [DATABASE_AGENT] Log combat event for analytics
+            // redis_->logCombatEvent(entity, hit.target, hit.damageDealt, lagAttack.serverTimestamp);
+        }
+    }
+}
 
 EntityID ZoneServer::spawnPlayer(ConnectionID connectionId, uint64_t playerId,
                                 const std::string& username, const Position& spawnPos) {

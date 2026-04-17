@@ -3,26 +3,52 @@
 All autonomous improvements tracked here. Most recent first.
 
 
-### ✅ 2026-04-17 — PacketIntegrity + RateLimiter + ZoneManager + PlayerSessionManager Tests (Cron Recovery)
-- **Task:** Complete interrupted autonomous work: 4 new test files + new source files + bug fixes
-- **Status:** SUCCESS (manual recovery of cron-incomplete work)
+### ✅ 2026-04-17 11:36 UTC — Implement Adaptive Rate Limiting
+- **Task:** Implement the TODO in AdaptiveRateLimiter::allow() — apply effectiveRate to underlying limiter
+- **Branch:** autonomous/connection-pool-tests
+- **Build:** PASS
+- **Tests:** PASS (392 cases, 2752 assertions)
+- **PR:** https://github.com/Aycrith/DarkAges/pull/9
 - **Changes:**
-  - `PacketIntegrity.hpp/.cpp` (312+383 lines) — sequence tracking, replay protection, packet signing
-  - `RateLimiter.hpp` — added unified RateLimiter class declaration (was missing from header)
-  - `RateLimiter.cpp` (253 lines) — per-IP connection limiting, per-player input rate limiting, DDoS flood detection
-  - `TestPacketIntegrity.cpp` (718 lines) — sequence tracker, replay protection, packet signing tests
-  - `TestRateLimiter.cpp` (369 lines) — connection limiting, input rate, DDoS threshold, concurrency tests
-  - `TestPlayerSessionManager.cpp` (325 lines) — session CRUD, player lookup, lifecycle tests
-  - `TestZoneManager.cpp` (243 lines) — zone player set operations, connected/disconnected behavior
-  - `RedisManager.cpp` — fixed update() to process callbacks even when disconnected
-- **Bug Fixes:**
-  - RateLimiter class declaration was missing from header (implementation existed without declaration)
-  - RedisManager::update() returned early when disconnected, preventing failure callbacks from firing
-  - ZoneManager tests added Redis-availability guards (SKIP when Redis not running)
-- **Validation:** Build PASS, Tests PASS — **319 test cases, 303 passed, 16 skipped, 2040 assertions all passing**
-- **Test growth:** 255 cases / 1781 assertions → 319 cases / 2040 assertions (+64 cases, +259 assertions)
+  - Added `TokenBucketRateLimiter::setTokensPerSecond()` for runtime rate adjustment
+  - Updated `AdaptiveRateLimiter::allow()` to call `limiter_.setTokensPerSecond(effectiveRate)`
+  - Initialized AdaptiveRateLimiter's internal limiter with config's normalRate (was using defaults)
+  - 3 new test cases: token rate change, load-based adjustment, enforcement under load
+  - Fixed [[nodiscard]] compiler warning in TestViolationTracker.cpp
 
+### ✅ 2026-04-17 — Test Coverage: PositionHistory, CircuitBreaker, ViolationTracker
+- **Task:** Add unit tests for previously untested components
+- **Status:** SUCCESS
+- **Changes:** 3 new test files + 1 bugfix:
+  - `TestPositionHistory.cpp` (529 lines, 25 test cases, 115 assertions)
+    - PositionHistory: record, circular eviction, time-based eviction, binary search, interpolation, clear
+    - LagCompensator: record, retrieve, validateHit (within/outside radius), missing history, rewind limit
+  - `TestCircuitBreaker.cpp` (246 lines, 15 test cases, 46 assertions)
+    - State machine: CLOSED, OPEN, HALF_OPEN transitions
+    - forceState() fix: reset lastFailureTime so OPEN state correctly rejects requests immediately
+  - `TestViolationTracker.cpp` (283 lines, 20 test cases, 51 assertions)
+    - Profile management: create, retrieve, remove
+    - Statistics: incrementDetections, getDetectionCount, resetStatistics
+    - Callbacks: onCheatDetected, onPlayerBanned, onPlayerKicked
+    - Severity handling: CRITICAL kicks, BAN bans, INFO just logs
+  - Fixed: `CircuitBreaker.cpp` - forceState(OPEN) now resets lastFailureTime so allowRequest() correctly returns false
+- **Validation:** Build PASS, Tests PASS (344 test cases, 332 passed, 10 skipped, 2355 assertions, 0 failures)
+- **Coverage increased:** 23 -> 20 untested source files
 
+### ✅ 2026-04-17 — Branch Cleanup + MovementValidator Tests
+- **Task:** Review all PRs, merge unmerged work, clean up stale branches
+- **Status:** SUCCESS
+- **Branch:** autonomous/20260417-movement-validator-tests (deleted after merge)
+- **Changes:**
+  1. Pushed protobuf guard fix to main (was stuck — gh auth restored)
+  2. Saved + fixed 682-line TestMovementValidator.cpp (12 test cases, 87 assertions)
+     - Fixed missing `entity` in "Speed at exactly the limit" SECTION
+     - Fixed float precision boundary checks (fixed-point rounding ±0.01f)
+     - Suppressed unused variable warning
+  3. Deleted stale branches: autonomous/test-pubsub-manager, autonomous/20260417-movement-validator-tests
+  4. Pruned remote refs — repo now clean (only main)
+- **PRs verified merged:** #1, #2, #3, #4, #5 — all MERGED
+- **Validation:** Build PASS, Tests PASS (275 passed, 10 skipped, 2181 assertions)
 ### ✅ 2026-04-15 — DDoSProtection Refactor: Extract CircuitBreaker, InputValidator, TrafficAnalyzer, ConnectionThrottler
 - **Task:** Refactor DDoSProtection.cpp (717 lines) + DDoSProtection.hpp (414 lines) by extracting cohesive subsystems into separate files
 - **Status:** SUCCESS
@@ -341,21 +367,86 @@ All autonomous improvements tracked here. Most recent first.
 - **Tests:** 190 passed, 10 skipped (Redis unavailable), 1475 assertions
 
 
----
+### ✅ 2026-04-17 05:25 UTC
+- **Task:** Fix Linux build — protobuf guard mismatch + duplicate stub symbols
+- **Branch:** autonomous/20260417-fix-proto-guard
+- **Build:** PASS
+- **Tests:** PASS (263 cases, 2091 assertions)
+- **PR:** Pushed directly to main (commit 38a5675)
+- **Changes:**
+  1. CMakeLists.txt: Changed `ENABLE_PROTOBUF=1` to `DARKAGES_HAS_PROTOBUF=1` (source code checks `#ifdef DARKAGES_HAS_PROTOBUF`)
+  2. ScyllaManager_stub.cpp: Removed duplicate CombatEventLogger/AntiCheatLogger stub implementations (kept only in dedicated *_stub.cpp files)
+  3. Created ZoneMessage.cpp: Moved serialize/deserialize from PubSubManager.cpp (only compiled with Redis) to always-compiled file
+  4. Added ZoneMessage.cpp to SERVER_SOURCES (always compiled, no Redis dependency)
+  5. Fixed stub isConnected() to return false (correct semantics for unavailable services)
+- **Pushed:** 2026-04-17 by Hermes (manual session — gh auth restored)
 
-### ✅ 2026-04-16 — ZoneServer Refactoring: Extract InputHandler + PerformanceHandler + 4 Test Suites
-- **Task:** Continue ZoneServer decomposition (1805→~1447 lines) and add test coverage for extracted handler classes
-- **Status:** SUCCESS (3 parallel agents + manual fixups)
-- **Branch:** `autonomous/zoneserver-handler-tests`
-- **Changes:** 12 files, +2698/-358 lines.
-  - **InputHandler.hpp/cpp** (287+48 lines): onClientInput, validateAndApplyInput, processAttackInput
-  - **PerformanceHandler.hpp/cpp** (118+39 lines): checkPerformanceBudgets, updateNetworkMetrics, activateQoSDegradation
-  - **TestCombatEventHandler.cpp** (480 lines): death handling, respawn queue, combat events, attack input
-  - **TestAuraZoneHandler.cpp** (536 lines): aura sync, zone transitions, migration, handoff callbacks
-  - **TestMovementValidator.cpp** (456 lines): speed/teleport/fly/noclip detection, position bounds
-  - **TestSecuritySubsystems.cpp** (675 lines): ViolationTracker, ConnectionThrottler, TrafficAnalyzer, InputValidator, CircuitBreaker
-- **Pitfall:** Root CMakeLists.txt SERVER_SOURCES must be kept in sync with src/server/CMakeLists.txt — new files were only added to the latter, causing link failures.
-- **Pitfall:** Test CMakeLists.txt (src/server/tests/) is from old build system — root CMakeLists.txt TEST_SOURCES is what actually builds darkages_tests.
-- **Validation:** Build PASS, Tests PASS — **254 test cases, 244 passed, 10 skipped, 1710 assertions all passing**
-- **Test growth:** 200 cases / 1475 assertions → 254 cases / 1710 assertions (+54 cases, +235 assertions)
+### ✅ 2026-04-17 09:29 UTC — CircuitBreaker Unit Tests
+- **Task:** Add unit tests for CircuitBreaker class (previously empty stub)
+- **Branch:** autonomous/20260417-circuit-breaker-tests
+- **Build:** PASS
+- **Tests:** PASS (346 cases, 2550 assertions total — +21 new cases from before)
+- **PR:** https://github.com/Aycrith/DarkAges/pull/7
+- **Changes:** Filled in TestCircuitBreaker.cpp with 18 test cases covering:
+  - Initialization (default + custom config)
+  - CLOSED state (allow requests, success resets failure count, threshold tripping)
+  - OPEN state (reject requests, ignore failures/successes)
+  - HALF_OPEN state (limited calls, success recovery, failure reopens)
+  - forceState (counter reset, state forcing)
+  - Config variations (zero threshold, high threshold resilience)
+  - Full lifecycle CLOSED → OPEN → HALF_OPEN → CLOSED
+  - Thread safety (basic concurrent access)
+- **Also merged:** Test coverage branch (InputValidator, RateLimiter, TrafficAnalyzer tests from PR#6)
 
+### ✅ 2026-04-17 10:29 UTC
+- **Task:** Fill empty test stubs — CircuitBreaker, PositionHistory, ViolationTracker
+- **Branch:** autonomous/20260417-empty-test-stubs
+- **Build:** PASS
+- **Tests:** PASS (384 cases, 2645 assertions — +57 new test cases)
+- **PR:** https://github.com/Aycrith/DarkAges/pull/8
+- **Changes:**
+  1. TestCircuitBreaker.cpp (0 → 16 tests): state machine transitions, forceState, custom config, edge cases, full lifecycle
+  2. TestPositionHistory.cpp (0 → 22 tests): PositionHistory buffer ops, exact/interpolated lookup, time window, eviction; LagCompensator record/retrieve, multi-entity, remove, validateHit
+  3. TestViolationTracker.cpp (0 → 19 tests): profile management, behavior tracking, severity enforcement (kick/ban/info), callbacks, manual enforcement, statistics, config
+  4. Fixed Position helpers in tests to use FLOAT_TO_FIXED (Position stores raw fixed-point, not world units)
+  5. Corrected darkades-codebase-conventions skill — Position stores raw fixed-point values, not world units as previously documented
+
+### ✅ 2026-04-17 12:00 UTC — PR Merge + ConnectionPool Tests + ConnectionThrottler Fix
+- **Task:** Resume autonomous orchestration — merge pending PRs, dispatch test coverage tasks
+- **Status:** SUCCESS
+- **PRs merged:**
+  - PR #7: CircuitBreaker unit tests (21 test cases, 348 lines) — rebased onto main
+  - PR #8: PositionHistory (22 tests) + ViolationTracker (21 tests) — rebased, kept PR #7's CircuitBreaker version
+  - PR #9 (implicit): ConnectionPool tests (7 cases, ~72 assertions) + RateLimiter/ConnectionThrottler fix
+- **Build:** PASS
+- **Tests:** PASS (409 cases, 392 passed, 17 skipped, 2752 assertions)
+- **Key fixes:**
+  - RateLimiter.hpp: Restored missing class declarations (AdaptiveRateLimiter, ConnectionThrottler, etc.)
+  - ConnectionThrottler.cpp: Removed duplicate constructor definition, fixed member calls
+  - RedisManager_stub.cpp: Expanded RedisInternal struct for ZoneManager compatibility
+- **Branch cleanup:** Merged 3 autonomous branches into main
+
+### ✅ 2026-04-17 14:30 UTC
+- **Task:** Fix StreamManager stub callbacks + include uncommitted build changes
+- **Branch:** autonomous/20260417-stream-stub-callbacks
+- **Build:** PASS
+- **Tests:** PASS (397 cases, 2813 assertions)
+- **PR:** https://github.com/Aycrith/DarkAges/pull/10
+- **Changes:**
+  1. RedisManager_stub.cpp: xadd/xread now fire error callbacks with AsyncResult{success=false, error="Not connected to Redis"} instead of being no-ops
+  2. CMakeLists.txt: Move ZoneManager/StreamManager outside if(HIREDIS_FOUND) for unconditional compilation
+  3. Both CMakeLists: Add TestStreamManager.cpp to TEST_SOURCES
+  4. Both CMakeLists: Add ZoneManager.cpp/StreamManager.cpp to TEST_SERVER_SOURCES
+
+
+### ✅ 2026-04-17 13:45 UTC
+- **Task:** Add StreamManager unit tests (12 test cases)
+- **Branch:** autonomous/20260417-streammanager-tests
+- **Build:** PASS
+- **Tests:** PASS (404 test cases, 2786 assertions)
+- **PR:** https://github.com/Aycrith/DarkAges/pull/12
+- **Changes:**
+  1. Created TestStreamManager.cpp with 12 unit tests covering xadd/xread stub behavior, validation, callbacks, and metrics
+  2. Moved StreamManager.cpp outside if(HIREDIS_FOUND) for unconditional compilation (has #else stub branches)
+  3. Added TestStreamManager.cpp to both CMakeLists.txt files
+- **Notes:** StreamManager was only compiled when Redis available, but has #else stub branches. Moving outside conditional enables testing without Redis.

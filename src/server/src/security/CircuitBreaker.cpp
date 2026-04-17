@@ -106,6 +106,10 @@ void CircuitBreaker::forceState(State state) {
     failureCount_ = 0;
     successCount_ = 0;
     halfOpenCalls_ = 0;
+    // Reset lastFailureTime so that OPEN state immediately rejects requests
+    // (unless timeout has passed, but this makes the transition cleaner)
+    lastFailureTime_ = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
 } // namespace Security

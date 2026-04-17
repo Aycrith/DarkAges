@@ -135,7 +135,8 @@ TEST_CASE("Spatial Hash performance", "[spatial][performance]") {
         // Query 100 times and measure total time
         auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < 100; ++i) {
-            hash.query(500.0f, 500.0f, 50.0f);
+            auto results = hash.query(500.0f, 500.0f, 50.0f);
+            (void)results;  // Benchmark - just measuring time
         }
         auto elapsed = std::chrono::high_resolution_clock::now() - start;
         auto avgUs = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count() / 100.0;
