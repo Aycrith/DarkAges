@@ -437,3 +437,16 @@ All autonomous improvements tracked here. Most recent first.
   2. CMakeLists.txt: Move ZoneManager/StreamManager outside if(HIREDIS_FOUND) for unconditional compilation
   3. Both CMakeLists: Add TestStreamManager.cpp to TEST_SOURCES
   4. Both CMakeLists: Add ZoneManager.cpp/StreamManager.cpp to TEST_SERVER_SOURCES
+
+
+### ✅ 2026-04-17 13:45 UTC
+- **Task:** Add StreamManager unit tests (12 test cases)
+- **Branch:** autonomous/20260417-streammanager-tests
+- **Build:** PASS
+- **Tests:** PASS (404 test cases, 2786 assertions)
+- **PR:** https://github.com/Aycrith/DarkAges/pull/12
+- **Changes:**
+  1. Created TestStreamManager.cpp with 12 unit tests covering xadd/xread stub behavior, validation, callbacks, and metrics
+  2. Moved StreamManager.cpp outside if(HIREDIS_FOUND) for unconditional compilation (has #else stub branches)
+  3. Added TestStreamManager.cpp to both CMakeLists.txt files
+- **Notes:** StreamManager was only compiled when Redis available, but has #else stub branches. Moving outside conditional enables testing without Redis.
