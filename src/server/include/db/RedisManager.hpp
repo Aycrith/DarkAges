@@ -94,7 +94,6 @@ public:
     
     // === Pub/Sub (for cross-zone communication) ===
     
-    #ifdef REDIS_AVAILABLE
     // Publish message to channel
     void publish(std::string_view channel, std::string_view message);
     
@@ -113,7 +112,6 @@ public:
     void broadcastToAllZones(const ZoneMessage& message);
     void subscribeToZoneChannel(uint32_t myZoneId, 
                                 std::function<void(const ZoneMessage&)> callback);
-    #endif
     
     // === Streams (Non-blocking alternative to Pub/Sub) ===
     

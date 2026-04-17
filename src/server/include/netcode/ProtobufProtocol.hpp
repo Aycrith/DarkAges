@@ -10,6 +10,7 @@
 #include <span>
 #include <optional>
 
+#ifdef DARKAGES_HAS_PROTOBUF
 // Include generated protobuf headers
 #include "network_protocol.pb.h"
 
@@ -179,3 +180,5 @@ private:
 
 } // namespace Netcode
 } // namespace DarkAges
+
+#endif // DARKAGES_HAS_PROTOBUF

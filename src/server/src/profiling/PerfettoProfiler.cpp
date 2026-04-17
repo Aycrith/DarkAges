@@ -189,8 +189,8 @@ const char* PerfettoProfiler::getCategoryColor(TraceCategory cat) {
 
 void PerfettoProfiler::flushTrace() {
     FILE* fp = nullptr;
-    errno_t err = fopen_s(&fp, outputPath_.c_str(), "w");
-    if (err != 0 || !fp) {
+    fp = fopen(outputPath_.c_str(), "w");
+    if (!fp) {
         std::cerr << "[PROFILER] Failed to open output file: " << outputPath_ << std::endl;
         return;
     }

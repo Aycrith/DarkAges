@@ -158,8 +158,11 @@ private:
 };
 
 // Macros for easy instrumentation
+#define CONCAT_IMPL(a, b) a##b
+#define CONCAT(a, b) CONCAT_IMPL(a, b)
+
 #define TRACE_EVENT(name, category) \
-    auto _trace_##__LINE__ = DarkAges::Profiling::PerfettoProfiler::instance().scopedEvent(name, category)
+    auto CONCAT(_trace_, __LINE__) = DarkAges::Profiling::PerfettoProfiler::instance().scopedEvent(name, category)
 
 #define TRACE_BEGIN(name, category) \
     DarkAges::Profiling::PerfettoProfiler::instance().beginEvent(name, category)

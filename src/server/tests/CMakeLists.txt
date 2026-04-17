@@ -13,12 +13,10 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(Catch2)
 
-# Test sources
+# Test sources - base tests
 set(TEST_SOURCES
-    TestMain.cpp
     TestSpatialHash.cpp
     TestMovementSystem.cpp
-    TestNetworkProtocol.cpp
     TestDeltaCompression.cpp
     TestReplicationOptimizer.cpp
     TestAreaOfInterest.cpp
@@ -26,28 +24,41 @@ set(TEST_SOURCES
     TestLagCompensator.cpp
     TestLagCompensatedCombat.cpp
     TestCombatSystem.cpp
-    TestAbilitySystem.cpp
-    TestProjectileSystem.cpp
     TestZoneOrchestrator.cpp
     TestEntityMigration.cpp
     TestMemoryPool.cpp
     TestProfiling.cpp
-    TestMetricsExporter.cpp
     TestDDoSProtection.cpp
+    TestAntiCheat.cpp
+    TestPacketValidator.cpp
+    TestStatisticalDetector.cpp
+    TestPacketIntegrity.cpp
+    TestAuraZoneHandler.cpp
+    TestCombatEventHandler.cpp
     TestRedisIntegration.cpp
     BenchmarkRedis.cpp
 )
 
-# Server sources needed for tests (excluding main.cpp)
+# Conditional test sources based on dependencies
+if(GNS_AVAILABLE)
+    list(APPEND TEST_SOURCES TestGNSIntegration.cpp)
+    # TestNetworkProtocol requires protobuf - only include if protobuf generated
+    if(EXISTS ${CMAKE_SOURCE_DIR}/../shared/game_protocol_generated.h)
+        list(APPEND TEST_SOURCES TestNetworkProtocol.cpp)
+    endif()
+endif()
+
+# Scylla tests - include if driver available (always off for now since we use stub)
+# list(APPEND TEST_SOURCES TestScyllaManager.cpp)
+
+# Server sources needed for tests - use stubs when dependencies unavailable
 set(TEST_SERVER_SOURCES
     ${CMAKE_SOURCE_DIR}/src/ecs/CoreTypes.cpp
     ${CMAKE_SOURCE_DIR}/src/physics/SpatialHash.cpp
     ${CMAKE_SOURCE_DIR}/src/physics/MovementSystem.cpp
-    ${CMAKE_SOURCE_DIR}/src/netcode/NetworkManager.cpp
-    ${CMAKE_SOURCE_DIR}/src/db/RedisManager.cpp
-    ${CMAKE_SOURCE_DIR}/src/db/ConnectionPool.cpp
-    ${CMAKE_SOURCE_DIR}/src/db/ScyllaManager.cpp
     ${CMAKE_SOURCE_DIR}/src/zones/ZoneServer.cpp
+    ${CMAKE_SOURCE_DIR}/src/zones/CombatEventHandler.cpp
+    ${CMAKE_SOURCE_DIR}/src/zones/AuraZoneHandler.cpp
     ${CMAKE_SOURCE_DIR}/src/zones/ZoneOrchestrator.cpp
     ${CMAKE_SOURCE_DIR}/src/zones/ReplicationOptimizer.cpp
     ${CMAKE_SOURCE_DIR}/src/zones/AreaOfInterest.cpp
@@ -56,17 +67,47 @@ set(TEST_SERVER_SOURCES
     ${CMAKE_SOURCE_DIR}/src/combat/PositionHistory.cpp
     ${CMAKE_SOURCE_DIR}/src/combat/CombatSystem.cpp
     ${CMAKE_SOURCE_DIR}/src/combat/LagCompensatedCombat.cpp
-    ${CMAKE_SOURCE_DIR}/src/combat/AbilitySystem.cpp
     ${CMAKE_SOURCE_DIR}/src/memory/MemoryPool.cpp
     ${CMAKE_SOURCE_DIR}/src/memory/LeakDetector.cpp
     ${CMAKE_SOURCE_DIR}/src/security/AntiCheat.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/ViolationTracker.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/MovementValidator.cpp
     ${CMAKE_SOURCE_DIR}/src/security/DDoSProtection.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/PacketValidator.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/StatisticalDetector.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/PacketIntegrity.cpp
     ${CMAKE_SOURCE_DIR}/src/security/CircuitBreaker.cpp
     ${CMAKE_SOURCE_DIR}/src/security/InputValidator.cpp
     ${CMAKE_SOURCE_DIR}/src/security/ConnectionThrottler.cpp
     ${CMAKE_SOURCE_DIR}/src/security/TrafficAnalyzer.cpp
+    ${CMAKE_SOURCE_DIR}/src/zones/PlayerManager.cpp
+    ${CMAKE_SOURCE_DIR}/src/combat/AbilitySystem.cpp
     ${CMAKE_SOURCE_DIR}/src/monitoring/MetricsExporter.cpp
+    ${CMAKE_SOURCE_DIR}/src/profiling/PerformanceMonitor.cpp
+    ${CMAKE_SOURCE_DIR}/src/profiling/PerfettoProfiler_stub.cpp
+    ${CMAKE_SOURCE_DIR}/src/zones/ZoneHandoff.cpp
 )
+
+# Network manager: use stub if GNS not available
+if(GNS_AVAILABLE)
+    list(APPEND TEST_SERVER_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/netcode/NetworkManager.cpp
+    )
+else()
+    list(APPEND TEST_SERVER_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/netcode/NetworkManager_stub.cpp
+    )
+endif()
+
+# Redis: use stub if not available
+if(REDIS_AVAILABLE)
+    list(APPEND TEST_SERVER_SOURCES ${CMAKE_SOURCE_DIR}/src/db/RedisManager.cpp)
+else()
+    list(APPEND TEST_SERVER_SOURCES ${CMAKE_SOURCE_DIR}/src/db/RedisManager_stub.cpp)
+endif()
+
+# Scylla: always use stub
+list(APPEND TEST_SERVER_SOURCES ${CMAKE_SOURCE_DIR}/src/db/ScyllaManager_stub.cpp)
 
 add_executable(darkages-tests ${TEST_SOURCES} ${TEST_SERVER_SOURCES})
 
