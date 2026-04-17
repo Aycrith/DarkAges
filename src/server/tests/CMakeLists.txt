@@ -38,6 +38,10 @@ set(TEST_SOURCES
     TestCombatEventHandler.cpp
     TestAuraZoneHandler.cpp
     TestSecuritySubsystems.cpp
+    TestPacketIntegrity.cpp
+    TestRateLimiter.cpp
+    TestZoneManager.cpp
+    TestPlayerSessionManager.cpp
     BenchmarkRedis.cpp
 )
 
@@ -49,6 +53,7 @@ set(TEST_SERVER_SOURCES
     ${CMAKE_SOURCE_DIR}/src/netcode/NetworkManager.cpp
     ${CMAKE_SOURCE_DIR}/src/db/RedisManager.cpp
     ${CMAKE_SOURCE_DIR}/src/db/ConnectionPool.cpp
+    ${CMAKE_SOURCE_DIR}/src/db/PlayerSessionManager.cpp
     ${CMAKE_SOURCE_DIR}/src/db/ScyllaManager.cpp
     ${CMAKE_SOURCE_DIR}/src/zones/ZoneServer.cpp
     ${CMAKE_SOURCE_DIR}/src/zones/ZoneOrchestrator.cpp
@@ -76,6 +81,9 @@ set(TEST_SERVER_SOURCES
     ${CMAKE_SOURCE_DIR}/src/security/InputValidator.cpp
     ${CMAKE_SOURCE_DIR}/src/security/ConnectionThrottler.cpp
     ${CMAKE_SOURCE_DIR}/src/security/TrafficAnalyzer.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/PacketIntegrity.cpp
+    ${CMAKE_SOURCE_DIR}/src/security/RateLimiter.cpp
+    ${CMAKE_SOURCE_DIR}/src/db/ZoneManager.cpp
     ${CMAKE_SOURCE_DIR}/src/monitoring/MetricsExporter.cpp
 )
 

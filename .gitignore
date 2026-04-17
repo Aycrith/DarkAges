@@ -139,3 +139,6 @@ build_combined/
 build-check/
 build-verify/
 build_*/
+
+# Nested build directories (autonomous iteration)
+src/server/build/

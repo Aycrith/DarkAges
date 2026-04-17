@@ -119,9 +119,8 @@ bool RedisManager::isConnected() const {
 }
 
 void RedisManager::update() {
-    if (!internal_->connected) return;
-    
-    // Process pending callbacks
+    // Always process pending callbacks, even when disconnected
+    // (queued operations need to fire their failure callbacks)
     std::queue<RedisInternal::PendingCallback> callbacks;
     {
         std::lock_guard<std::mutex> lock(internal_->callbackMutex);
@@ -132,6 +131,8 @@ void RedisManager::update() {
         callbacks.front().func();
         callbacks.pop();
     }
+    
+    if (!internal_->connected) return;
     
     #ifdef REDIS_AVAILABLE
     // Process pub/sub messages via PubSubManager

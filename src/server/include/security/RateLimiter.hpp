@@ -5,6 +5,8 @@
 #include <mutex>
 #include <unordered_map>
 #include <string>
+#include <vector>
+#include <algorithm>
 
 namespace DarkAges {
 namespace Security {
@@ -349,6 +351,72 @@ private:
     TokenBucketRateLimiter<uint32_t> packetLimiter_;
     TokenBucketRateLimiter<uint32_t> messageLimiter_;
 };
+
+// [SECURITY_AGENT] Unified rate limiter for connections, input, and DDoS detection
+class RateLimiter {
+public:
+    struct Config {
+        std::uint32_t maxConnectionsPerIP{10};
+        std::uint32_t maxInputPerSecond{60};
+        std::uint64_t inputWindowDurationMs{1000};
+        std::uint32_t maxConnectionsPerSecondPerIP{20};
+        std::uint64_t connectionWindowDurationMs{1000};
+
+        Config() = default;
+    };
+
+    explicit RateLimiter(const Config& config);
+    RateLimiter();
+
+    // Connection limiting (per-IP)
+    bool checkConnectionLimit(const std::string& ipAddress);
+    void recordConnection(const std::string& ipAddress);
+    void recordDisconnection(const std::string& ipAddress);
+    std::uint32_t getConnectionCount(const std::string& ipAddress) const;
+
+    // Input rate limiting (per-player, sliding window)
+    bool checkInputRate(std::uint64_t playerId);
+    void recordInput(std::uint64_t playerId);
+    std::uint32_t getInputCount(std::uint64_t playerId) const;
+
+    // DDoS connection flood detection (per-IP)
+    bool checkDDoSThreshold(const std::string& ipAddress);
+    void recordConnectionAttempt(const std::string& ipAddress);
+
+    // Maintenance
+    void reset();
+    void cleanupStale(std::uint64_t maxAgeMs);
+    std::size_t getTrackedIPCount() const;
+    std::size_t getTrackedPlayerCount() const;
+
+private:
+    std::uint64_t getCurrentTimeMs() const;
+    std::size_t cleanWindow(std::deque<std::uint64_t>& timestamps,
+                            std::uint64_t windowDurationMs) const;
+
+    struct IPConnectionEntry {
+        std::uint32_t activeConnections{0};
+        std::uint64_t lastActivityMs{0};
+    };
+
+    struct PlayerInputEntry {
+        std::deque<std::uint64_t> timestamps;
+        std::uint64_t lastActivityMs{0};
+    };
+
+    struct IPAttemptEntry {
+        std::deque<std::uint64_t> timestamps;
+        std::uint64_t lastActivityMs{0};
+    };
+
+    Config config_;
+    mutable std::mutex mutex_;
+    std::unordered_map<std::string, IPConnectionEntry> ipConnections_;
+    std::unordered_map<std::string, IPAttemptEntry> ipConnectionAttempts_;
+    std::unordered_map<std::uint64_t, PlayerInputEntry> playerInputs_;
+};
+
+using RateLimitConfig = RateLimiter::Config;
 
 } // namespace Security
 } // namespace DarkAges

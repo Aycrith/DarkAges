@@ -1,12 +1,20 @@
 // Stub implementation for RedisManager when hiredis is not available
 #include "db/RedisManager.hpp"
 #include "db/RedisInternal.hpp"
+#include <queue>
+#include <mutex>
+#include <atomic>
 
 namespace DarkAges {
 
 // Minimal RedisInternal for stub
 struct RedisInternal {
     bool connected{false};
+    std::atomic<uint64_t> commandsSent_{0};
+    std::atomic<uint64_t> commandsCompleted_{0};
+    std::atomic<uint64_t> commandsFailed_{0};
+    std::queue<std::function<void()>> callbackQueue;
+    std::mutex callbackMutex;
 };
 
 RedisManager::RedisManager() : internal_(std::make_unique<RedisInternal>()) {}

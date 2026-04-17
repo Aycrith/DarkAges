@@ -90,6 +90,8 @@ set(SERVER_SOURCES
     src/security/InputValidator.cpp
     src/security/ConnectionThrottler.cpp
     src/security/TrafficAnalyzer.cpp
+    src/security/PacketIntegrity.cpp
+    src/security/RateLimiter.cpp
 )
 
 # Header files
@@ -134,6 +136,7 @@ set(SERVER_HEADERS
     include/security/InputValidator.hpp
     include/security/TrafficAnalyzer.hpp
     include/security/RateLimiter.hpp
+    include/security/PacketIntegrity.hpp
 )
 
 # Main executable

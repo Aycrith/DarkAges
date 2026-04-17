@@ -451,6 +451,8 @@ set(SERVER_SOURCES
     src/server/src/security/InputValidator.cpp
     src/server/src/security/ConnectionThrottler.cpp
     src/server/src/security/TrafficAnalyzer.cpp
+    src/server/src/security/PacketIntegrity.cpp
+    src/server/src/security/RateLimiter.cpp
     src/server/src/security/PacketValidator.cpp
     src/server/src/profiling/PerformanceMonitor.cpp
 )
@@ -717,6 +719,10 @@ if(BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
         src/server/tests/TestAuraZoneHandler.cpp
         src/server/tests/TestMovementValidator.cpp
         src/server/tests/TestSecuritySubsystems.cpp
+        src/server/tests/TestPlayerSessionManager.cpp
+        src/server/tests/TestPacketIntegrity.cpp
+        src/server/tests/TestRateLimiter.cpp
+        src/server/tests/TestZoneManager.cpp
     )
 
     # Conditionally include tests for optional features

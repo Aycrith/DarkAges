@@ -3,6 +3,26 @@
 All autonomous improvements tracked here. Most recent first.
 
 
+### ✅ 2026-04-17 — PacketIntegrity + RateLimiter + ZoneManager + PlayerSessionManager Tests (Cron Recovery)
+- **Task:** Complete interrupted autonomous work: 4 new test files + new source files + bug fixes
+- **Status:** SUCCESS (manual recovery of cron-incomplete work)
+- **Changes:**
+  - `PacketIntegrity.hpp/.cpp` (312+383 lines) — sequence tracking, replay protection, packet signing
+  - `RateLimiter.hpp` — added unified RateLimiter class declaration (was missing from header)
+  - `RateLimiter.cpp` (253 lines) — per-IP connection limiting, per-player input rate limiting, DDoS flood detection
+  - `TestPacketIntegrity.cpp` (718 lines) — sequence tracker, replay protection, packet signing tests
+  - `TestRateLimiter.cpp` (369 lines) — connection limiting, input rate, DDoS threshold, concurrency tests
+  - `TestPlayerSessionManager.cpp` (325 lines) — session CRUD, player lookup, lifecycle tests
+  - `TestZoneManager.cpp` (243 lines) — zone player set operations, connected/disconnected behavior
+  - `RedisManager.cpp` — fixed update() to process callbacks even when disconnected
+- **Bug Fixes:**
+  - RateLimiter class declaration was missing from header (implementation existed without declaration)
+  - RedisManager::update() returned early when disconnected, preventing failure callbacks from firing
+  - ZoneManager tests added Redis-availability guards (SKIP when Redis not running)
+- **Validation:** Build PASS, Tests PASS — **319 test cases, 303 passed, 16 skipped, 2040 assertions all passing**
+- **Test growth:** 255 cases / 1781 assertions → 319 cases / 2040 assertions (+64 cases, +259 assertions)
+
+
 ### ✅ 2026-04-15 — DDoSProtection Refactor: Extract CircuitBreaker, InputValidator, TrafficAnalyzer, ConnectionThrottler
 - **Task:** Refactor DDoSProtection.cpp (717 lines) + DDoSProtection.hpp (414 lines) by extracting cohesive subsystems into separate files
 - **Status:** SUCCESS
