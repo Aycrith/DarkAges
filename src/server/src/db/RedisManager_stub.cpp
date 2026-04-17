@@ -10,7 +10,7 @@ RedisManager::~RedisManager() = default;
 bool RedisManager::initialize(const std::string&, uint16_t) { return true; }
 void RedisManager::shutdown() {}
 void RedisManager::update() {}
-bool RedisManager::isConnected() const { return true; }
+bool RedisManager::isConnected() const { return false; }
 
 void RedisManager::subscribeToZoneChannel(uint32_t, std::function<void(const ZoneMessage&)>) {}
 void RedisManager::unsubscribe(std::string_view) {}

@@ -480,6 +480,9 @@ else()
     message(STATUS "Protocol: Using stub implementation (GNS not available)")
 endif()
 
+# Database layer - ZoneMessage always compiled (no Redis dependency)
+list(APPEND SERVER_SOURCES src/server/src/db/ZoneMessage.cpp)
+
 # Database layer - conditional on hiredis
 if(HIREDIS_FOUND)
     list(APPEND SERVER_SOURCES
@@ -634,7 +637,7 @@ if(TARGET protobuf::libprotobuf-lite)
 elseif(TARGET protobuf::libprotobuf)
     target_link_libraries(darkages_core PUBLIC protobuf::libprotobuf)
 endif()
-target_compile_definitions(darkages_core PUBLIC ENABLE_PROTOBUF=1)
+target_compile_definitions(darkages_core PUBLIC DARKAGES_HAS_PROTOBUF=1)
 
 # Core linking
 target_link_libraries(darkages_core PUBLIC Threads::Threads)
