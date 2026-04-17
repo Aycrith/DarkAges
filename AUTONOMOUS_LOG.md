@@ -367,3 +367,20 @@ All autonomous improvements tracked here. Most recent first.
   4. Added ZoneMessage.cpp to SERVER_SOURCES (always compiled, no Redis dependency)
   5. Fixed stub isConnected() to return false (correct semantics for unavailable services)
 - **Pushed:** 2026-04-17 by Hermes (manual session — gh auth restored)
+
+### ✅ 2026-04-17 09:29 UTC — CircuitBreaker Unit Tests
+- **Task:** Add unit tests for CircuitBreaker class (previously empty stub)
+- **Branch:** autonomous/20260417-circuit-breaker-tests
+- **Build:** PASS
+- **Tests:** PASS (346 cases, 2550 assertions total — +21 new cases from before)
+- **PR:** https://github.com/Aycrith/DarkAges/pull/7
+- **Changes:** Filled in TestCircuitBreaker.cpp with 18 test cases covering:
+  - Initialization (default + custom config)
+  - CLOSED state (allow requests, success resets failure count, threshold tripping)
+  - OPEN state (reject requests, ignore failures/successes)
+  - HALF_OPEN state (limited calls, success recovery, failure reopens)
+  - forceState (counter reset, state forcing)
+  - Config variations (zero threshold, high threshold resilience)
+  - Full lifecycle CLOSED → OPEN → HALF_OPEN → CLOSED
+  - Thread safety (basic concurrent access)
+- **Also merged:** Test coverage branch (InputValidator, RateLimiter, TrafficAnalyzer tests from PR#6)
