@@ -21,8 +21,8 @@
 - **WP-8-1**: Production Monitoring (Day 4/14)
 - **WP-8-6**: GameNetworkingSockets - Protobuf protocol layer (Day 4/14)
 
-### ⏳ Waiting on Merge
-- **PR #5** - Security + handler extraction (mergeable)
+### ✅ Just Merged
+- **PR #5** - Security + handler extraction → MERGED (commit ac4d161)
 
 ---
 
