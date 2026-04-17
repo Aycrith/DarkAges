@@ -1,7 +1,17 @@
 # DarkAges Autonomous Iteration Log
 
-All autonomous improvements tracked here. Most recent first.
-
+### ✅ 2026-04-17 14:46 UTC — Fix SIGSEGV on sub-manager null dereference
+- **Task:** Fix SIGSEGV in TestStreamManager when Redis initialization fails
+- **Branch:** autonomous/20260417-fix-sigsegv-submanager-null-checks (merged to main)
+- **Build:** PASS
+- **Tests:** PASS (438 cases, 2970 assertions, 0 failures — was 1 SIGSEGV)
+- **Changes:**
+  - Added null pointer checks to all RedisManager facade methods delegating to sub-managers
+  - sessionManager_: savePlayerSession, loadPlayerSession, removePlayerSession, updatePlayerPosition
+  - zoneManager_: addPlayerToZone, removePlayerFromZone, getZonePlayers
+  - streamManager_: xadd, xread
+  - pubSubManager_: publish, subscribe, unsubscribe, processSubscriptions, publishToZone, broadcastToAllZones
+- **Root cause:** When RedisManager::initialize() fails, sub-managers are never created (lines 91-96). Facade methods blindly dereference null unique_ptr, causing SIGSEGV.
 
 ### ✅ 2026-04-17 11:36 UTC — Implement Adaptive Rate Limiting
 - **Task:** Implement the TODO in AdaptiveRateLimiter::allow() — apply effectiveRate to underlying limiter
