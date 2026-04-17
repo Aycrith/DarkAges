@@ -28,6 +28,7 @@ set(TEST_SOURCES
     TestEntityMigration.cpp
     TestMemoryPool.cpp
     TestProfiling.cpp
+    TestPerformanceMonitor.cpp
     TestDDoSProtection.cpp
     TestAntiCheat.cpp
     TestPacketValidator.cpp
@@ -42,6 +43,7 @@ set(TEST_SOURCES
     TestViolationTracker.cpp
     TestInputValidator.cpp
     TestRateLimiter.cpp
+    TestConnectionThrottler.cpp
     TestTrafficAnalyzer.cpp
     TestConnectionPool.cpp
     TestStreamManager.cpp
