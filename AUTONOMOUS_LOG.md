@@ -450,3 +450,23 @@ All autonomous improvements tracked here. Most recent first.
   2. Moved StreamManager.cpp outside if(HIREDIS_FOUND) for unconditional compilation (has #else stub branches)
   3. Added TestStreamManager.cpp to both CMakeLists.txt files
 - **Notes:** StreamManager was only compiled when Redis available, but has #else stub branches. Moving outside conditional enables testing without Redis.
+
+### ✅ 2026-04-17 19:03 UTC
+- **Task:** Add PubSubManager tests (ZoneMessage serialization, ZoneMessageType enum, Redis stub behavior)
+- **Branch:** autonomous/20260417-pubsubmanager-tests (merged to main)
+- **Build:** PASS
+- **Tests:** PASS (438 cases, 418 passed, 20 skipped, 0 failed)
+- **PR:** N/A (push auth failed, merged locally)
+- **Files changed:**
+  1. Created `src/server/tests/TestPubSubManager.cpp` with 16 test cases
+  2. Added to `CMakeLists.txt` TEST_SOURCES (line ~738)
+  3. Fixed missing `processAttackInput` declaration in `ZoneServer.hpp` (pre-existing build error)
+- **Tests added:**
+  - ZoneMessageType enum value verification (7 values)
+  - ZoneMessage serialize header size, empty payload, type byte
+  - ZoneMessage round-trip for all 7 message types
+  - ZoneMessage round-trip edge cases: broadcast target, large payload (1000 bytes), zero values, max uint32
+  - ZoneMessage deserialize: too-small data, empty data, truncated payload, single byte, header-only
+  - PubSubManager stub behavior: publish/subscribe/unsubscribe/processSubscriptions when disconnected
+  - PubSubManager publishToZone/broadcastToAllZones disconnected paths
+  - PubSubManager connected publish with command counter (Redis-gated, skip when unavailable)
