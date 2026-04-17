@@ -92,6 +92,8 @@ set(TEST_SERVER_SOURCES
     ${CMAKE_SOURCE_DIR}/src/profiling/PerformanceMonitor.cpp
     ${CMAKE_SOURCE_DIR}/src/profiling/PerfettoProfiler_stub.cpp
     ${CMAKE_SOURCE_DIR}/src/zones/ZoneHandoff.cpp
+    ${CMAKE_SOURCE_DIR}/src/db/AntiCheatLogger_stub.cpp
+    ${CMAKE_SOURCE_DIR}/src/db/CombatEventLogger_stub.cpp
 )
 
 # Network manager: use stub if GNS not available
