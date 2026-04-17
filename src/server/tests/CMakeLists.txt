@@ -46,6 +46,7 @@ set(TEST_SOURCES
     TestConnectionPool.cpp
     TestStreamManager.cpp
     TestZoneMessage.cpp
+    TestZoneManager.cpp
 )
 
 # Conditional test sources based on dependencies
