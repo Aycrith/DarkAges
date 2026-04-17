@@ -44,6 +44,7 @@ set(TEST_SOURCES
     TestRateLimiter.cpp
     TestTrafficAnalyzer.cpp
     TestConnectionPool.cpp
+    TestStreamManager.cpp
 )
 
 # Conditional test sources based on dependencies
@@ -112,6 +113,7 @@ endif()
 if(REDIS_AVAILABLE)
     list(APPEND TEST_SERVER_SOURCES ${CMAKE_SOURCE_DIR}/src/db/RedisManager.cpp)
     list(APPEND TEST_SERVER_SOURCES ${CMAKE_SOURCE_DIR}/src/db/ConnectionPool.cpp)
+    list(APPEND TEST_SERVER_SOURCES ${CMAKE_SOURCE_DIR}/src/db/StreamManager.cpp)
 else()
     list(APPEND TEST_SERVER_SOURCES ${CMAKE_SOURCE_DIR}/src/db/RedisManager_stub.cpp)
 endif()

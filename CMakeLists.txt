@@ -741,6 +741,7 @@ if(BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
 
     if(ENABLE_REDIS AND HIREDIS_FOUND)
         list(APPEND TEST_SOURCES src/server/tests/TestRedisIntegration.cpp)
+        list(APPEND TEST_SOURCES src/server/tests/TestStreamManager.cpp)
         message(STATUS "Including Redis integration tests")
     else()
         message(STATUS "Skipping Redis integration tests (Redis not available)")

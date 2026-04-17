@@ -547,6 +547,15 @@ void RedisManager::xadd(std::string_view streamKey,
                         std::string_view id,
                         const std::unordered_map<std::string, std::string>& fields,
                         StreamAddCallback callback) {
+    if (!streamManager_ || !isConnected()) {
+        if (callback) {
+            AsyncResult<std::string> result;
+            result.success = false;
+            result.error = "Not connected to Redis";
+            callback(result);
+        }
+        return;
+    }
     streamManager_->xadd(streamKey, id, fields, std::move(callback));
 }
 
@@ -555,6 +564,15 @@ void RedisManager::xread(std::string_view streamKey,
                          StreamReadCallback callback,
                          uint32_t count,
                          uint32_t blockMs) {
+    if (!streamManager_ || !isConnected()) {
+        if (callback) {
+            AsyncResult<std::vector<StreamEntry>> result;
+            result.success = false;
+            result.error = "Not connected to Redis";
+            callback(result);
+        }
+        return;
+    }
     streamManager_->xread(streamKey, lastId, std::move(callback), count, blockMs);
 }
 
