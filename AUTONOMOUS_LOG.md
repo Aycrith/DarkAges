@@ -425,3 +425,15 @@ All autonomous improvements tracked here. Most recent first.
   - ConnectionThrottler.cpp: Removed duplicate constructor definition, fixed member calls
   - RedisManager_stub.cpp: Expanded RedisInternal struct for ZoneManager compatibility
 - **Branch cleanup:** Merged 3 autonomous branches into main
+
+### ✅ 2026-04-17 14:30 UTC
+- **Task:** Fix StreamManager stub callbacks + include uncommitted build changes
+- **Branch:** autonomous/20260417-stream-stub-callbacks
+- **Build:** PASS
+- **Tests:** PASS (397 cases, 2813 assertions)
+- **PR:** https://github.com/Aycrith/DarkAges/pull/10
+- **Changes:**
+  1. RedisManager_stub.cpp: xadd/xread now fire error callbacks with AsyncResult{success=false, error="Not connected to Redis"} instead of being no-ops
+  2. CMakeLists.txt: Move ZoneManager/StreamManager outside if(HIREDIS_FOUND) for unconditional compilation
+  3. Both CMakeLists: Add TestStreamManager.cpp to TEST_SOURCES
+  4. Both CMakeLists: Add ZoneManager.cpp/StreamManager.cpp to TEST_SERVER_SOURCES
