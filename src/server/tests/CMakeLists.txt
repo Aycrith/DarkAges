@@ -37,6 +37,12 @@ set(TEST_SOURCES
     TestCombatEventHandler.cpp
     TestRedisIntegration.cpp
     BenchmarkRedis.cpp
+    TestPositionHistory.cpp
+    TestCircuitBreaker.cpp
+    TestViolationTracker.cpp
+    TestInputValidator.cpp
+    TestRateLimiter.cpp
+    TestTrafficAnalyzer.cpp
 )
 
 # Conditional test sources based on dependencies
