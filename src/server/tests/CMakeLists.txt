@@ -44,6 +44,7 @@ set(TEST_SOURCES
     TestRateLimiter.cpp
     TestTrafficAnalyzer.cpp
     TestConnectionPool.cpp
+        TestStreamManager.cpp
 )
 
 # Conditional test sources based on dependencies

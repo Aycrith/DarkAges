@@ -489,14 +489,17 @@ if(HIREDIS_FOUND)
         src/server/src/db/RedisManager.cpp
         src/server/src/db/ConnectionPool.cpp
         src/server/src/db/PlayerSessionManager.cpp
-        src/server/src/db/PubSubManager.cpp
-        src/server/src/db/ZoneManager.cpp
-        src/server/src/db/StreamManager.cpp)
+        src/server/src/db/PubSubManager.cpp)
     message(STATUS "RedisManager: Using hiredis implementation with extracted managers")
 else()
     list(APPEND SERVER_SOURCES src/server/src/db/RedisManager_stub.cpp)
     message(WARNING "RedisManager: Using stub implementation")
 endif()
+
+# ZoneManager and StreamManager always compiled (have #else stub branches for non-Redis builds)
+list(APPEND SERVER_SOURCES
+    src/server/src/db/ZoneManager.cpp
+    src/server/src/db/StreamManager.cpp)
 
 # ScyllaDB layer - conditional on cassandra-cpp-driver (stub on Windows)
 if(CASSANDRA_FOUND)
@@ -728,6 +731,7 @@ if(BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
         src/server/tests/TestRateLimiter.cpp
         src/server/tests/TestTrafficAnalyzer.cpp
         src/server/tests/TestConnectionPool.cpp
+        src/server/tests/TestStreamManager.cpp
     )
 
     # Conditionally include tests for optional features
