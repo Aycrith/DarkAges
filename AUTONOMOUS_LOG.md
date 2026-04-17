@@ -3,6 +3,20 @@
 All autonomous improvements tracked here. Most recent first.
 
 
+### ✅ 2026-04-17 — Branch Cleanup + MovementValidator Tests
+- **Task:** Review all PRs, merge unmerged work, clean up stale branches
+- **Status:** SUCCESS
+- **Branch:** autonomous/20260417-movement-validator-tests (deleted after merge)
+- **Changes:**
+  1. Pushed protobuf guard fix to main (was stuck — gh auth restored)
+  2. Saved + fixed 682-line TestMovementValidator.cpp (12 test cases, 87 assertions)
+     - Fixed missing `entity` in "Speed at exactly the limit" SECTION
+     - Fixed float precision boundary checks (fixed-point rounding ±0.01f)
+     - Suppressed unused variable warning
+  3. Deleted stale branches: autonomous/test-pubsub-manager, autonomous/20260417-movement-validator-tests
+  4. Pruned remote refs — repo now clean (only main)
+- **PRs verified merged:** #1, #2, #3, #4, #5 — all MERGED
+- **Validation:** Build PASS, Tests PASS (275 passed, 10 skipped, 2181 assertions)
 ### ✅ 2026-04-15 — DDoSProtection Refactor: Extract CircuitBreaker, InputValidator, TrafficAnalyzer, ConnectionThrottler
 - **Task:** Refactor DDoSProtection.cpp (717 lines) + DDoSProtection.hpp (414 lines) by extracting cohesive subsystems into separate files
 - **Status:** SUCCESS
