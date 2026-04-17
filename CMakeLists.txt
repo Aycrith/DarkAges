@@ -441,6 +441,8 @@ set(SERVER_SOURCES
     src/server/src/zones/CrossZoneMessenger.cpp
     src/server/src/zones/CombatEventHandler.cpp
     src/server/src/zones/AuraZoneHandler.cpp
+    src/server/src/zones/InputHandler.cpp
+    src/server/src/zones/PerformanceHandler.cpp
     src/server/src/security/AntiCheat.cpp
     src/server/src/security/MovementValidator.cpp
     src/server/src/security/ViolationTracker.cpp
