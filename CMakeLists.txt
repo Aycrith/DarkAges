@@ -732,6 +732,7 @@ if(BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
         src/server/tests/TestTrafficAnalyzer.cpp
         src/server/tests/TestConnectionPool.cpp
         src/server/tests/TestStreamManager.cpp
+        src/server/tests/TestZoneMessage.cpp
     )
 
     # Conditionally include tests for optional features
