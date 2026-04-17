@@ -723,6 +723,7 @@ if(BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
         src/server/tests/TestPacketIntegrity.cpp
         src/server/tests/TestRateLimiter.cpp
         src/server/tests/TestZoneManager.cpp
+        src/server/tests/TestStreamManager.cpp
     )
 
     # Conditionally include tests for optional features

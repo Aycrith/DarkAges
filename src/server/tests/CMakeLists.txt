@@ -41,6 +41,7 @@ set(TEST_SOURCES
     TestPacketIntegrity.cpp
     TestRateLimiter.cpp
     TestZoneManager.cpp
+    TestStreamManager.cpp
     TestPlayerSessionManager.cpp
     BenchmarkRedis.cpp
 )
