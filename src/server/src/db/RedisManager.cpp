@@ -359,19 +359,38 @@ void RedisManager::del(std::string_view key, SetCallback callback) {
 // ============================================================================
 
 void RedisManager::savePlayerSession(const PlayerSession& session, SetCallback callback) {
+    if (!sessionManager_) {
+        if (callback) callback(false);
+        return;
+    }
     sessionManager_->savePlayerSession(session, callback);
 }
 
 void RedisManager::loadPlayerSession(uint64_t playerId, SessionCallback callback) {
+    if (!sessionManager_) {
+        AsyncResult<PlayerSession> result;
+        result.success = false;
+        result.error = "Not connected to Redis";
+        callback(result);
+        return;
+    }
     sessionManager_->loadPlayerSession(playerId, callback);
 }
 
 void RedisManager::removePlayerSession(uint64_t playerId, SetCallback callback) {
+    if (!sessionManager_) {
+        if (callback) callback(false);
+        return;
+    }
     sessionManager_->removePlayerSession(playerId, callback);
 }
 
 void RedisManager::updatePlayerPosition(uint64_t playerId, const Position& pos,
                                        uint32_t timestamp, SetCallback callback) {
+    if (!sessionManager_) {
+        if (callback) callback(false);
+        return;
+    }
     sessionManager_->updatePlayerPosition(playerId, pos, timestamp, callback);
 }
 
@@ -380,15 +399,30 @@ void RedisManager::updatePlayerPosition(uint64_t playerId, const Position& pos,
 // ============================================================================
 
 void RedisManager::addPlayerToZone(uint32_t zoneId, uint64_t playerId, SetCallback callback) {
+    if (!zoneManager_) {
+        if (callback) callback(false);
+        return;
+    }
     zoneManager_->addPlayerToZone(zoneId, playerId, callback);
 }
 
 void RedisManager::removePlayerFromZone(uint32_t zoneId, uint64_t playerId, SetCallback callback) {
+    if (!zoneManager_) {
+        if (callback) callback(false);
+        return;
+    }
     zoneManager_->removePlayerFromZone(zoneId, playerId, callback);
 }
 
 void RedisManager::getZonePlayers(uint32_t zoneId, 
                                  std::function<void(const AsyncResult<std::vector<uint64_t>>&)> callback) {
+    if (!zoneManager_) {
+        AsyncResult<std::vector<uint64_t>> result;
+        result.success = false;
+        result.error = "Not connected to Redis";
+        callback(result);
+        return;
+    }
     zoneManager_->getZonePlayers(zoneId, std::move(callback));
 }
 
@@ -399,27 +433,33 @@ void RedisManager::getZonePlayers(uint32_t zoneId,
 #ifdef REDIS_AVAILABLE
 
 void RedisManager::publish(std::string_view channel, std::string_view message) {
+    if (!pubSubManager_) return;
     pubSubManager_->publish(channel, message);
 }
 
 void RedisManager::subscribe(std::string_view channel,
                             std::function<void(std::string_view, std::string_view)> callback) {
+    if (!pubSubManager_) return;
     pubSubManager_->subscribe(channel, std::move(callback));
 }
 
 void RedisManager::unsubscribe(std::string_view channel) {
+    if (!pubSubManager_) return;
     pubSubManager_->unsubscribe(channel);
 }
 
 void RedisManager::processSubscriptions() {
+    if (!pubSubManager_) return;
     pubSubManager_->processSubscriptions();
 }
 
 void RedisManager::publishToZone(uint32_t zoneId, const ZoneMessage& message) {
+    if (!pubSubManager_) return;
     pubSubManager_->publishToZone(zoneId, message);
 }
 
 void RedisManager::broadcastToAllZones(const ZoneMessage& message) {
+    if (!pubSubManager_) return;
     pubSubManager_->broadcastToAllZones(message);
 }
 
@@ -548,6 +588,15 @@ void RedisManager::xadd(std::string_view streamKey,
                         std::string_view id,
                         const std::unordered_map<std::string, std::string>& fields,
                         StreamAddCallback callback) {
+    if (!streamManager_) {
+        if (callback) {
+            AsyncResult<std::string> result;
+            result.success = false;
+            result.error = "Not connected to Redis";
+            callback(result);
+        }
+        return;
+    }
     streamManager_->xadd(streamKey, id, fields, std::move(callback));
 }
 
@@ -556,6 +605,15 @@ void RedisManager::xread(std::string_view streamKey,
                          StreamReadCallback callback,
                          uint32_t count,
                          uint32_t blockMs) {
+    if (!streamManager_) {
+        if (callback) {
+            AsyncResult<std::vector<StreamEntry>> result;
+            result.success = false;
+            result.error = "Not connected to Redis";
+            callback(result);
+        }
+        return;
+    }
     streamManager_->xread(streamKey, lastId, std::move(callback), count, blockMs);
 }
 
