@@ -60,7 +60,7 @@ TEST_CASE("[violation-tracker] const getProfile returns nullptr for unknown", "[
 
 TEST_CASE("[violation-tracker] removeProfile deletes profile", "[security]") {
     ViolationTracker tracker;
-    tracker.getProfile(12345);
+    (void)tracker.getProfile(12345); // Creates profile via side effect
     REQUIRE(tracker.getActiveProfileCount() == 1);
     tracker.removeProfile(12345);
     REQUIRE(tracker.getActiveProfileCount() == 0);

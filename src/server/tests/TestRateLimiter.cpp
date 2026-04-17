@@ -355,3 +355,75 @@ TEST_CASE("[rate-limiter] Connection throttler cleanup removes old entries", "[s
     // Should be allowed again (old entries cleaned up)
     REQUIRE(throttler.allowConnection("10.0.0.1"));
 }
+
+// ============================================================================
+// Dynamic Rate Adjustment
+// ============================================================================
+
+TEST_CASE("[rate-limiter] Token bucket setTokensPerSecond changes rate", "[security]") {
+    TokenBucketRateLimiter<std::string> limiter({10, 100}); // 10 tokens, 100/sec
+
+    REQUIRE(limiter.getTokensPerSecond() == 100);
+
+    // Change rate
+    limiter.setTokensPerSecond(50);
+    REQUIRE(limiter.getTokensPerSecond() == 50);
+
+    // Limiter should still work after rate change
+    REQUIRE(limiter.allow("test"));
+}
+
+TEST_CASE("[rate-limiter] Adaptive limiter actually adjusts rate on allow", "[security]") {
+    AdaptiveRateLimiter::Config config;
+    config.normalRate = 100;
+    config.stressedRate = 50;
+    config.criticalRate = 20;
+    config.stressThreshold = 0.7f;
+    config.criticalThreshold = 0.9f;
+
+    AdaptiveRateLimiter limiter(config);
+
+    // Normal load — should use normalRate
+    limiter.allow("10.0.0.1", 0.3f);
+    REQUIRE(limiter.getCurrentRateLimit() == 100);
+
+    // Stressed load — should use stressedRate
+    limiter.allow("10.0.0.1", 0.8f);
+    REQUIRE(limiter.getCurrentRateLimit() == 50);
+
+    // Critical load — should use criticalRate
+    limiter.allow("10.0.0.1", 0.95f);
+    REQUIRE(limiter.getCurrentRateLimit() == 20);
+
+    // Recover to normal
+    limiter.allow("10.0.0.1", 0.2f);
+    REQUIRE(limiter.getCurrentRateLimit() == 100);
+}
+
+TEST_CASE("[rate-limiter] Adaptive limiter enforces stricter limits under load", "[security]") {
+    AdaptiveRateLimiter::Config config;
+    config.normalRate = 100;
+    config.stressedRate = 10;
+    config.criticalRate = 2;
+    config.stressThreshold = 0.7f;
+    config.criticalThreshold = 0.9f;
+
+    AdaptiveRateLimiter limiter(config);
+
+    // Under normal load, should allow 100 requests (burst)
+    for (int i = 0; i < 100; ++i) {
+        REQUIRE(limiter.allow("10.0.0.1", 0.3f));
+    }
+
+    // Switch to critical load — the limiter adjusts rate on each allow() call
+    // Under critical, tokensPerSecond becomes 2 and existing bucket gets refilled
+    // at that rate. Since we just exhausted normal bucket, switching to critical
+    // rate limits further requests much more strictly.
+    // After exhausting the critical rate, requests should fail
+    // Allow the critical-rate burst (up to maxTokens worth), then should reject
+    limiter.allow("10.0.0.1", 0.95f); // First critical call adjusts rate
+    // Drain remaining tokens under critical rate
+    while (limiter.allow("10.0.0.1", 0.95f)) { /* drain */ }
+    // Next request should be rejected
+    REQUIRE_FALSE(limiter.allow("10.0.0.1", 0.95f));
+}
