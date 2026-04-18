@@ -142,3 +142,6 @@ build_*/
 
 # Nested build directories (autonomous iteration)
 src/server/build/
+
+# Build variants
+/build_*/
