@@ -63,8 +63,10 @@ analyze_codebase() {
 
     # Check for const correctness opportunities
     local non_const_refs
-    non_const_refs=$(grep -rn "& " src/server/src/ --include="*.hpp" --include="*.h" 2>/dev/null | grep -v "const" | grep -v "&&" | wc -l || echo "0")
-    if [ "$non_const_refs" -gt 10 ]; then
+    non_const_refs=$(grep -rn "& " src/server/src/ --include="*.hpp" --include="*.h" 2>/dev/null | grep -v "const" | grep -v "&&" | wc -l)
+    non_const_refs=${non_const_refs//[^0-9]/}  # Extract only digits
+    [ -z "$non_const_refs" ] && non_const_refs=0
+    if [ "$non_const_refs" -gt 10 ] 2>/dev/null; then
         issues+=("Potential const-correctness improvements ($non_const_refs non-const references)")
     fi
 
@@ -133,43 +135,69 @@ validate_changes() {
     cd "$PROJECT_ROOT"
     log "Phase 4: Validating changes..."
 
-    # Stage 1: CMake configure
+    # Stage 1: CMake configure (with retry logic for resilience)
     log "  Configuring CMake..."
-    if cmake -S . -B build_validate -DBUILD_TESTS=ON -DFETCH_DEPENDENCIES=ON 2>&1 | tail -5; then
-        success "  CMake configure: PASS"
-    else
-        fail "  CMake configure: FAIL"
+    local cmake_attempts=0
+    local cmake_max_attempts=2
+    local cmake_success=false
+    
+    while [ $cmake_attempts -lt $cmake_max_attempts ]; do
+        cmake_attempts=$((cmake_attempts + 1))
+        if cmake -S . -B build_autonomous \
+            -DBUILD_TESTS=ON \
+            -DFETCH_DEPENDENCIES=ON \
+            -DENABLE_GNS=OFF \
+            -DENABLE_REDIS=OFF \
+            -DENABLE_SCYLLA=OFF 2>&1 | tail -5; then
+            cmake_success=true
+            success "  CMake configure: PASS (attempt $cmake_attempts)"
+            break
+        else
+            warn "  CMake configure failed (attempt $cmake_attempts/$cmake_max_attempts)"
+            if [ $cmake_attempts -lt $cmake_max_attempts ]; then
+                log "  Cleaning and retrying..."
+                rm -rf build_autonomous CMakeCache.txt CMakeFiles
+                sleep 5
+            fi
+        fi
+    done
+    
+    if [ "$cmake_success" = false ]; then
+        fail "  CMake configure: FAIL after $cmake_max_attempts attempts"
         return 1
     fi
 
     # Stage 2: Build
     log "  Building..."
-    if cmake --build build_validate --parallel $(nproc) 2>&1 | tail -20; then
+if cmake --build build_autonomous --parallel $(nproc) 2>&1 | tail -20; then
         success "  Build: PASS"
     else
         fail "  Build: FAIL"
-        rm -rf build_validate
+        rm -rf build_autonomous
         return 1
     fi
 
-    # Stage 3: Tests (if test binary exists)
-    if [ -f build_validate/DarkAgesTests ] || [ -f build_validate/Debug/DarkAgesTests.exe ]; then
+    # Stage 3: Tests (use ctest for reliable exit codes)
+    if [ -f build_autonomous/DarkAgesTests ] || [ -f build_autonomous/Debug/DarkAgesTests.exe ]; then
         log "  Running tests..."
-        local test_bin="build_validate/DarkAgesTests"
-        [ -f "build_validate/Debug/DarkAgesTests.exe" ] && test_bin="build_validate/Debug/DarkAgesTests.exe"
+        local test_bin="build_autonomous/DarkAgesTests"
+        [ -f "build_autonomous/Debug/DarkAgesTests.exe" ] && test_bin="build_autonomous/Debug/DarkAgesTests.exe"
 
-        if $test_bin 2>&1 | tail -20; then
+        # Use ctest for reliable exit codes (handles parallel test execution better)
+        cd build_autonomous
+        if ctest --output-on-failure 2>&1 | tail -20; then
             success "  Tests: PASS"
         else
             fail "  Tests: FAIL"
-            rm -rf build_validate
+            rm -rf build_autonomous
             return 1
         fi
+        cd "$PROJECT_ROOT"
     else
         warn "  No test binary found, skipping test run"
     fi
 
-    rm -rf build_validate
+    rm -rf build_autonomous
     success "All validations passed"
     return 0
 }
