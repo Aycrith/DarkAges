@@ -93,8 +93,13 @@ def find_missing_tests() -> List[Task]:
     covered_by_other_tests = {
         "redismanager",  # covered by TestRedisIntegration
         "scyllamanager",  # covered by TestScyllaManager
+        "redismanager_stub",  # stub, no test needed
+        "scyllamanager_stub",  # stub, no test needed
         "main",  # no test needed
     }
+
+    # Stub files that don't need tests
+    stub_suffixes = {"_stub", "_stubs"}
 
     for src_file in src_files:
         base_lower = src_file.stem.lower()
@@ -103,20 +108,108 @@ def find_missing_tests() -> List[Task]:
         if base_lower in covered_by_other_tests:
             continue
 
-        # Check for exact or partial name match in test stems
-        has_test = any(
-            base_lower in stem or stem in base_lower
-            for stem in test_stems_lower
-        )
+        # Skip stub files
+        if any(base_lower.endswith(s) for s in stub_suffixes):
+            continue
 
-        if not has_test:
+        # Check for EXACT name match only (not fuzzy) for test stems
+        # "anticheathandler" should NOT match "anticheat"
+        has_exact_test = base_lower in test_stems_lower
+
+        # Also check if the class name (without "Handler"/"Manager" suffix) has a test
+        # e.g., "anticheathandler" -> check if "anticheat" has TestAntiCheat.cpp
+        # But only if the test file is specifically about this component
+        has_partial_test = False
+        if not has_exact_test:
+            # Strip common suffixes and check
+            stripped = base_lower
+            for suffix in ["handler", "manager", "logger", "optimizer", "validator"]:
+                if stripped.endswith(suffix):
+                    stripped = stripped[:-len(suffix)]
+                    break
+            if stripped in test_stems_lower and len(stripped) > 5:
+                has_partial_test = True
+
+        if not has_exact_test and not has_partial_test:
+            # Determine priority based on file type
+            if "stub" in base_lower:
+                priority = "P3"
+                desc = f"Stub file — add basic tests verifying stub behavior"
+            elif any(k in str(src_file) for k in ["/db/", "/security/"]):
+                priority = "P1"
+                desc = f"Critical subsystem without tests — {src_file.relative_to(PROJECT_ROOT)}"
+            else:
+                priority = "P2"
+                desc = f"No test file found for {src_file.relative_to(PROJECT_ROOT)}"
+
             tasks.append(Task(
-                priority="P2",
+                priority=priority,
                 category="test",
                 title=f"Add tests for {src_file.stem}",
-                description=f"No test file found for {src_file.relative_to(PROJECT_ROOT)}",
+                description=desc,
                 files=[str(src_file.relative_to(PROJECT_ROOT))],
                 estimated_hours=1.0
+            ))
+
+    return tasks
+
+
+def find_missing_header_tests() -> List[Task]:
+    """Find significant header files without corresponding test files."""
+    tasks = []
+    test_dir = SRC_DIR / "server" / "tests"
+
+    # Get all test file stems
+    test_stems = set()
+    if test_dir.exists():
+        for f in test_dir.glob("Test*.cpp"):
+            test_stems.add(f.stem.lower().replace("test", ""))
+
+    for h in SRC_DIR.rglob("*.hpp"):
+        if "tests" in str(h) or "proto" in str(h):
+            continue
+
+        try:
+            lines = len(h.read_text().splitlines())
+        except (UnicodeDecodeError, PermissionError):
+            continue
+
+        # Only significant headers (50+ lines)
+        if lines < 50:
+            continue
+
+        basename = h.stem.lower()
+
+        # Check if there's a corresponding source file with tests
+        has_src_test = False
+        for suffix in ["handler", "manager", "logger", "optimizer", "validator"]:
+            if basename.endswith(suffix):
+                stripped = basename[:-len(suffix)]
+                if stripped in test_stems:
+                    has_src_test = True
+                    break
+
+        if has_src_test:
+            continue
+
+        # Check if any test covers this header's component
+        has_test = basename in test_stems
+        if not has_test:
+            # Prioritize memory/safety headers
+            if "/memory/" in str(h):
+                priority = "P1"
+            elif "/security/" in str(h):
+                priority = "P1"
+            else:
+                priority = "P2"
+
+            tasks.append(Task(
+                priority=priority,
+                category="test",
+                title=f"Add tests for {h.stem}",
+                description=f"Header has {lines} lines but no corresponding test file",
+                files=[str(h.relative_to(PROJECT_ROOT))],
+                estimated_hours=1.5
             ))
 
     return tasks
@@ -132,7 +225,7 @@ def find_large_files() -> List[Task]:
                 continue
             try:
                 lines = len(f.read_text().splitlines())
-                if lines > 800:
+                if lines > 500:
                     tasks.append(Task(
                         priority="P3" if lines < 1500 else "P2",
                         category="refactor",
@@ -206,6 +299,7 @@ def main():
     # Discover tasks
     all_tasks = []
     all_tasks.extend(find_missing_tests())
+    all_tasks.extend(find_missing_header_tests())
     all_tasks.extend(find_large_files())
     all_tasks.extend(find_todos())
 
