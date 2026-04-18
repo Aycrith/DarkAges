@@ -556,3 +556,26 @@
 - **Tests:** PASS (input handler: 9/9 passed)
 - **Push:** FAILED (token expired, local commit only)
 - **Note:** Task discover showed InputHandler missing tests (priority 2)
+
+### ✅ 2026-04-18 17:15 UTC — Remove dead code from ZoneServer.cpp
+- **Task:** Refactor ZoneServer.cpp (1480 lines) - extract cohesive subsystems
+- **Branch:** main (direct commit)
+- **Build:** PASS
+- **Tests:** PASS (569 test cases, 3406 assertions — all pass)
+- **Changes:**
+  - Refactored ZoneServer.cpp: 1480 → 1104 lines (-376 lines)
+  - Removed duplicate combat methods (orphaned after handler extraction):
+    * ZoneServer::processCombat() - empty stub, handler uses combatEventHandler_.processCombat()
+    * ZoneServer::onEntityDied() - never called, handler uses combatEventHandler_.onEntityDied()
+    * ZoneServer::processRespawns() - never called, handler uses combatEventHandler_.processRespawns()
+    * ZoneServer::sendCombatEvent() - never called
+    * ZoneServer::logCombatEvent() - never called
+  - Removed duplicate aura methods (orphaned after handler extraction):
+    * ZoneServer::syncAuraState() - never called, handler uses auraZoneHandler_.syncAuraState()
+    * ZoneServer::handleAuraEntityMigration() - only called from dead code
+    * ZoneServer::checkEntityZoneTransitions() - never called, handler uses auraZoneHandler_.checkEntityZoneTransitions()
+- **Note:** Handler classes (CombatEventHandler, AuraZoneHandler) already contain the actual 
+  implementations. The ZoneServer local methods were duplicates left behind after handler 
+  extraction. All functionality preserved via handler delegations in updateGameLogic() 
+  and updateReplication().
+

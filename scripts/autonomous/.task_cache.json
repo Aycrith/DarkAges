@@ -1,27 +1,7 @@
 {
-  "timestamp": 1776537724.51952,
-  "git_head": "3884191d50e6d48099ae87a5461f5943e423dd26",
+  "timestamp": 1776546622.1767898,
+  "git_head": "ef3ecef30f8ef48d9fd0e2c071d9ba401fa77a8d",
   "tasks": [
-    {
-      "priority": "P2",
-      "category": "test",
-      "title": "Add tests for LeakDetector",
-      "description": "No test file found for src/server/src/memory/LeakDetector.cpp",
-      "files": [
-        "src/server/src/memory/LeakDetector.cpp"
-      ],
-      "estimated_hours": 1.0
-    },
-    {
-      "priority": "P2",
-      "category": "test",
-      "title": "Add tests for ZoneServer",
-      "description": "No test file found for src/server/src/zones/ZoneServer.cpp",
-      "files": [
-        "src/server/src/zones/ZoneServer.cpp"
-      ],
-      "estimated_hours": 1.0
-    },
     {
       "priority": "P3",
       "category": "refactor",
