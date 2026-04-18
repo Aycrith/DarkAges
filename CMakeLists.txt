@@ -720,8 +720,10 @@ if(BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
         src/server/tests/TestStatisticalDetector.cpp
         src/server/tests/TestPacketIntegrity.cpp
         src/server/tests/TestProfiling.cpp
+        src/server/tests/TestPerformanceHandler.cpp
         src/server/tests/TestPerformanceMonitor.cpp
         src/server/tests/TestAntiCheat.cpp
+        src/server/tests/TestInputHandler.cpp
         src/server/tests/TestMetricsExporter.cpp
         src/server/tests/TestPlayerManager.cpp
         src/server/tests/TestZoneHandoff.cpp

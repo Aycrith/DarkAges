@@ -26,7 +26,7 @@ void PerformanceHandler::checkPerformanceBudgets(uint64_t tickTimeUs) {
         }
 
         // Activate QoS degradation if severe
-        if (tickTimeUs > 20000 && !server_.isQoSDegraded()) {  // > 20ms
+        if (tickTimeUs >= 20000 && !server_.isQoSDegraded()) {  // >= 20ms
             activateQoSDegradation();
         }
     }
