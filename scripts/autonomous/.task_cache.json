@@ -1,14 +1,174 @@
 {
-  "timestamp": 1776546622.1767898,
-  "git_head": "ef3ecef30f8ef48d9fd0e2c071d9ba401fa77a8d",
+  "timestamp": 1776549968.70694,
+  "git_head": "d878b19bea46781370c57ad0dfd29a430c31d424",
   "tasks": [
+    {
+      "priority": "P1",
+      "category": "test",
+      "title": "Add tests for PooledAllocator",
+      "description": "Header has 124 lines but no corresponding test file",
+      "files": [
+        "src/server/include/memory/PooledAllocator.hpp"
+      ],
+      "estimated_hours": 1.5
+    },
+    {
+      "priority": "P1",
+      "category": "test",
+      "title": "Add tests for FixedVector",
+      "description": "Header has 130 lines but no corresponding test file",
+      "files": [
+        "src/server/include/memory/FixedVector.hpp"
+      ],
+      "estimated_hours": 1.5
+    },
+    {
+      "priority": "P1",
+      "category": "test",
+      "title": "Add tests for AntiCheatTypes",
+      "description": "Header has 152 lines but no corresponding test file",
+      "files": [
+        "src/server/include/security/AntiCheatTypes.hpp"
+      ],
+      "estimated_hours": 1.5
+    },
+    {
+      "priority": "P1",
+      "category": "test",
+      "title": "Add tests for AntiCheatConfig",
+      "description": "Header has 187 lines but no corresponding test file",
+      "files": [
+        "src/server/include/security/AntiCheatConfig.hpp"
+      ],
+      "estimated_hours": 1.5
+    },
+    {
+      "priority": "P2",
+      "category": "test",
+      "title": "Add tests for NetworkManager",
+      "description": "No test file found for src/server/src/netcode/NetworkManager.cpp",
+      "files": [
+        "src/server/src/netcode/NetworkManager.cpp"
+      ],
+      "estimated_hours": 1.0
+    },
+    {
+      "priority": "P2",
+      "category": "test",
+      "title": "Add tests for Protocol",
+      "description": "No test file found for src/server/src/netcode/Protocol.cpp",
+      "files": [
+        "src/server/src/netcode/Protocol.cpp"
+      ],
+      "estimated_hours": 1.0
+    },
+    {
+      "priority": "P2",
+      "category": "test",
+      "title": "Add tests for Constants",
+      "description": "Header has 168 lines but no corresponding test file",
+      "files": [
+        "src/server/include/Constants.hpp"
+      ],
+      "estimated_hours": 1.5
+    },
+    {
+      "priority": "P2",
+      "category": "test",
+      "title": "Add tests for RedisManager",
+      "description": "Header has 185 lines but no corresponding test file",
+      "files": [
+        "src/server/include/db/RedisManager.hpp"
+      ],
+      "estimated_hours": 1.5
+    },
+    {
+      "priority": "P2",
+      "category": "test",
+      "title": "Add tests for RedisInternal",
+      "description": "Header has 68 lines but no corresponding test file",
+      "files": [
+        "src/server/include/db/RedisInternal.hpp"
+      ],
+      "estimated_hours": 1.5
+    },
+    {
+      "priority": "P2",
+      "category": "test",
+      "title": "Add tests for ZoneDefinition",
+      "description": "Header has 78 lines but no corresponding test file",
+      "files": [
+        "src/server/include/zones/ZoneDefinition.hpp"
+      ],
+      "estimated_hours": 1.5
+    },
     {
       "priority": "P3",
       "category": "refactor",
-      "title": "Refactor ZoneServer.cpp (1480 lines)",
-      "description": "File is 1480 lines \u2014 consider extracting cohesive subsystems",
+      "title": "Refactor RedisManager.cpp (620 lines)",
+      "description": "File is 620 lines \u2014 consider extracting cohesive subsystems",
+      "files": [
+        "src/server/src/db/RedisManager.cpp"
+      ],
+      "estimated_hours": 3.0
+    },
+    {
+      "priority": "P3",
+      "category": "refactor",
+      "title": "Refactor CombatEventLogger.cpp (654 lines)",
+      "description": "File is 654 lines \u2014 consider extracting cohesive subsystems",
+      "files": [
+        "src/server/src/db/CombatEventLogger.cpp"
+      ],
+      "estimated_hours": 3.0
+    },
+    {
+      "priority": "P3",
+      "category": "refactor",
+      "title": "Refactor ScyllaManager.cpp (791 lines)",
+      "description": "File is 791 lines \u2014 consider extracting cohesive subsystems",
+      "files": [
+        "src/server/src/db/ScyllaManager.cpp"
+      ],
+      "estimated_hours": 3.0
+    },
+    {
+      "priority": "P3",
+      "category": "refactor",
+      "title": "Refactor ZoneOrchestrator.cpp (587 lines)",
+      "description": "File is 587 lines \u2014 consider extracting cohesive subsystems",
+      "files": [
+        "src/server/src/zones/ZoneOrchestrator.cpp"
+      ],
+      "estimated_hours": 3.0
+    },
+    {
+      "priority": "P3",
+      "category": "refactor",
+      "title": "Refactor ZoneServer.cpp (1104 lines)",
+      "description": "File is 1104 lines \u2014 consider extracting cohesive subsystems",
       "files": [
         "src/server/src/zones/ZoneServer.cpp"
+      ],
+      "estimated_hours": 3.0
+    },
+    {
+      "priority": "P3",
+      "category": "refactor",
+      "title": "Refactor EntityMigration.cpp (623 lines)",
+      "description": "File is 623 lines \u2014 consider extracting cohesive subsystems",
+      "files": [
+        "src/server/src/zones/EntityMigration.cpp"
+      ],
+      "estimated_hours": 3.0
+    },
+    {
+      "priority": "P3",
+      "category": "refactor",
+      "title": "Refactor NetworkManager.cpp (782 lines)",
+      "description": "File is 782 lines \u2014 consider extracting cohesive subsystems",
+      "files": [
+        "src/server/src/netcode/NetworkManager.cpp"
       ],
       "estimated_hours": 3.0
     }
