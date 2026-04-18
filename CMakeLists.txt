@@ -727,6 +727,7 @@ if(BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
         src/server/tests/TestInputHandler.cpp
         src/server/tests/TestMetricsExporter.cpp
         src/server/tests/TestPlayerManager.cpp
+        src/server/tests/TestCombatEventLogger.cpp
         src/server/tests/TestZoneHandoff.cpp
         src/server/tests/TestCrossZoneMessenger.cpp
         src/server/tests/TestProtobufProtocol.cpp
