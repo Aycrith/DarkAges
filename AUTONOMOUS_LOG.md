@@ -1,5 +1,20 @@
 # DarkAges Autonomous Iteration Log
 
+### ✅ 2026-04-18 14:05 UTC — Add tests for CombatEventLogger
+- **Task:** Add tests for CombatEventLogger (no test file existed)
+- **Branch:** autonomous/20260418-combat-event-logger-tests
+- **Build:** PASS
+- **Tests:** PASS (48 test cases, 231 assertions — all pass)
+- **Changes:**
+  - New file: `src/server/tests/TestCombatEventLogger.cpp` with 48 test cases covering:
+    constructor/destructor, prepareStatements (stub returns true), isReady,
+    metrics getters (writesQueued/writesCompleted/writesFailed = 0),
+    logCombatEvent stub behavior, logCombatEventsBatch (empty/large batches),
+    updatePlayerStats, getPlayerStats (callback never fires in stub),
+    savePlayerState, getTopKillers, getKillFeed, edge cases, stress tests
+  - CMakeLists.txt (root): add TestCombatEventLogger.cpp to TEST_SOURCES (line 730)
+- **Note:** Class uses stub when ScyllaDB unavailable. Tests verify stub API contract.
+
 ### ✅ 2026-04-18 13:45 UTC — Add tests for PerfettoProfiler
 - **Task:** Add comprehensive PerfettoProfiler tests (12 test cases, 53 assertions)
 - **Branch:** autonomous/20260418-perfetto-profiler-tests
