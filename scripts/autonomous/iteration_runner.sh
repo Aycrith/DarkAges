@@ -2,6 +2,8 @@
 # =============================================================================
 # DarkAges Autonomous Iteration Runner
 # Orchestrates: Analyze → Plan → Implement → Validate → PR → Log
+# Usage: iteration_runner.sh [auto|<task>] [--fast]
+#   --fast: Skip build (cmake configure only). Use for cron jobs.
 # =============================================================================
 set -euo pipefail
 
@@ -167,7 +169,13 @@ validate_changes() {
         return 1
     fi
 
-    # Stage 2: Build
+    # Stage 2: Build (skip in fast mode for cron jobs)
+    if [ "$FAST_MODE" = true ]; then
+        rm -rf build_autonomous
+        success "All validations passed (fast mode — cmake configure only)"
+        return 0
+    fi
+    
     log "  Building..."
 if cmake --build build_autonomous --parallel $(nproc) 2>&1 | tail -20; then
         success "  Build: PASS"
@@ -345,7 +353,9 @@ run_iteration() {
 }
 
 # Allow direct invocation
+FAST_MODE=false
 case "${1:-}" in
+    --fast|--skip-build) FAST_MODE=true; run_iteration "${2:-auto}" ;;
     analyze) analyze_codebase ;;
     validate) validate_changes ;;
     *) run_iteration "${1:-auto}" ;;
