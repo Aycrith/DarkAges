@@ -787,7 +787,7 @@ if(BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
     add_test(NAME test_network COMMAND darkages_tests "[network]")
     add_test(NAME test_zones COMMAND darkages_tests "[zones]")
     add_test(NAME test_security COMMAND darkages_tests "[security]")
-add_test(NAME test_anticheat_noclip COMMAND darkages_tests "[anticheat][noclip]")
+add_test(NAME test_anticheat COMMAND darkages_tests "[anticheat]")
     add_test(NAME test_database COMMAND darkages_tests "[database]")
 endif()
 
