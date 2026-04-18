@@ -741,6 +741,7 @@ if(BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
         src/server/tests/TestStreamManager.cpp
         src/server/tests/TestZoneMessage.cpp
         src/server/tests/TestZoneManager.cpp
+        src/server/tests/TestPerfettoProfiler.cpp
     )
 
     # Conditionally include tests for optional features

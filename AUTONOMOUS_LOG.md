@@ -1,5 +1,26 @@
 # DarkAges Autonomous Iteration Log
 
+### ✅ 2026-04-18 13:45 UTC — Add tests for PerfettoProfiler
+- **Task:** Add comprehensive PerfettoProfiler tests (12 test cases, 53 assertions)
+- **Branch:** autonomous/20260418-perfetto-profiler-tests
+- **Build:** PASS
+- **Tests:** PASS (12 test cases, 53 assertions — all pass)
+- **Changes:**
+  - New file: `src/server/tests/TestPerfettoProfiler.cpp` with 12 test cases covering:
+    singleton, lifecycle, event recording, inactive mode, PerformanceCounter
+    statistics, counter tracking (getCounter/getCounterNames/resetCounters),
+    ScopedTraceEvent RAII (move semantics), macro expansion, concurrent
+    threads, zero-division protection, high-frequency event recording
+  - PerfettoProfiler: add `clearCounters()` method — fully resets counter map
+    (vs `resetCounters()` which only zeroes values). Call in `initialize()`.
+  - PerfettoProfiler_stub: add `clearCounters()` stub for completeness
+  - CMakeLists.txt (root): add TestPerfettoProfiler.cpp to TEST_SOURCES
+  - CMakeLists.txt (src/server/tests): add TestPerfettoProfiler.cpp
+- **Note:** discover_tasks.py false-positive — LeakDetector already has coverage
+  in TestMemoryPool.cpp. PerfettoProfiler had TestProfiling.cpp but missing
+  counter tracking, inactive mode, concurrent, and high-frequency tests.
+- **Build requires:** `-DENABLE_PROFILING=ON` (counters map requires real impl)
+
 ### ✅ 2026-04-17 20:20 UTC — Fix QoS threshold boundary condition
 - **Task:** Fix PerformanceHandler::checkPerformanceBudgets to activate QoS at 20ms (not >20ms)
 - **Branch:** autonomous/20260417-input-handler-tests (local commit)

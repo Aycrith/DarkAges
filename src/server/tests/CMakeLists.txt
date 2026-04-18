@@ -29,6 +29,7 @@ set(TEST_SOURCES
     TestMemoryPool.cpp
     TestProfiling.cpp
     TestPerformanceMonitor.cpp
+    TestPerfettoProfiler.cpp
     TestDDoSProtection.cpp
     TestAntiCheat.cpp
     TestPacketValidator.cpp

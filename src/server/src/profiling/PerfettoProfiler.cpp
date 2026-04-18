@@ -62,6 +62,7 @@ PerfettoProfiler& PerfettoProfiler::instance() {
 bool PerfettoProfiler::initialize(const std::string& outputPath) {
     outputPath_ = outputPath;
     active_ = true;
+    clearCounters();
     
     // Reserve buffer space to minimize allocations during tracing
     eventBuffer_.reserve(100000);
@@ -164,6 +165,11 @@ void PerfettoProfiler::resetCounters() {
     for (auto& [name, counter] : counters_) {
         counter.reset();
     }
+}
+
+void PerfettoProfiler::clearCounters() {
+    std::lock_guard<std::mutex> lock(counterMutex_);
+    counters_.clear();
 }
 
 void PerfettoProfiler::setActive(bool active) {

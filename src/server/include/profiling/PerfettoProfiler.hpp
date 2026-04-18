@@ -106,8 +106,11 @@ public:
     const PerformanceCounter* getCounter(const std::string& name) const;
     std::vector<std::string> getCounterNames() const;
     
-    // Reset all counters
+    // Reset all counters (zero values but keep map entries)
     void resetCounters();
+    
+    // Clear all counters entirely
+    void clearCounters();
     
     // Check if profiling is active
     bool isActive() const { return active_; }

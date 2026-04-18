@@ -16,6 +16,7 @@ bool PerfettoProfiler::initialize(const std::string&) {
 void PerfettoProfiler::shutdown() { 
     active_ = false; 
 }
+void PerfettoProfiler::clearCounters() {}
 void PerfettoProfiler::beginEvent(const char*, TraceCategory) {}
 void PerfettoProfiler::endEvent(const char*, TraceCategory) {}
 void PerfettoProfiler::instantEvent(const char*, TraceCategory) {}
